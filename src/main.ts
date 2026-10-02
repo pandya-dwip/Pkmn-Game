@@ -1,5 +1,5 @@
 import { POKEMON_SPECIES_MAP, STONE_EVOLUTIONS, getPokemonSpecies, calculateBaseStatTotal, isEvolutionLine } from './data/pokemon';
-import { MOVES_DATA, TYPE_MOVE_MAP } from './data/moves';
+import { MOVES_DATA, TYPE_MOVE_MAP, MOVE_ICONS } from './data/moves';
 import { TYPE_NAMES, TYPE_CHART, calculateTypeEffectiveness } from './data/types';
 import { sound } from './audio/SoundSynthesizer';
 import { playMoveEffect, shk, puff, fly, el, ctr, flash, rush, ring } from './animations/CombatEffects';
@@ -265,7 +265,7 @@ export const mh = (m: MonInstance) =>
   `${img(m.id)}<span>${POKEMON_SPECIES_MAP[m.id]?.name} Lv.${m.lv}<small>HP ${m.hp}/${st(m).max}</small></span>`;
 
 export const mvh = (v: any, e: number = 1) =>
-  `<span class="mn">${v.name.toUpperCase()}</span><small>${v.type.toUpperCase()} · POWER ${v.power}</small><small>${'●'.repeat(
+  `<span class="mn">${MOVE_ICONS[v.typeShort as keyof typeof MOVE_ICONS] || ''} ${v.name.toUpperCase()}</span><small>${v.type.toUpperCase()} · POWER ${v.power}</small><small>${'●'.repeat(
     Math.max(1, Math.round(v.accuracy / 25))
   )} ACC ${v.accuracy}</small>` +
   (e === 1

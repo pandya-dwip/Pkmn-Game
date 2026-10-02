@@ -49,57 +49,57 @@ export const Pokemon3DConfig = {
 
   // Battle positioning in 3D world coordinates
   POSITIONS: {
-    // Player on the lower-left foreground
+    // Player on the lower-left foreground (perfectly framed above HP bar)
     player: {
-      x: -1.75,
+      x: -1.3,
       y: 0,
-      z: 1.2,
+      z: 0.5,
       // Facing toward opponent (top-right)
-      rotationY: Math.PI * 0.32,
+      rotationY: Math.PI * 0.35,
     },
-    // Opponent on the upper-right midground
+    // Opponent on the upper-right midground (perfectly framed below HP bar)
     foe: {
-      x: 1.6,
-      y: 0.3,
+      x: 1.2,
+      y: 0,
       z: -1.2,
       // Facing toward player (bottom-left)
-      rotationY: -Math.PI * 0.68,
+      rotationY: -Math.PI * 0.65,
     },
   },
 
   // Base normalization scale: target height in world units
-  TARGET_HEIGHT: 1.8,
+  TARGET_HEIGHT: 2.1,
 
   // Custom scale adjustments for specific Pokemon species (to reflect canon sizes naturally)
   SPECIES_SCALE_MODIFIERS: {
     // Large / giant Pokemon
-    95: 1.55,  // Onix
-    130: 1.45, // Gyarados
-    143: 1.4,  // Snorlax
-    149: 1.35, // Dragonite
-    131: 1.3,  // Lapras
-    6: 1.25,   // Charizard
+    95: 1.45,  // Onix
+    130: 1.4,  // Gyarados
+    143: 1.35, // Snorlax
+    149: 1.3,  // Dragonite
+    131: 1.25, // Lapras
+    6: 1.2,    // Charizard
     9: 1.2,    // Blastoise
     3: 1.2,    // Venusaur
-    68: 1.2,   // Machamp
-    103: 1.35, // Exeggutor
-    144: 1.3,  // Articuno
-    145: 1.3,  // Zapdos
-    146: 1.35, // Moltres
-    150: 1.3,  // Mewtwo
+    68: 1.15,  // Machamp
+    103: 1.25, // Exeggutor
+    144: 1.2,  // Articuno
+    145: 1.2,  // Zapdos
+    146: 1.25, // Moltres
+    150: 1.2,  // Mewtwo
 
-    // Tiny / small Pokemon
-    10: 0.75,  // Caterpie
-    13: 0.75,  // Weedle
-    16: 0.8,   // Pidgey
-    19: 0.8,   // Rattata
-    25: 0.85,  // Pikachu
-    39: 0.85,  // Jigglypuff
-    50: 0.75,  // Diglett
-    41: 0.8,   // Zubat
-    43: 0.8,   // Oddish
-    60: 0.8,   // Poliwag
-    151: 0.8,  // Mew
+    // Tiny / small Pokemon (scaled to be clearly visible)
+    10: 0.95,  // Caterpie
+    13: 0.95,  // Weedle
+    16: 0.95,  // Pidgey
+    19: 0.95,  // Rattata
+    25: 1.0,   // Pikachu
+    39: 1.0,   // Jigglypuff
+    50: 1.05,  // Diglett
+    41: 0.95,  // Zubat
+    43: 0.95,  // Oddish
+    60: 0.95,  // Poliwag
+    151: 0.95, // Mew
   } as Record<number, number>,
 
   // Species model rotation adjustments (if specific GLB models are modeled facing backwards or 90 deg off)

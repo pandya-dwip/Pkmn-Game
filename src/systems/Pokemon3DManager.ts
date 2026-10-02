@@ -233,11 +233,13 @@ export class Pokemon3DManager {
       slot.controller = controller;
       slot.loaded = true;
 
-      // 4. Smoothly hide 2D placeholder sprite now that 3D model is active
+      // 4. Smoothly hide 2D placeholder sprite and CSS shadow now that 3D model is active
       if (sprEl) {
         sprEl.style.transition = 'opacity 0.3s ease-out';
         sprEl.style.opacity = '0';
       }
+      const shEl = document.querySelector(isPlayer ? '#psh' : '#fsh') as HTMLElement | null;
+      if (shEl) shEl.style.display = 'none';
 
       return true;
     } catch (err) {
@@ -246,6 +248,8 @@ export class Pokemon3DManager {
       if (sprEl) {
         sprEl.style.opacity = '1';
       }
+      const shEl = document.querySelector(isPlayer ? '#psh' : '#fsh') as HTMLElement | null;
+      if (shEl) shEl.style.display = '';
       return false;
     }
   }

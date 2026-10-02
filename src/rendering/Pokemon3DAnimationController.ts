@@ -49,7 +49,6 @@ export class Pokemon3DAnimationController {
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         for (const mat of mats) {
           if (mat) {
-            mat.transparent = true;
             this.originalOpacities.set(mat, mat.opacity !== undefined ? mat.opacity : 1.0);
           }
         }

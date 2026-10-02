@@ -91,9 +91,14 @@ export class Pokemon3DCache {
 
         // Clone material so hit reaction flashes don't affect other instances
         if (Array.isArray(mesh.material)) {
-          mesh.material = mesh.material.map(m => m.clone());
+          mesh.material = mesh.material.map(m => {
+            const cl = m.clone();
+            cl.side = THREE.DoubleSide;
+            return cl;
+          });
         } else if (mesh.material) {
           mesh.material = mesh.material.clone();
+          mesh.material.side = THREE.DoubleSide;
         }
       }
     });

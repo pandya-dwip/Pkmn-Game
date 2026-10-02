@@ -20,9 +20,9 @@ export class Pokemon3DScene {
   private playerShadow: THREE.Mesh;
   private foeShadow: THREE.Mesh;
 
-  // Camera animation baselines
-  private defaultCameraPos = new THREE.Vector3(0, 3.0, 7.8);
-  private defaultCameraTarget = new THREE.Vector3(0, 0.85, 0);
+  // Camera animation baselines (perfectly tuned to frame battle arena diagonal)
+  private defaultCameraPos = new THREE.Vector3(0, 2.6, 6.0);
+  private defaultCameraTarget = new THREE.Vector3(0, -0.3, 0);
   private currentCameraPos = new THREE.Vector3();
   private currentCameraTarget = new THREE.Vector3();
 
@@ -35,8 +35,8 @@ export class Pokemon3DScene {
     this.scene = new THREE.Scene();
     this.scene.background = null; // Transparent to see the outdoor SVG stadium
 
-    // Camera setup
-    this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+    // Camera setup (36 deg FOV for natural Pokémon battle view)
+    this.camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
     this.currentCameraPos.copy(this.defaultCameraPos);
     this.currentCameraTarget.copy(this.defaultCameraTarget);
     this.camera.position.copy(this.currentCameraPos);
@@ -160,31 +160,39 @@ export class Pokemon3DScene {
    * Normalizes, centers and grounds a Pokemon model to Y=0
    */
   public normalizeAndGroundModel(model: THREE.Group, pokemonId: number): void {
-    // 1. Calculate raw bounding box
+    // 1. Reset any previous transform
+    model.position.set(0, 0, 0);
+    model.rotation.set(0, 0, 0);
+    model.scale.set(1, 1, 1);
+    model.updateMatrixWorld(true);
+
+    // 2. Measure raw bounds
     const box = new THREE.Box3().setFromObject(model);
     const size = new THREE.Vector3();
     box.getSize(size);
-    const center = new THREE.Vector3();
-    box.getCenter(center);
 
-    // 2. Center geometry horizontally and ground bottom at Y = 0
-    model.position.x -= center.x;
-    model.position.y -= box.min.y;
-    model.position.z -= center.z;
+    // 3. Determine target scale
+    const maxDim = Math.max(size.x, size.y, size.z, 0.001);
+    const scaleMultiplier = Pokemon3DConfig.SPECIES_SCALE_MODIFIERS[pokemonId] || 1.0;
+    const baseScale = (Pokemon3DConfig.TARGET_HEIGHT / maxDim) * scaleMultiplier;
 
-    // 3. Scale normalization
-    const maxDim = Math.max(size.x, size.y, size.z);
-    let scaleMultiplier = Pokemon3DConfig.SPECIES_SCALE_MODIFIERS[pokemonId] || 1.0;
-    const baseScale = (Pokemon3DConfig.TARGET_HEIGHT / Math.max(0.1, maxDim)) * scaleMultiplier;
-
-    // Wrap in a parent group so position/rotation can be cleanly animated without losing centering
-    const wrapper = new THREE.Group();
-    wrapper.add(model);
+    // 4. Apply scale FIRST to model
     model.scale.set(baseScale, baseScale, baseScale);
+    model.updateMatrixWorld(true);
 
-    // Flying / floating offset if applicable
+    // 5. Measure scaled bounds and center horizontally, ground bottom exactly at Y = 0
+    const scaledBox = new THREE.Box3().setFromObject(model);
+    const scaledCenter = new THREE.Vector3();
+    scaledBox.getCenter(scaledCenter);
+
+    model.position.x = -scaledCenter.x;
+    model.position.y = -scaledBox.min.y; // bottom rests cleanly at Y = 0
+    model.position.z = -scaledCenter.z;
+
+    // 6. Flying / floating offset if applicable
     const yOffset = Pokemon3DConfig.SPECIES_Y_OFFSETS[pokemonId] || 0;
     model.position.y += yOffset;
+    model.updateMatrixWorld(true);
   }
 
   public applyQuality(quality: QualityConfig): void {

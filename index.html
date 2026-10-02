@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Pokémon: Kanto Cup</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="g">
+      <!-- Title Screen -->
+      <section id="title" class="scr on"></section>
+
+      <!-- Tournament Bracket / Hub Screen -->
+      <section id="map" class="scr"></section>
+
+      <!-- Battlefield Screen -->
+      <section id="bat" class="scr">
+        <div id="fld">
+          <div id="world">
+            <svg id="bg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">
+              <defs>
+                <linearGradient id="sk" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#3f78c4" />
+                  <stop offset=".55" stop-color="#8fbbe6" />
+                  <stop offset="1" stop-color="#e8eef0" />
+                </linearGradient>
+                <linearGradient id="gr" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#86ad4f" />
+                  <stop offset=".3" stop-color="#5f9438" />
+                  <stop offset="1" stop-color="#2a6122" />
+                </linearGradient>
+                <linearGradient id="wl" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#f1e3d6" />
+                  <stop offset="1" stop-color="#b7a090" />
+                </linearGradient>
+                <linearGradient id="rf" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#b4574a" />
+                  <stop offset="1" stop-color="#6e3029" />
+                </linearGradient>
+                <linearGradient id="gl" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#7f93ad" />
+                  <stop offset="1" stop-color="#2d3b52" />
+                </linearGradient>
+                <linearGradient id="hz" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#fff" stop-opacity="0" />
+                  <stop offset=".5" stop-color="#fff" stop-opacity=".4" />
+                  <stop offset="1" stop-color="#fff" stop-opacity="0" />
+                </linearGradient>
+                <radialGradient id="tc" cx=".35" cy=".3" r=".8">
+                  <stop offset="0" stop-color="#78b45e" />
+                  <stop offset=".6" stop-color="#3a7a38" />
+                  <stop offset="1" stop-color="#1c4724" />
+                </radialGradient>
+                <radialGradient id="sn" cx=".9" cy="0" r="1">
+                  <stop offset="0" stop-color="#fff0b8" stop-opacity=".8" />
+                  <stop offset=".6" stop-color="#fff0b8" stop-opacity="0" />
+                </radialGradient>
+                <radialGradient id="vg" cx=".5" cy=".5" r=".75">
+                  <stop offset=".6" stop-color="#000" stop-opacity="0" />
+                  <stop offset="1" stop-color="#001a08" stop-opacity=".45" />
+                </radialGradient>
+                <filter id="bl"><feGaussianBlur stdDeviation="3" /></filter>
+                <filter id="bl2"><feGaussianBlur stdDeviation="14" /></filter>
+                <filter id="gt" x="0" y="0" width="100%" height="100%">
+                  <feTurbulence type="fractalNoise" baseFrequency=".45 .035" numOctaves="3" seed="4" />
+                  <feColorMatrix values="0 0 0 0 .06 0 0 0 0 .25 0 0 0 0 .03 0 0 0 1.4 -.5" />
+                </filter>
+                <g id="tr">
+                  <rect x="-6" y="0" width="12" height="40" fill="#4a3220" />
+                  <ellipse cx="0" cy="-8" rx="44" ry="54" fill="url(#tc)" />
+                  <ellipse cx="-16" cy="-30" rx="26" ry="30" fill="url(#tc)" />
+                  <ellipse cx="18" cy="-24" rx="24" ry="28" fill="url(#tc)" />
+                </g>
+                <g id="hs">
+                  <rect width="200" height="104" fill="url(#wl)" />
+                  <polygon points="-14,0 100,-62 214,0" fill="url(#rf)" />
+                  <rect y="0" width="200" height="10" fill="#000" opacity=".22" />
+                  <g fill="url(#gl)" stroke="#5a463a" stroke-width="3">
+                    <rect x="22" y="26" width="30" height="42" />
+                    <rect x="85" y="26" width="30" height="42" />
+                    <rect x="148" y="26" width="30" height="42" />
+                  </g>
+                  <rect y="92" width="200" height="12" fill="#6b5446" />
+                </g>
+                <g id="bs">
+                  <ellipse cy="14" rx="70" ry="12" fill="#0a2a10" opacity=".35" />
+                  <ellipse rx="60" ry="26" fill="url(#tc)" />
+                  <g fill="#d58ae0">
+                    <circle cx="-26" cy="-8" r="5" />
+                    <circle cx="8" cy="-16" r="5" />
+                    <circle cx="30" cy="-4" r="4" />
+                    <circle cx="-4" cy="4" r="4" />
+                  </g>
+                </g>
+              </defs>
+              <rect width="1000" height="1000" fill="url(#sk)" />
+              <g fill="#fff" filter="url(#bl2)" opacity=".85">
+                <ellipse cx="220" cy="90" rx="160" ry="26" />
+                <ellipse cx="340" cy="66" rx="90" ry="22" />
+                <ellipse cx="780" cy="70" rx="170" ry="24" />
+              </g>
+              <g fill="#fff" filter="url(#bl)" opacity=".5">
+                <ellipse cx="200" cy="130" rx="110" ry="10" />
+                <ellipse cx="700" cy="120" rx="120" ry="9" />
+              </g>
+              <path filter="url(#bl)" d="M0 290Q180 205 380 280T700 265T1000 285V345H0Z" fill="#8aa88e" opacity=".8" />
+              <path d="M0 318Q250 255 520 312T1000 298V345H0Z" fill="#6f9a5a" />
+              <g filter="url(#bl)" opacity=".9">
+                <use href="#tr" transform="translate(120,300) scale(.8)" />
+                <use href="#tr" transform="translate(190,310) scale(.7)" />
+                <use href="#tr" transform="translate(900,300) scale(.9)" />
+              </g>
+              <use href="#hs" x="410" y="225" />
+              <use href="#hs" x="730" y="228" />
+              <rect x="590" y="120" width="64" height="215" fill="url(#wl)" />
+              <polygon points="580,120 622,20 664,120" fill="url(#rf)" />
+              <circle cx="622" cy="170" r="20" fill="#f2e6c8" stroke="#5a463a" stroke-width="5" />
+              <use href="#tr" transform="translate(70,300) scale(1.4)" />
+              <use href="#tr" transform="translate(960,300) scale(1.5)" />
+              <use href="#tr" transform="translate(340,325) scale(.8)" />
+              <rect y="335" width="1000" height="665" fill="url(#gr)" />
+              <rect y="335" width="1000" height="665" filter="url(#gt)" opacity=".55" />
+              <g fill="#fff" opacity=".055">
+                <polygon points="500,335 560,335 760,1000 560,1000" />
+                <polygon points="610,335 670,335 1000,1000 860,1000" />
+                <polygon points="390,335 440,335 240,1000 380,1000" />
+                <polygon points="280,335 330,335 -80,1000 60,1000" />
+              </g>
+              <rect x="360" y="330" width="460" height="14" rx="5" fill="#b8a78c" />
+              <rect x="360" y="330" width="460" height="4" rx="2" fill="#e0d2b8" />
+              <rect y="290" width="1000" height="90" fill="url(#hz)" />
+              <use href="#bs" x="450" y="352" />
+              <use href="#bs" x="790" y="356" />
+              <use href="#bs" x="130" y="362" />
+              <g filter="url(#bl2)" fill="#0c3a14" opacity=".7">
+                <ellipse cx="80" cy="1000" rx="170" ry="40" />
+                <ellipse cx="930" cy="1000" rx="190" ry="44" />
+              </g>
+              <rect width="1000" height="1000" fill="url(#sn)" />
+              <rect width="1000" height="1000" fill="url(#vg)" />
+            </svg>
+            <div class="sh" id="fsh"></div>
+            <div class="sh" id="psh"></div>
+            <div class="pk" id="fw"><img class="spr" id="fs" alt="" /></div>
+            <div class="pk" id="pw"><img class="spr" id="ps" alt="" /></div>
+          </div>
+          <div class="info f">
+            <div class="nm"><span id="fn"></span><span id="fl"></span></div>
+            <div class="bar"><i id="fb"></i></div>
+            <div id="fh"></div>
+            <div class="ty" id="ft"></div>
+            <div class="dots" id="fd"></div>
+          </div>
+          <div class="info p">
+            <div class="nm"><span id="pn"></span><span id="pl"></span></div>
+            <div class="bar"><i id="pb"></i></div>
+            <div id="ph"></div>
+            <div class="ty" id="pt"></div>
+            <div class="dots" id="pd"></div>
+          </div>
+        </div>
+        <div id="msg"></div>
+        <div id="ctl"></div>
+      </section>
+
+      <!-- Modal Dialog Overlay -->
+      <div id="ov"></div>
+
+      <!-- Sound Settings Drawer -->
+      <div id="snd">
+        <button id="sb">🔊</button>
+        <div id="sp">
+          <label><input type="checkbox" id="son" checked /> 🔊 Sound ON</label>
+          <input type="range" id="sv" min="0" max="100" value="70" />
+          <label>🎵 Music<input type="range" id="vm" min="0" max="100" value="60" /></label>
+          <label>🔊 Effects<input type="range" id="vs" min="0" max="100" value="80" /></label>
+          <label>🐾 Pokémon<input type="range" id="vp" min="0" max="100" value="60" /></label>
+          <hr style="border:0;border-top:1px solid #ffffff22;margin:8px 0" />
+          <label><input type="checkbox" id="m3d" checked /> 🎮 3D Models (ON/OFF)</label>
+          <label style="display:flex;align-items:center;justify-content:space-between;margin-top:4px">
+            <span>⚡ 3D Quality</span>
+            <select id="m3q" style="background:#1a2346;color:#fff;border:1px solid #ffffff33;border-radius:6px;padding:2px 6px">
+              <option value="AUTO">AUTO</option>
+              <option value="HIGH">HIGH</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="LOW">LOW</option>
+            </select>
+          </label>
+          <button id="btn-credits" style="margin-top:10px;font-size:11px;padding:6px 10px;width:100%;text-align:center">📜 Credits & Attribution</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

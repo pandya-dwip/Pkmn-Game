@@ -95,6 +95,12 @@ export class Pokemon3DManager {
     return this.enabled;
   }
 
+  public is3DActive(side: 'p' | 'f'): boolean {
+    if (!this.enabled) return false;
+    const slot = side === 'p' ? this.playerSlot : this.foeSlot;
+    return !!(slot && slot.loaded && !slot.failed);
+  }
+
   public setEnabled(val: boolean): void {
     this.enabled = val;
     try {

@@ -201,8 +201,10 @@ export function rewards(r: number): MonInstance[] {
 export interface GameSaveState {
   r: number;
   team: MonInstance[];
-  b: number; // Health Berry
-  fh: number; // Full Heal Berry
+  b: number; // Oran Berry (30%)
+  b50: number; // Sitrus Berry (50%)
+  b75: number; // Enigma Berry (75%)
+  fh: number; // Full Heal Berry (100%)
   rv: number; // Revive
   st: Record<string, number>; // Evolution Stones
   ph: string;
@@ -232,6 +234,8 @@ export const load = (): GameSaveState | null => {
     if (g && g.br) {
       g.tmax = g.tmax || 5;
       g.ev = g.ev || 0;
+      g.b50 = g.b50 ?? 2;
+      g.b75 = g.b75 ?? 1;
       g.team.forEach(m => {
         m.uid = m.uid || nu();
       });
@@ -498,17 +502,31 @@ export function hubScr(): void {
 }
 
 // Evolution Helpers
-export const evoOf = (m: MonInstance) => {
-  const spec = POKEMON_SPECIES_MAP[m.id];
-  if (spec.evolutionLevel > 0) return [[m.id + 1]];
-  return (STONE_EVOLUTIONS[m.id] || []).map(e => [e.evolvesTo]);
+export const evoOfId = (id: number): number[][] => {
+  const spec = POKEMON_SPECIES_MAP[id];
+  if (!spec) return [];
+  if (spec.evolutionLevel > 0) return [[id + 1]];
+  return (STONE_EVOLUTIONS[id] || []).map(e => [e.evolvesTo]);
 };
 
-export async function evoShow(m: MonInstance, nid: number): Promise<void> {
+export const evoOf = (m: MonInstance) => evoOfId(m.id);
+
+export const getEvolutionLevelBonus = (_prevId: number, nextId: number): number => {
+  const nextEvos = evoOfId(nextId);
+  if (nextEvos.length > 0) {
+    // Evolved into a 2nd stage (middle form) like Ivysaur, Charmeleon, Haunter -> +2 levels
+    return 2;
+  }
+  // Evolved into 3rd stage final form (Venusaur, Charizard, Blastoise, Alakazam, Gengar, Dragonite, etc.) -> +4 levels
+  const is3Stage = [3, 6, 9, 12, 15, 18, 26, 31, 34, 45, 62, 65, 68, 71, 76, 94, 149].includes(nextId);
+  return is3Stage ? 4 : 2;
+};
+
+export async function evoShow(m: MonInstance, nid: number, levelBonus: number = 0): Promise<void> {
   const o = $('#ov');
   const old = st(m);
   const oi = m.id;
-  const pc = m.hp / old.max;
+  const oldLv = m.lv;
   o.style.display = 'flex';
   o.onclick = null;
   o.innerHTML = `<div class="box"><h1 style="animation:none">EVOLUTION</h1><div class="evw"><img id="evi" src="${U(
@@ -533,7 +551,8 @@ export async function evoShow(m: MonInstance, nid: number): Promise<void> {
   ).finished;
 
   m.id = nid;
-  m.hp = Math.max(1, Math.round(st(m).max * pc));
+  m.lv += levelBonus;
+  m.hp = st(m).max; // 100% full health restored!
   im.src = U(nid);
   sound.beep(880, 0.4, 'triangle', 0.12);
   [0, 0.12, 0.24].forEach((d, j) => sound.beep(660 + j * 220, 0.25, 'square', 0.06, d));
@@ -546,7 +565,9 @@ export async function evoShow(m: MonInstance, nid: number): Promise<void> {
   const nw = st(m);
   $('#evt').innerHTML = `✨ EVOLUTION COMPLETE! ✨<br>${POKEMON_SPECIES_MAP[oi]?.name} → ${
     POKEMON_SPECIES_MAP[nid]?.name
-  }<br>Level: ${m.lv} → ${m.lv}<br>HP +${nw.max - old.max} · ATK +${nw.atk - old.atk} · DEF +${nw.def - old.def}<br><br><button id="evok">OK</button>`;
+  }<br>Level: ${oldLv} → <b>Lv.${m.lv} (+${levelBonus} Levels!)</b><br>HP: <b>${m.hp}/${nw.max} (100% RESTORED)</b><br>ATK +${
+    nw.atk - old.atk
+  } · DEF +${nw.def - old.def}<br><br><button id="evok">OK</button>`;
 
   await new Promise<void>(r => {
     $('#evok').onclick = () => {
@@ -558,18 +579,18 @@ export async function evoShow(m: MonInstance, nid: number): Promise<void> {
 
 export async function specialEvo(): Promise<void> {
   while ((G.ev || 0) > 0) {
-    const L = G.team.map(m => ({ m, o: m.se ? [] : evoOf(m) }));
+    const L = G.team.map(m => ({ m, o: evoOf(m) }));
     if (!L.some(x => x.o.length)) {
-      await note(['No Pokémon can evolve right now.']);
+      await note(['No Pokémon on your team can evolve right now.']);
       break;
     }
 
     const i = await pick(
-      `<h1>SPECIAL EVOLUTION</h1>Opportunities left: ${G.ev}<br>Choose a Pokémon:`,
+      `<h1>SPECIAL EVOLUTION</h1>Special evolutions left: ${G.ev}<br>Choose a Pokémon to evolve:`,
       L.map(x => ({
         d: !x.o.length,
         h: `${mh(x.m)}<small>${
-          x.o.length ? '→ ' + x.o.map(e => POKEMON_SPECIES_MAP[e[0]]?.name).join(' / ') : x.m.se ? 'Already used' : 'No evolution'
+          x.o.length ? '→ ' + x.o.map(e => POKEMON_SPECIES_MAP[e[0]]?.name).join(' / ') : 'Fully Evolved ★'
         }</small>`,
       })),
       true,
@@ -590,9 +611,9 @@ export async function specialEvo(): Promise<void> {
       t = o[j][0];
     }
 
-    await evoShow(m, t);
-    m.se = 1;
-    G.ev = (G.ev || 1) - 1;
+    const levelBonus = getEvolutionLevelBonus(m.id, t);
+    await evoShow(m, t, levelBonus);
+    G.ev = Math.max(0, (G.ev || 1) - 1);
     save();
   }
   hubScr();
@@ -659,7 +680,7 @@ export const spr = (im: HTMLImageElement, id: number, back?: boolean) => {
   im.src = U(id);
 };
 
-export function hit(s: 'p' | 'f', dm: number, k: number = 1): Promise<Animation> {
+export async function hit(s: 'p' | 'f', dm: number, k: number = 1): Promise<void> {
   pokemon3DManager.playHitReaction(s, dm, k >= 2);
   const e = $('#' + s + 's');
   const f = document.createElement('div');
@@ -672,7 +693,13 @@ export function hit(s: 'p' | 'f', dm: number, k: number = 1): Promise<Animation>
   setTimeout(() => f.remove(), 1000);
   sound.beep(110, 0.2, 'sawtooth');
 
-  return e.animate(
+  if (pokemon3DManager.is3DActive(s)) {
+    e.style.opacity = '0';
+    await sleep(450);
+    return;
+  }
+
+  await e.animate(
     [
       { transform: 'translateX(0)', filter: 'brightness(3)' },
       { transform: 'translateX(-10px)', opacity: '0.3' },
@@ -689,6 +716,17 @@ export const faint = async (s: 'p' | 'f') => {
   const anim3d = pokemon3DManager.playFaintAnimation(s);
   const e = $('#' + s + 's');
   const h = $('#' + s + 'sh');
+
+  if (pokemon3DManager.is3DActive(s)) {
+    e.style.opacity = '0';
+    if (h) {
+      h.style.transition = 'opacity .7s';
+      h.style.opacity = '0';
+    }
+    await anim3d;
+    return;
+  }
+
   await e.animate(
     [
       { transform: 'none' },
@@ -719,6 +757,13 @@ export const recall = async (s: 'p' | 'f') => {
     { transform: 'translate(-50%,-50%) scale(1.3)' },
     { transform: 'translate(-50%,-50%) scale(1)' },
   ], { duration: 450, delay: 150, fill: 'backwards' });
+
+  if (pokemon3DManager.is3DActive(s)) {
+    $('#' + s + 's').style.opacity = '0';
+    await anim3d;
+    return;
+  }
+
   await $('#' + s + 's').animate(
     [
       { transform: 'scale(1)', filter: 'none', opacity: '1' },
@@ -735,6 +780,13 @@ export const release = async (s: 'p' | 'f') => {
   $('#' + s + 'sh').style.opacity = '';
   puff(c.x, c.y, '✨', 8, 80, 500);
   const anim3d = pokemon3DManager.playEntranceAnimation(s, M(s).id);
+
+  if (pokemon3DManager.is3DActive(s)) {
+    $('#' + s + 's').style.opacity = '0';
+    await anim3d;
+    return;
+  }
+
   await $('#' + s + 's').animate(
     [
       { transform: 'scale(.1)', filter: 'brightness(4)', opacity: '0' },
@@ -892,15 +944,15 @@ export function aiAct(): any {
 }
 
 // Items and Switching
-export async function berry(m: MonInstance, who: 'p' | 'f'): Promise<void> {
+export async function berry(m: MonInstance, who: 'p' | 'f', pct: number = 0.3, bname: string = 'Health Berry'): Promise<void> {
   const x = st(m);
-  const h = Math.min(x.max - m.hp, Math.ceil(x.max * 0.3));
+  const h = Math.min(x.max - m.hp, Math.ceil(x.max * pct));
   m.hp += h;
   ui();
   await say(
     who === 'p'
-      ? `You used a HEALTH BERRY! ${POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase()} restored ${h} HP!`
-      : `${B.tn} used a HEALTH BERRY!`
+      ? `You used a ${bname.toUpperCase()}! ${POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase()} restored ${h} HP!`
+      : `${B.tn} used a ${bname.toUpperCase()}!`
   );
 }
 
@@ -924,10 +976,12 @@ export async function sw(s: 'p' | 'f', j: number): Promise<void> {
   }
 }
 
-export const ITEMS: Record<string, { ic: string; n: string; d: string; t: (m: MonInstance) => boolean; k: keyof GameSaveState }> = {
-  b: { ic: '🍓', n: 'Health Berry', d: 'Restores 30% of max HP.', t: m => m.hp > 0 && m.hp < st(m).max, k: 'b' },
-  f: { ic: '✨', n: 'Full Heal Berry', d: 'Restores 100% HP.', t: m => m.hp > 0 && m.hp < st(m).max, k: 'fh' },
-  r: { ic: '💊', n: 'Revive', d: 'Revives a fainted Pokémon with 50% HP.', t: m => m.hp <= 0, k: 'rv' },
+export const ITEMS: Record<string, { ic: string; n: string; d: string; pct: number; t: (m: MonInstance) => boolean; k: keyof GameSaveState }> = {
+  b: { ic: '🍓', n: 'Oran Berry (30%)', d: 'Restores 30% of max HP.', pct: 0.3, t: m => m.hp > 0 && m.hp < st(m).max, k: 'b' },
+  s: { ic: '🫐', n: 'Sitrus Berry (50%)', d: 'Restores 50% of max HP.', pct: 0.5, t: m => m.hp > 0 && m.hp < st(m).max, k: 'b50' },
+  h: { ic: '🍇', n: 'Enigma Berry (75%)', d: 'Restores 75% of max HP.', pct: 0.75, t: m => m.hp > 0 && m.hp < st(m).max, k: 'b75' },
+  f: { ic: '✨', n: 'Full Heal Berry (100%)', d: 'Restores 100% of max HP.', pct: 1.0, t: m => m.hp > 0 && m.hp < st(m).max, k: 'fh' },
+  r: { ic: '💊', n: 'Revive', d: 'Revives a fainted Pokémon with 50% HP.', pct: 0.5, t: m => m.hp <= 0, k: 'rv' },
 };
 
 export const STN: Record<string, [string, string]> = {
@@ -938,9 +992,16 @@ export const STN: Record<string, [string, string]> = {
   Mo: ['🌙', 'Moon Stone'],
 };
 
-export const IR = [{ b: 1 }, { b: 1 }, { b: 1, f: 1 }, { b: 1, f: 1 }, { f: 1, r: 1, b: 1 }, {}];
+export const IR = [
+  { b: 2, s: 1, h: 1, f: 1, r: 1 },
+  { b: 2, s: 2, h: 1, f: 1, r: 1 },
+  { b: 2, s: 2, h: 2, f: 2, r: 2 },
+  { b: 3, s: 2, h: 2, f: 2, r: 2 },
+  { b: 3, s: 3, h: 3, f: 3, r: 3 },
+  { f: 3, r: 3, h: 3, s: 3, b: 3 },
+];
 
-export const qty = (k: string) => (k.length === 1 ? (G[ITEMS[k].k] as number) : G.st[k] || 0);
+export const qty = (k: string) => (k.length === 1 ? ((G[ITEMS[k].k] as number) || 0) : G.st[k] || 0);
 export const elig = (k: string, m: MonInstance) =>
   k.length === 1 ? ITEMS[k].t(m) : (STONE_EVOLUTIONS[m.id] || []).some(e => e.stoneType === k);
 
@@ -976,32 +1037,37 @@ export async function useItem(x: any, tm: MonInstance[]): Promise<void> {
   const n = POKEMON_SPECIES_MAP[t.id]?.name.toUpperCase();
   const i = x.i;
   if (i === 'r') {
-    G.rv--;
+    G.rv = Math.max(0, (G.rv || 1) - 1);
     t.hp = Math.ceil(st(t).max * 0.5);
     ui();
     await say('You used a Revive!');
     await say(`${n} was revived!`);
   } else if (i === 'f') {
-    G.fh--;
+    G.fh = Math.max(0, (G.fh || 1) - 1);
     t.hp = st(t).max;
     ui();
     await say('You used a Full Heal Berry!');
     await say(`${n}'s HP was fully restored!`);
+  } else if (i === 'h') {
+    G.b75 = Math.max(0, (G.b75 || 1) - 1);
+    await berry(t, 'p', 0.75, 'Enigma Berry (75%)');
+  } else if (i === 's') {
+    G.b50 = Math.max(0, (G.b50 || 1) - 1);
+    await berry(t, 'p', 0.50, 'Sitrus Berry (50%)');
   } else {
-    G.b--;
-    await berry(t, 'p');
+    G.b = Math.max(0, (G.b || 1) - 1);
+    await berry(t, 'p', 0.30, 'Oran Berry (30%)');
   }
 }
 
 export async function stone(m: MonInstance, k: string): Promise<void> {
   const e = (STONE_EVOLUTIONS[m.id] || []).find(x => x.stoneType === k);
   if (!e) return;
-  const pc = m.hp / st(m).max;
   const o = POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase();
   G.st[k]--;
   await say(`${o} is evolving!`, 200);
   m.id = e.evolvesTo;
-  m.hp = Math.max(1, Math.round(st(m).max * pc));
+  m.hp = st(m).max; // 100% full health restored!
   await say(`It evolved into ${POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase()}!`);
 }
 
@@ -1024,7 +1090,7 @@ export async function evo(m: MonInstance): Promise<void> {
     ).finished;
   }
   m.id = d.evolvesTo;
-  m.hp = Math.max(1, Math.round(st(m).max * pc));
+  m.hp = st(m).max; // 100% full health restored!
   ui();
   sound.beep(880, 0.3);
   await say(`It evolved into ${POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase()}!`);

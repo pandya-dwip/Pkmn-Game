@@ -146,8 +146,10 @@ export interface TournamentBracket {
 }
 
 export interface Inventory {
-  healthBerries: number;
-  fullHealBerries: number;
+  healthBerries: number;      // 30% Oran Berry
+  sitrusBerries: number;      // 50% Sitrus Berry
+  enigmaBerries: number;      // 75% Enigma Berry
+  fullHealBerries: number;    // 100% Full Heal Berry
   revives: number;
   stones: Record<string, number>;
 }

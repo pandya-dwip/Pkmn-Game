@@ -49,57 +49,57 @@ export const Pokemon3DConfig = {
 
   // Battle positioning in 3D world coordinates
   POSITIONS: {
-    // Player on the lower-left foreground (perfectly framed above HP bar)
+    // Player on the grass field directly above player's info box (bottom-left)
     player: {
-      x: -1.3,
+      x: -1.35,
       y: 0,
-      z: 0.5,
-      // Facing toward opponent (top-right)
-      rotationY: Math.PI * 0.35,
+      z: 1.2,
+      // Facing toward opponent (top-right along battle diagonal)
+      rotationY: 2.356, // 135 deg: perfectly aligns with foe position (+2.8, -2.8)
     },
-    // Opponent on the upper-right midground (perfectly framed below HP bar)
+    // Opponent on the grass field aligned with opponent's info box (top-right)
     foe: {
-      x: 1.2,
+      x: 1.45,
       y: 0,
-      z: -1.2,
-      // Facing toward player (bottom-left)
-      rotationY: -Math.PI * 0.65,
+      z: -1.6,
+      // Facing toward player (bottom-left along battle diagonal)
+      rotationY: -0.785, // -45 deg: perfectly aligns with player position (-2.8, +2.8)
     },
   },
 
-  // Base normalization scale: target height in world units
-  TARGET_HEIGHT: 2.1,
+  // Base normalization scale: target height in world units (compact & proportional)
+  TARGET_HEIGHT: 1.15,
 
   // Custom scale adjustments for specific Pokemon species (to reflect canon sizes naturally)
   SPECIES_SCALE_MODIFIERS: {
     // Large / giant Pokemon
-    95: 1.45,  // Onix
-    130: 1.4,  // Gyarados
-    143: 1.35, // Snorlax
-    149: 1.3,  // Dragonite
-    131: 1.25, // Lapras
-    6: 1.2,    // Charizard
-    9: 1.2,    // Blastoise
-    3: 1.2,    // Venusaur
-    68: 1.15,  // Machamp
-    103: 1.25, // Exeggutor
-    144: 1.2,  // Articuno
-    145: 1.2,  // Zapdos
-    146: 1.25, // Moltres
-    150: 1.2,  // Mewtwo
+    95: 1.35,  // Onix
+    130: 1.3,  // Gyarados
+    143: 1.25, // Snorlax
+    149: 1.2,  // Dragonite
+    131: 1.2,  // Lapras
+    6: 1.15,   // Charizard
+    9: 1.15,   // Blastoise
+    3: 1.15,   // Venusaur
+    68: 1.1,   // Machamp
+    103: 1.2,  // Exeggutor
+    144: 1.15, // Articuno
+    145: 1.15, // Zapdos
+    146: 1.2,  // Moltres
+    150: 1.15, // Mewtwo
 
     // Tiny / small Pokemon (scaled to be clearly visible)
-    10: 0.95,  // Caterpie
-    13: 0.95,  // Weedle
-    16: 0.95,  // Pidgey
-    19: 0.95,  // Rattata
-    25: 1.0,   // Pikachu
-    39: 1.0,   // Jigglypuff
-    50: 1.05,  // Diglett
-    41: 0.95,  // Zubat
-    43: 0.95,  // Oddish
-    60: 0.95,  // Poliwag
-    151: 0.95, // Mew
+    10: 0.9,   // Caterpie
+    13: 0.9,   // Weedle
+    16: 0.9,   // Pidgey
+    19: 0.9,   // Rattata
+    25: 0.95,  // Pikachu
+    39: 0.95,  // Jigglypuff
+    50: 1.0,   // Diglett
+    41: 0.9,   // Zubat
+    43: 0.9,   // Oddish
+    60: 0.9,   // Poliwag
+    151: 0.9,  // Mew
   } as Record<number, number>,
 
   // Species model rotation adjustments (if specific GLB models are modeled facing backwards or 90 deg off)
@@ -108,17 +108,17 @@ export const Pokemon3DConfig = {
     DEFAULT: 0,
   } as Record<number, number>,
 
-  // Floating / flying Pokemon vertical ground offsets
+  // Floating / flying Pokemon vertical ground offsets (proportional to 1.15 height)
   SPECIES_Y_OFFSETS: {
-    12: 0.6,  // Butterfree
-    15: 0.5,  // Beedrill
-    41: 0.65, // Zubat
-    42: 0.7,  // Golbat
-    92: 0.5,  // Gastly
-    93: 0.45, // Haunter
-    144: 0.6, // Articuno
-    145: 0.6, // Zapdos
-    146: 0.7, // Moltres
-    151: 0.55,// Mew
+    12: 0.3,   // Butterfree
+    15: 0.25,  // Beedrill
+    41: 0.3,   // Zubat
+    42: 0.35,  // Golbat
+    92: 0.25,  // Gastly
+    93: 0.25,  // Haunter
+    144: 0.3,  // Articuno
+    145: 0.3,  // Zapdos
+    146: 0.35, // Moltres
+    151: 0.25, // Mew
   } as Record<number, number>,
 };

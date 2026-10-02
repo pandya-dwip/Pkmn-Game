@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>Pokémon: Kanto Cup</title>
-    <script type="module" crossorigin src="/assets/index-8BgjHhQK.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-c8DBVpYj.css">
+    <script type="module" crossorigin src="/assets/index-DNC4TYKp.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DDmegI5c.css">
   </head>
   <body>
     <div id="g">
@@ -182,30 +182,70 @@
         <div id="ctl"></div>
       </section>
 
-      <!-- Modal Dialog Overlay -->
+      <!-- Pokédex Hardware Bottom Bar with Speaker & Settings -->
+      <footer id="dex-footer">
+        <div class="dex-speaker-grill">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <button id="sb" class="dex-sound-btn" title="Sound & Settings">
+          <span id="sb-icon">🔊</span>
+          <span class="sb-text">SOUND / SETTINGS</span>
+        </button>
+      </footer>
+
+      <!-- Modal Dialog Overlay (for game events/selection) -->
       <div id="ov"></div>
 
-      <!-- Sound Settings Drawer -->
-      <div id="snd">
-        <button id="sb">🔊</button>
-        <div id="sp">
-          <label><input type="checkbox" id="son" checked /> 🔊 Sound ON</label>
-          <input type="range" id="sv" min="0" max="100" value="70" />
-          <label>🎵 Music<input type="range" id="vm" min="0" max="100" value="60" /></label>
-          <label>🔊 Effects<input type="range" id="vs" min="0" max="100" value="80" /></label>
-          <label>🐾 Pokémon<input type="range" id="vp" min="0" max="100" value="60" /></label>
-          <hr style="border:0;border-top:1px solid #ffffff22;margin:8px 0" />
-          <label><input type="checkbox" id="m3d" checked /> 🎮 3D Models (ON/OFF)</label>
-          <label style="display:flex;align-items:center;justify-content:space-between;margin-top:4px">
-            <span>⚡ 3D Quality</span>
-            <select id="m3q" style="background:#1a2346;color:#fff;border:1px solid #ffffff33;border-radius:6px;padding:2px 6px">
-              <option value="AUTO">AUTO</option>
-              <option value="HIGH">HIGH</option>
-              <option value="MEDIUM">MEDIUM</option>
-              <option value="LOW">LOW</option>
-            </select>
-          </label>
-          <button id="btn-credits" style="margin-top:10px;font-size:11px;padding:6px 10px;width:100%;text-align:center">📜 Credits & Attribution</button>
+      <!-- Dedicated Pokédex Settings Modal Overlay -->
+      <div id="set-ov">
+        <div class="box set-box">
+          <div class="set-hdr">⚙ POKÉDEX SETTINGS</div>
+          <div class="set-body">
+            <div class="set-row">
+              <span class="set-lbl">🔊 Master Sound</span>
+              <label class="dex-switch">
+                <input type="checkbox" id="son" checked />
+                <span class="dex-slider-sw round"></span>
+              </label>
+            </div>
+            <div class="set-row">
+              <span class="set-lbl">Master Volume</span>
+              <input type="range" id="sv" min="0" max="100" value="70" class="dex-range" />
+            </div>
+            <div class="set-row">
+              <span class="set-lbl">🎵 Music Volume</span>
+              <input type="range" id="vm" min="0" max="100" value="60" class="dex-range" />
+            </div>
+            <div class="set-row">
+              <span class="set-lbl">⚔️ SFX Volume</span>
+              <input type="range" id="vs" min="0" max="100" value="80" class="dex-range" />
+            </div>
+            <div class="set-row">
+              <span class="set-lbl">🐾 Pokémon Cries</span>
+              <input type="range" id="vp" min="0" max="100" value="60" class="dex-range" />
+            </div>
+            <hr class="set-div" />
+            <div class="set-row">
+              <span class="set-lbl">🎮 3D Pokémon Models</span>
+              <label class="dex-switch">
+                <input type="checkbox" id="m3d" checked />
+                <span class="dex-slider-sw round"></span>
+              </label>
+            </div>
+            <div class="set-row">
+              <span class="set-lbl">⚡ 3D Quality Preset</span>
+              <select id="m3q" class="dex-dropdown">
+                <option value="AUTO">AUTO (Recommended)</option>
+                <option value="HIGH">HIGH (Retina / Max FX)</option>
+                <option value="MEDIUM">MEDIUM (Balanced)</option>
+                <option value="LOW">LOW (Performance)</option>
+              </select>
+            </div>
+            <div class="set-btns">
+              <button id="btn-credits" class="set-btn-alt">📜 Credits & Attribution</button>
+              <button id="btn-close-settings" class="set-btn-pri">CLOSE</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

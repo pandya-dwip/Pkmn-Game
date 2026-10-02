@@ -372,16 +372,16 @@ export class Pokemon3DAnimationController {
       // Lunge curve: quick thrust forward (0 to 0.4), hold/strike (0.4 to 0.6), return (0.6 to 1.0)
       let lungeDist = 0;
       if (p < 0.4) {
-        lungeDist = (p / 0.4) * 0.8;
+        lungeDist = (p / 0.4) * 0.5;
       } else if (p < 0.6) {
-        lungeDist = 0.8;
+        lungeDist = 0.5;
       } else {
-        lungeDist = 0.8 * (1 - (p - 0.6) / 0.4);
+        lungeDist = 0.5 * (1 - (p - 0.6) / 0.4);
       }
 
       this.model.position.x = this.basePosition.x + this.attackLungeDirection.x * lungeDist;
       this.model.position.z = this.basePosition.z + this.attackLungeDirection.z * lungeDist;
-      this.model.position.y = this.basePosition.y + Math.sin(p * Math.PI) * 0.25;
+      this.model.position.y = this.basePosition.y + Math.sin(p * Math.PI) * 0.18;
       return;
     }
 
@@ -399,8 +399,8 @@ export class Pokemon3DAnimationController {
       this.model.rotation.y = this.baseRotation.y + sway;
       this.model.position.y = this.basePosition.y + Math.abs(Math.sin(this.time * 2.2)) * 0.03;
     } else {
-      // Subtle position bobbing even with animation clips for extra organic feel
       this.model.position.copy(this.basePosition);
+      this.model.rotation.copy(this.baseRotation);
     }
   }
 

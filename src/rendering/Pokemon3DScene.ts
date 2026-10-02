@@ -20,9 +20,9 @@ export class Pokemon3DScene {
   private playerShadow: THREE.Mesh;
   private foeShadow: THREE.Mesh;
 
-  // Camera animation baselines (perfectly tuned to frame battle arena diagonal)
-  private defaultCameraPos = new THREE.Vector3(0, 2.6, 6.0);
-  private defaultCameraTarget = new THREE.Vector3(0, -0.3, 0);
+  // Camera animation baselines (calibrated to center the battle field)
+  private defaultCameraPos = new THREE.Vector3(0, 3.0, 7.5);
+  private defaultCameraTarget = new THREE.Vector3(0, 0.5, 0);
   private currentCameraPos = new THREE.Vector3();
   private currentCameraTarget = new THREE.Vector3();
 
@@ -67,7 +67,7 @@ export class Pokemon3DScene {
     this.hemiLight.position.set(0, 20, 0);
     this.scene.add(this.hemiLight);
 
-    // Ground shadows
+    // Ground shadows (calibrated for 1.15 base model scale)
     const shadowTex = this.createShadowTexture();
     const shadowMat = new THREE.MeshBasicMaterial({
       map: shadowTex,
@@ -76,13 +76,13 @@ export class Pokemon3DScene {
       depthWrite: false,
     });
 
-    const playerGeo = new THREE.PlaneGeometry(1.6, 1.1);
+    const playerGeo = new THREE.PlaneGeometry(1.0, 0.7);
     this.playerShadow = new THREE.Mesh(playerGeo, shadowMat.clone());
     this.playerShadow.rotation.x = -Math.PI / 2;
     this.playerShadow.position.set(Pokemon3DConfig.POSITIONS.player.x, 0.02, Pokemon3DConfig.POSITIONS.player.z);
     this.scene.add(this.playerShadow);
 
-    const foeGeo = new THREE.PlaneGeometry(1.4, 0.95);
+    const foeGeo = new THREE.PlaneGeometry(0.85, 0.6);
     this.foeShadow = new THREE.Mesh(foeGeo, shadowMat.clone());
     this.foeShadow.rotation.x = -Math.PI / 2;
     this.foeShadow.position.set(Pokemon3DConfig.POSITIONS.foe.x, 0.02, Pokemon3DConfig.POSITIONS.foe.z);

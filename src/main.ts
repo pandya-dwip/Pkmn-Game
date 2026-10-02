@@ -262,7 +262,7 @@ export const tb = (t: string) => `<i class="t ${t}">${TYPE_NAMES[t as keyof type
 export const img = (id: number) =>
   `<img src="${U(id)}" alt="${POKEMON_SPECIES_MAP[id]?.name || 'Mon'}" onerror="fb(this)">`;
 export const mh = (m: MonInstance) =>
-  `${img(m.id)}<span>${POKEMON_SPECIES_MAP[m.id]?.name} Lv.${m.lv}<small>HP ${m.hp}/${st(m).max}</small></span>`;
+  `${img(m.id)}<span><b>${POKEMON_SPECIES_MAP[m.id]?.name}</b> Lv.${m.lv}<small>HP ${m.hp}/${st(m).max}</small></span>`;
 
 export const mvh = (v: any, e: number = 1) =>
   `<span class="mn">${MOVE_ICONS[v.typeShort as keyof typeof MOVE_ICONS] || ''} ${v.name.toUpperCase()}</span><small>${v.type.toUpperCase()} · POWER ${v.power}</small><small>${'●'.repeat(
@@ -345,7 +345,7 @@ export function titleScr(): void {
     const i = await pick(
       'CHOOSE YOUR FIRST POKÉMON<br>(Lv.5)',
       STARTERS.map(id => ({
-        h: `${img(id)}<span>${POKEMON_SPECIES_MAP[id]?.name}<small>${POKEMON_SPECIES_MAP[id]?.typesShort
+        h: `${img(id)}<span><b>${POKEMON_SPECIES_MAP[id]?.name}</b><small>${POKEMON_SPECIES_MAP[id]?.typesShort
           .map(tb)
           .join('')}</small></span>`,
       }))
@@ -1438,12 +1438,17 @@ window.addEventListener('DOMContentLoaded', () => {
   const son = q('son') as HTMLInputElement;
   const sv = q('sv') as HTMLInputElement;
   const sb = q('sb');
+  const sbIcon = q('sb-icon');
+  const setOv = q('set-ov');
+  const btnCloseSettings = q('btn-close-settings');
 
   const updateSoundVisuals = () => {
     try {
       localStorage.setItem('kantoSnd', JSON.stringify(sound.SND));
     } catch {}
-    if (sb) sb.textContent = sound.SND.on && sound.SND.v > 0 ? '🔊' : '🔇';
+    const icon = sound.SND.on && sound.SND.v > 0 ? '🔊' : '🔇';
+    if (sbIcon) sbIcon.textContent = icon;
+    else if (sb) sb.textContent = icon;
   };
 
   if (son) {
@@ -1463,8 +1468,24 @@ window.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  if (sb) {
-    sb.onclick = () => q('snd').classList.toggle('open');
+  if (sb && setOv) {
+    sb.onclick = () => {
+      setOv.style.display = 'flex';
+    };
+  }
+
+  if (btnCloseSettings && setOv) {
+    btnCloseSettings.onclick = () => {
+      setOv.style.display = 'none';
+    };
+  }
+
+  if (setOv) {
+    setOv.onclick = e => {
+      if (e.target === setOv) {
+        setOv.style.display = 'none';
+      }
+    };
   }
 
   for (const [k, id] of [

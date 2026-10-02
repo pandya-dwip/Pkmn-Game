@@ -358,6 +358,8 @@ export function titleScr(): void {
       r: 0,
       team: [mk(STARTERS[i], 5)],
       b: 3,
+      b50: 2,
+      b75: 1,
       fh: 2,
       rv: 2,
       st: {},
@@ -470,11 +472,140 @@ export function hubScr(): void {
   }</h1><p style="text-align:center">★ YOU ADVANCED ★<br><br>REWARDS<br>+ ${G.last?.e || 0} EXP<br>+ ${
     G.last?.it || 'None'
   }<br>+ Pokémon Choice</p><table>${G.team.map(trow).join('')}</table>
+  <div class="quick-actions-bar">
+    <button id="qh-train" class="qpm-btn qpm-train" title="Instantly train whole team using 1 session">💪 QUICK TRAIN</button>
+    <button id="qh-heal" class="qpm-btn qpm-heal" title="Heal and revive team using available bag berries">🩹 QUICK HEAL</button>
+    <button id="qh-maxheal" class="qpm-btn qpm-maxheal" title="Fully restore entire team to 100% HP">✨ MAX HEAL</button>
+  </div>
   <p>TRAINING SESSIONS<br>${'★'.repeat(G.tk || 0)}${'☆'.repeat((G.tmax || 5) - (G.tk || 0))}<br>${G.tk || 0} / ${
     G.tmax || 5
-  } remaining<br> · 🍓${G.b} ✨${G.fh} 💊${G.rv}</p><div class="col"><button id="h1">TRAINING</button><button id="h2">TEAM</button><button id="h3">BAG</button><button id="h4">TOURNAMENT</button>${
+  } remaining<br> · 🍓${G.b || 0} 🫐${G.b50 || 0} 🍇${G.b75 || 0} ✨${G.fh || 0} 💊${G.rv || 0}</p><div class="col"><button id="h1">TRAINING</button><button id="h2">TEAM</button><button id="h3">BAG</button><button id="h4">TOURNAMENT</button>${
     (G.ev || 0) > 0 && G.r >= 4 ? `<button id="h5">✨ SPECIAL EVOLUTION ×${G.ev}</button>` : ''
   }</div><p style="text-align:center">NEXT MATCH: TBD</p>`;
+
+  // Quick Action: Train
+  $('#qh-train').onclick = async () => {
+    if ((G.tk || 0) < 1) {
+      return note(['No training sessions remaining for this round!']);
+    }
+    G.tk = (G.tk || 1) - 1;
+    const e = Math.round(
+      [25, 35, 45, 55, 65][Math.min(4, G.r - 1)] * [1, 1, 1.2, 1.2, 1.4][Math.min(4, (G.tmax || 5) - (G.tk || 0))]
+    );
+    HUB = ['💪 QUICK TEAM TRAINING COMPLETE!'];
+    for (const m of G.team) {
+      const h = Math.min(st(m).max - m.hp, Math.ceil(st(m).max * 0.15));
+      const n = POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase();
+      m.hp += h;
+      m.exp += e;
+      HUB.push(`${n} gained +${e} EXP (${h > 0 ? `+${h} HP` : 'Full HP'})`);
+      await lvls(m);
+    }
+    sound.beep(880, 0.35, 'triangle', 0.15);
+    const l = HUB;
+    HUB = null;
+    save();
+    await note(l);
+    hubScr();
+  };
+
+  // Quick Action: Heal
+  $('#qh-heal').onclick = async () => {
+    const damaged = G.team.filter(m => m.hp < st(m).max || m.hp <= 0);
+    if (!damaged.length) {
+      return note(['All Pokémon on your team are already at full HP!']);
+    }
+
+    let revCount = 0;
+    let b75Count = 0;
+    let b50Count = 0;
+    let b30Count = 0;
+    let fhCount = 0;
+
+    // 1. Revive any fainted Pokémon first
+    for (const m of G.team) {
+      if (m.hp <= 0 && (G.rv || 0) > 0) {
+        G.rv = Math.max(0, (G.rv || 1) - 1);
+        m.hp = Math.ceil(st(m).max * 0.5);
+        revCount++;
+      }
+    }
+
+    // 2. Heal damaged Pokémon using available berries
+    for (const m of G.team) {
+      while (m.hp < st(m).max) {
+        const missingPct = (st(m).max - m.hp) / st(m).max;
+        if (missingPct > 0.6 && (G.b75 || 0) > 0) {
+          G.b75 = Math.max(0, (G.b75 || 1) - 1);
+          m.hp = Math.min(st(m).max, m.hp + Math.ceil(st(m).max * 0.75));
+          b75Count++;
+        } else if (missingPct > 0.35 && (G.b50 || 0) > 0) {
+          G.b50 = Math.max(0, (G.b50 || 1) - 1);
+          m.hp = Math.min(st(m).max, m.hp + Math.ceil(st(m).max * 0.5));
+          b50Count++;
+        } else if ((G.b || 0) > 0) {
+          G.b = Math.max(0, (G.b || 1) - 1);
+          m.hp = Math.min(st(m).max, m.hp + Math.ceil(st(m).max * 0.3));
+          b30Count++;
+        } else if ((G.b50 || 0) > 0) {
+          G.b50 = Math.max(0, (G.b50 || 1) - 1);
+          m.hp = Math.min(st(m).max, m.hp + Math.ceil(st(m).max * 0.5));
+          b50Count++;
+        } else if ((G.b75 || 0) > 0) {
+          G.b75 = Math.max(0, (G.b75 || 1) - 1);
+          m.hp = Math.min(st(m).max, m.hp + Math.ceil(st(m).max * 0.75));
+          b75Count++;
+        } else if ((G.fh || 0) > 0) {
+          G.fh = Math.max(0, (G.fh || 1) - 1);
+          m.hp = st(m).max;
+          fhCount++;
+        } else {
+          break; // No more berries in bag
+        }
+      }
+    }
+
+    const usedParts: string[] = [];
+    if (revCount) usedParts.push(`💊 ${revCount} Revive(s)`);
+    if (fhCount) usedParts.push(`✨ ${fhCount} Full Heal Berry`);
+    if (b75Count) usedParts.push(`🍇 ${b75Count} Enigma (75%)`);
+    if (b50Count) usedParts.push(`🫐 ${b50Count} Sitrus (50%)`);
+    if (b30Count) usedParts.push(`🍓 ${b30Count} Oran (30%)`);
+
+    sound.beep(659, 0.15, 'sine');
+    sound.beep(880, 0.25, 'sine', 0.1, 0.12);
+    save();
+
+    if (usedParts.length) {
+      await note(['🩹 QUICK HEAL COMPLETE', 'Used: ' + usedParts.join(', '), 'Your team has been restored!']);
+    } else {
+      await note(['No berries or revives remaining in your bag!', 'Win battles to earn more berries and revives.']);
+    }
+    hubScr();
+  };
+
+  // Quick Action: Max Heal
+  $('#qh-maxheal').onclick = async () => {
+    let healed = false;
+    for (const m of G.team) {
+      if (m.hp < st(m).max) {
+        m.hp = st(m).max;
+        healed = true;
+      }
+    }
+    if (!healed) {
+      return note(['All Pokémon on your team are already at full 100% HP!']);
+    }
+
+    // Play Pokémon Center healing fanfare
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => sound.beep(freq, 0.22, 'triangle', 0.12, idx * 0.1));
+    save();
+    await note([
+      '✨ MAX HEAL COMPLETE! ✨',
+      'All Pokémon on your team have been completely restored to 100% full HP and all fainted Pokémon are revived!',
+    ]);
+    hubScr();
+  };
 
   $('#h1').onclick = trainScr;
   $('#h2').onclick = async () => {
@@ -822,6 +953,9 @@ export function ui(): void {
     if (im.dataset.k !== k) {
       im.dataset.k = k;
       spr(im, m.id, s === 'p');
+    }
+    if (pokemon3DManager.is3DActive(s)) {
+      im.style.opacity = '0';
     }
   }
 
@@ -1391,12 +1525,26 @@ export async function battle(r: number): Promise<void> {
     return champion();
   }
 
-  const ir: any = IR[r] || {};
-  const gt: string[] = [];
-  for (const k in ir) {
-    (G as any)[ITEMS[k].k] += ir[k];
-    gt.push(`${ir[k]} ${ITEMS[k].n}`);
-  }
+  // Guaranteed Victory Rewards: Revives, Full Max Health Berries, and Tier Berries
+  const revAward = Math.max(2, Math.floor((r + 3) / 2));
+  const fullHealAward = Math.max(2, Math.floor((r + 3) / 2));
+  const enigmaAward = Math.max(1, r);
+  const sitrusAward = 2;
+  const oranAward = 3;
+
+  G.rv = (G.rv || 0) + revAward;
+  G.fh = (G.fh || 0) + fullHealAward;
+  G.b75 = (G.b75 || 0) + enigmaAward;
+  G.b50 = (G.b50 || 0) + sitrusAward;
+  G.b = (G.b || 0) + oranAward;
+
+  const gt: string[] = [
+    `${revAward} Revive(s) 💊`,
+    `${fullHealAward} Full Heal Berry (100% HP) ✨`,
+    `${enigmaAward} Enigma Berry (75% HP) 🍇`,
+    `${sitrusAward} Sitrus Berry (50% HP) 🫐`,
+    `${oranAward} Oran Berry (30% HP) 🍓`,
+  ];
   if (r >= 1 && R() < 0.3) {
     const k = Object.keys(STN)[ri(0, 4)];
     G.st[k] = (G.st[k] || 0) + 1;
@@ -1463,8 +1611,13 @@ export async function champion(): Promise<void> {
   const pl = G.team;
   const L = (m: MonInstance) => `${POKEMON_SPECIES_MAP[m.id]?.name} Lv.${m.lv}`;
   const cards = (l: MonInstance[]) =>
-    `<div class="grid">${l
-      .map(m => `<div class="itm">${img(m.id)}<b>${POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase()}</b><small>Lv.${m.lv}</small></div>`)
+    `<div class="champ-grid">${l
+      .map(
+        m =>
+          `<div class="champ-card">${img(m.id)}<b>${POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase()}</b><small>Lv.${
+            m.lv
+          }</small><div class="champ-types">${POKEMON_SPECIES_MAP[m.id]?.typesShort.map(tb).join('')}</div></div>`
+      )
       .join('')}</div>`;
 
   const rec = {
@@ -1473,7 +1626,7 @@ export async function champion(): Promise<void> {
     finalOpponent: T.nm,
     finalOpponentTeam: fo.map(L),
     playerTeam: pl.map(L),
-    date: new Date().toLocaleString(),
+    date: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
   };
   try {
     localStorage.setItem('kantoChampion', JSON.stringify(rec));
@@ -1484,17 +1637,32 @@ export async function champion(): Promise<void> {
   await sleep(1200);
   [523, 659, 784, 1046, 784, 1046].forEach((f, i) => setTimeout(() => sound.beep(f, 0.25), i * 180));
 
-  await pick('<h1>YOU WON!</h1>The championship is yours!', [{ h: 'CONTINUE' }]);
-  await pick(`<h1>CHAMPION DEFEATED</h1>${T.av} ${T.nm}<br>You defeated:${cards(fo)}`, [{ h: 'CONTINUE' }]);
+  await pick(
+    `<h1>🏆 CHAMPIONSHIP VICTORY! 🏆</h1><p style="text-align:center">The Kanto Cup is officially yours!<br>You have triumphed over all 64 trainers!</p>`,
+    [{ h: 'VIEW GRAND FINAL RESULTS' }]
+  );
+
   confetti();
   await pick(
-    `<div class="trophy">🏆</div><h1>KANTO CHAMPION</h1>★ ★ ★ ★ ★<br>CONGRATULATIONS!<br><small>${rec.date}</small>`,
-    [{ h: 'CONTINUE' }]
+    `<h1>GRAND FINAL DEFEATED</h1><p style="text-align:center;font-weight:700">${T.av} ${T.nm}<br><small style="color:#64748b;font-weight:600">You defeated ${T.nm}'s team in the championship match:</small></p>${cards(
+      fo
+    )}`,
+    [{ h: 'ENTER HALL OF FAME' }]
   );
+
   confetti();
-  await pick(`<h1>🏆 CHAMPION 🏆</h1>KANTO CUP<br><br>FINAL TEAM${cards(pl)}FINAL OPPONENT: ${T.nm}${cards(fo)}`, [
-    { h: 'PLAY AGAIN' },
-  ]);
+  await pick(
+    `<div class="trophy" style="font-size:54px;text-align:center;margin:6px 0;animation:pul 1.2s infinite alternate">🏆</div><h1>KANTO CHAMPION</h1><p style="text-align:center;font-weight:800;color:#b45309">★ ★ ★ ★ ★<br>HALL OF FAME INDUCTION<br><small style="color:#64748b;font-weight:600">${rec.date}</small></p>`,
+    [{ h: 'VIEW CHAMPION TEAM' }]
+  );
+
+  confetti();
+  await pick(
+    `<h1>🏆 HALL OF FAME 🏆</h1><p style="text-align:center;font-weight:700">★ YOUR CHAMPIONSHIP SQUAD ★</p>${cards(
+      pl
+    )}<p style="text-align:center;font-size:11px;font-weight:600;margin-top:8px;color:#64748b">Defeated ${T.nm}'s Squad in the Grand Finals · ${rec.date}</p>`,
+    [{ h: 'PLAY AGAIN' }]
+  );
   titleScr();
 }
 

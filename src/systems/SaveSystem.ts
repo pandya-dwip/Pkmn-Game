@@ -39,6 +39,8 @@ export class SaveSystem {
         activePokemonId: data.activePokemonId ?? existing?.activePokemonId ?? '',
         inventory: data.inventory ?? existing?.inventory ?? {
           healthBerries: 2,
+          sitrusBerries: 2,
+          enigmaBerries: 1,
           fullHealBerries: 2,
           revives: 2,
           stones: {},

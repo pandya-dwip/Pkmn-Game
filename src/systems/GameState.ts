@@ -19,6 +19,8 @@ export class GameState {
   public activePokemonId: string = '';
   public inventory: Inventory = {
     healthBerries: 3,
+    sitrusBerries: 2,
+    enigmaBerries: 1,
     fullHealBerries: 2,
     revives: 2,
     stones: {},
@@ -98,6 +100,8 @@ export class GameState {
     this.activePokemonId = starterMon.instanceId;
     this.inventory = {
       healthBerries: 3,
+      sitrusBerries: 2,
+      enigmaBerries: 1,
       fullHealBerries: 2,
       revives: 2,
       stones: {},

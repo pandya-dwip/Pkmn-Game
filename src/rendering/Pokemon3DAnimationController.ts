@@ -37,6 +37,18 @@ export class Pokemon3DAnimationController {
   private faintTimer = 0;
   private originalOpacities: Map<THREE.Material, number> = new Map();
 
+  // Rigged bone tracking and T-Pose relaxation
+  private bones = {
+    leftArm: null as THREE.Bone | null,
+    rightArm: null as THREE.Bone | null,
+    leftForearm: null as THREE.Bone | null,
+    rightForearm: null as THREE.Bone | null,
+    head: null as THREE.Bone | null,
+    spine: null as THREE.Bone | null,
+    tail: null as THREE.Bone | null,
+  };
+  private boneBaselines: Map<THREE.Bone, THREE.Euler> = new Map();
+
   constructor(model: THREE.Group, clips: THREE.AnimationClip[]) {
     this.model = model;
     this.mixer = new THREE.AnimationMixer(model);
@@ -54,6 +66,9 @@ export class Pokemon3DAnimationController {
         }
       }
     });
+
+    // Discover skeletal bones for procedural animation & T-pose relaxation
+    this.discoverBones();
 
     // Start with idle animation
     this.playIdle();
@@ -95,6 +110,99 @@ export class Pokemon3DAnimationController {
     }
 
     return discovered;
+  }
+
+  /**
+   * Discovers skeletal bones and saves their rest rotations.
+   * If the model has no idle animation track, relaxes bind T-pose arms into combat guard stance.
+   */
+  private discoverBones(): void {
+    if (this.discovered.idle) return;
+
+    this.model.traverse(child => {
+      if ((child as THREE.Bone).isBone) {
+        const bone = child as THREE.Bone;
+        const name = bone.name.toLowerCase();
+        this.boneBaselines.set(bone, bone.rotation.clone());
+
+        if (
+          !this.bones.leftArm &&
+          (name.includes('larm') ||
+            name.includes('arm_l') ||
+            name.includes('arm1_l') ||
+            name.includes('leftarm') ||
+            name.includes('l_arm') ||
+            name.includes('lupperarm'))
+        ) {
+          this.bones.leftArm = bone;
+        } else if (
+          !this.bones.rightArm &&
+          (name.includes('rarm') ||
+            name.includes('arm_r') ||
+            name.includes('arm1_r') ||
+            name.includes('rightarm') ||
+            name.includes('r_arm') ||
+            name.includes('rupperarm'))
+        ) {
+          this.bones.rightArm = bone;
+        } else if (
+          !this.bones.leftForearm &&
+          (name.includes('lforearm') ||
+            name.includes('forearm_l') ||
+            name.includes('arm2_l') ||
+            name.includes('leftforearm') ||
+            name.includes('l_forearm'))
+        ) {
+          this.bones.leftForearm = bone;
+        } else if (
+          !this.bones.rightForearm &&
+          (name.includes('rforearm') ||
+            name.includes('forearm_r') ||
+            name.includes('arm2_r') ||
+            name.includes('rightforearm') ||
+            name.includes('r_forearm'))
+        ) {
+          this.bones.rightForearm = bone;
+        } else if (!this.bones.head && (name.includes('head') || name.includes('neck'))) {
+          this.bones.head = bone;
+        } else if (
+          !this.bones.spine &&
+          (name.includes('spine2') ||
+            name.includes('spine1') ||
+            name.includes('spine') ||
+            name.includes('chest') ||
+            name.includes('torso'))
+        ) {
+          this.bones.spine = bone;
+        } else if (!this.bones.tail && name.includes('tail')) {
+          this.bones.tail = bone;
+        }
+      }
+    });
+
+    this.relaxTPose();
+  }
+
+  /**
+   * Poses upper arms naturally down and bends elbows forward to eliminate T-pose.
+   */
+  private relaxTPose(): void {
+    if (this.discovered.idle) return;
+
+    if (this.bones.leftArm) {
+      this.bones.leftArm.rotation.z -= 0.75;
+      this.bones.leftArm.rotation.y += 0.35;
+    }
+    if (this.bones.rightArm) {
+      this.bones.rightArm.rotation.z += 0.75;
+      this.bones.rightArm.rotation.y -= 0.35;
+    }
+    if (this.bones.leftForearm) {
+      this.bones.leftForearm.rotation.z -= 0.35;
+    }
+    if (this.bones.rightForearm) {
+      this.bones.rightForearm.rotation.z += 0.35;
+    }
   }
 
   /**
@@ -385,19 +493,73 @@ export class Pokemon3DAnimationController {
       return;
     }
 
-    // 4. Procedural idle breathing and subtle sway (applied when idle clip is missing or to enhance life)
+    // 4. Procedural idle animation for living, animated Pokémon
     if (!this.discovered.idle) {
-      const breathe = Math.sin(this.time * 2.2) * 0.025;
-      const sway = Math.sin(this.time * 1.5) * 0.03;
+      // A. Skeleton bone animation (for rigged models without embedded animation clips)
+      if (this.bones.spine) {
+        const sb = this.boneBaselines.get(this.bones.spine);
+        if (sb) this.bones.spine.rotation.x = sb.x + Math.sin(this.time * 2.6) * 0.04;
+      }
+
+      if (this.bones.head) {
+        const hb = this.boneBaselines.get(this.bones.head);
+        if (hb) {
+          this.bones.head.rotation.y = hb.y + Math.sin(this.time * 1.3) * 0.08;
+          this.bones.head.rotation.x = hb.x + Math.sin(this.time * 2.2) * 0.04;
+        }
+      }
+
+      if (this.bones.leftArm) {
+        const ab = this.boneBaselines.get(this.bones.leftArm);
+        if (ab) {
+          this.bones.leftArm.rotation.z = ab.z - 0.75 + Math.sin(this.time * 2.6) * 0.04;
+          this.bones.leftArm.rotation.y = ab.y + 0.35 + Math.sin(this.time * 1.8) * 0.03;
+        }
+      }
+
+      if (this.bones.rightArm) {
+        const ab = this.boneBaselines.get(this.bones.rightArm);
+        if (ab) {
+          this.bones.rightArm.rotation.z = ab.z + 0.75 - Math.sin(this.time * 2.6) * 0.04;
+          this.bones.rightArm.rotation.y = ab.y - 0.35 - Math.sin(this.time * 1.8) * 0.03;
+        }
+      }
+
+      if (this.bones.leftForearm) {
+        const fb = this.boneBaselines.get(this.bones.leftForearm);
+        if (fb) this.bones.leftForearm.rotation.z = fb.z - 0.35 + Math.sin(this.time * 2.6 + 0.5) * 0.03;
+      }
+
+      if (this.bones.rightForearm) {
+        const fb = this.boneBaselines.get(this.bones.rightForearm);
+        if (fb) this.bones.rightForearm.rotation.z = fb.z + 0.35 - Math.sin(this.time * 2.6 + 0.5) * 0.03;
+      }
+
+      if (this.bones.tail) {
+        const tb = this.boneBaselines.get(this.bones.tail);
+        if (tb) this.bones.tail.rotation.y = tb.y + Math.sin(this.time * 3.2) * 0.15;
+      }
+
+      // B. Whole-model dynamic martial/boxer bounce & living stance
+      // Gives all models (including unrigged meshes like Hitmonlee) energetic fighting idle motion
+      const bounce = Math.abs(Math.sin(this.time * 3.2)) * 0.06;
+      const weightShift = Math.sin(this.time * 1.6) * 0.035;
+      const swayZ = Math.sin(this.time * 1.6) * 0.025;
+      const swayY = Math.sin(this.time * 1.6) * 0.035;
+
+      const breatheY = 1 + Math.sin(this.time * 3.2) * 0.03;
+      const breatheXZ = 1 - Math.sin(this.time * 3.2) * 0.015;
 
       this.model.scale.set(
-        this.baseScale.x * (1 - breathe * 0.6),
-        this.baseScale.y * (1 + breathe),
-        this.baseScale.z * (1 - breathe * 0.6)
+        this.baseScale.x * breatheXZ,
+        this.baseScale.y * breatheY,
+        this.baseScale.z * breatheXZ
       );
 
-      this.model.rotation.y = this.baseRotation.y + sway;
-      this.model.position.y = this.basePosition.y + Math.abs(Math.sin(this.time * 2.2)) * 0.03;
+      this.model.rotation.y = this.baseRotation.y + swayY;
+      this.model.rotation.z = this.baseRotation.z + swayZ;
+      this.model.position.x = this.basePosition.x + weightShift;
+      this.model.position.y = this.basePosition.y + bounce;
     } else {
       this.model.position.copy(this.basePosition);
       this.model.rotation.copy(this.baseRotation);

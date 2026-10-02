@@ -292,13 +292,33 @@ h1 {
   background: #ffffff;
   border: 4px solid var(--dex-red);
   border-radius: 22px;
-  padding: 18px;
-  max-width: 90%;
-  width: 440px;
-  max-height: 85vh;
+  padding: 18px 16px;
+  max-width: 94%;
+  width: 480px;
+  max-height: 86vh;
   overflow-y: auto;
+  overflow-x: hidden;
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.65), 0 0 0 2px #ffffff;
   color: #0f172a;
+}
+
+#ov .box::-webkit-scrollbar {
+  width: 6px;
+}
+
+#ov .box::-webkit-scrollbar-thumb {
+  background: var(--dex-red);
+  border-radius: 6px;
+}
+
+#ov .box::-webkit-scrollbar-track {
+  background: #fee2e2;
+  border-radius: 6px;
+}
+
+#ov .box img {
+  max-width: 100%;
+  height: auto;
 }
 
 #ov .box > div:first-child {
@@ -311,6 +331,89 @@ h1 {
   padding-bottom: 8px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+/* Championship & Hall of Fame Squad Cards */
+.champ-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+  margin: 12px 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 440px) {
+  .champ-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+}
+
+.champ-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 8px 4px;
+  text-align: center;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.07);
+  min-width: 0;
+  overflow: hidden;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.champ-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--dex-red);
+  box-shadow: 0 6px 14px rgba(220, 38, 38, 0.15);
+}
+
+.champ-card img {
+  width: 60px !important;
+  height: 60px !important;
+  max-width: 60px !important;
+  max-height: 60px !important;
+  object-fit: contain;
+  margin-bottom: 4px;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.18));
+}
+
+.champ-card b {
+  font-size: 11px;
+  font-weight: 800;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  display: block;
+}
+
+.champ-card small {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--dex-red-dark);
+  margin: 1px 0 2px;
+  display: block;
+}
+
+.champ-types {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.champ-types .t {
+  font-size: 8px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin: 0;
 }
 
 .grid {
@@ -643,6 +746,23 @@ h1 {
   animation-delay: -1s;
 }
 
+/* When 3D model is active, strictly hide 2D sprites and their CSS shadows */
+#fld.has-3d-player #pw,
+#fld.has-3d-player #ps,
+#fld.has-3d-player #psh {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+#fld.has-3d-foe #fw,
+#fld.has-3d-foe #fs,
+#fld.has-3d-foe #fsh {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 @keyframes br {
   0%, 100% { transform: perspective(800px) rotateY(var(--ry)) rotate(-0.8deg); }
   50% { transform: perspective(800px) rotateY(var(--ry)) rotate(0.8deg) translateY(-1%) scale(1.012, 1.03); }
@@ -863,32 +983,64 @@ h1 {
 }
 
 /* The 4 Iconic Pokédex Battle Buttons */
-[data-a="f"] {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 60%, #b91c1c 100%);
-  border-color: #fee2e2;
-  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.5);
+#ctl button[data-a="f"] {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 60%, #b91c1c 100%) !important;
+  color: #ffffff !important;
+  border-color: #fee2e2 !important;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.5) !important;
 }
 
-[data-a="p"] {
-  background: linear-gradient(135deg, #10b981 0%, #059669 60%, #047857 100%);
-  border-color: #d1fae5;
-  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.45);
+#ctl button[data-a="f"]:hover:not(:disabled) {
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 60%, #dc2626 100%) !important;
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.75) !important;
+  transform: translateY(-2px) scale(1.03);
 }
 
-[data-a="b"] {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 60%, #b45309 100%);
-  border-color: #fef3c7;
-  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.45);
+#ctl button[data-a="p"] {
+  background: linear-gradient(135deg, #10b981 0%, #059669 60%, #047857 100%) !important;
+  color: #ffffff !important;
+  border-color: #d1fae5 !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.45) !important;
 }
 
-[data-a="r"] {
-  background: linear-gradient(135deg, #64748b 0%, #475569 60%, #334155 100%);
-  border-color: #e2e8f0;
+#ctl button[data-a="p"]:hover:not(:disabled) {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 60%, #059669 100%) !important;
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.75) !important;
+  transform: translateY(-2px) scale(1.03);
 }
 
-#ctl button:hover:not(:disabled) {
-  transform: translateY(-2px) scale(1.02);
-  filter: brightness(1.1);
+#ctl button[data-a="b"] {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 60%, #b45309 100%) !important;
+  color: #ffffff !important;
+  border-color: #fef3c7 !important;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.45) !important;
+}
+
+#ctl button[data-a="b"]:hover:not(:disabled) {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 60%, #d97706 100%) !important;
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.75) !important;
+  transform: translateY(-2px) scale(1.03);
+}
+
+#ctl button[data-a="r"] {
+  background: linear-gradient(135deg, #64748b 0%, #475569 60%, #334155 100%) !important;
+  color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 14px rgba(100, 116, 139, 0.45) !important;
+}
+
+#ctl button[data-a="r"]:hover:not(:disabled) {
+  background: linear-gradient(135deg, #94a3b8 0%, #64748b 60%, #475569 100%) !important;
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 6px 20px rgba(100, 116, 139, 0.75) !important;
+  transform: translateY(-2px) scale(1.03);
 }
 
 /* Move Cartridges */
@@ -901,11 +1053,82 @@ h1 {
   padding: 8px 12px;
   text-align: left;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  transition: all 0.15s ease-out;
 }
 
-#ctl .mv:hover {
-  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-  border-color: var(--dex-red-dark);
+#ctl .mv:hover:not(:disabled) {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%) !important;
+  border-color: var(--dex-red-dark) !important;
+  color: #0f172a !important;
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.25);
+}
+
+#ctl .mv:hover .mn {
+  color: var(--dex-red-deep) !important;
+}
+
+/* Quick Actions Bar after match in Hub */
+.quick-actions-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 14px 0 10px;
+}
+
+.qpm-btn {
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  text-align: center !important;
+  padding: 10px 6px !important;
+  border-radius: 12px !important;
+  cursor: pointer;
+  transition: all 0.15s ease-out;
+  min-height: 44px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  border: 2px solid #ffffff !important;
+}
+
+.qpm-train {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  color: #ffffff !important;
+  border-color: #fef3c7 !important;
+}
+
+.qpm-train:hover:not(:disabled) {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.5) !important;
+  transform: translateY(-2px) scale(1.02);
+  color: #ffffff !important;
+}
+
+.qpm-heal {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: #ffffff !important;
+  border-color: #d1fae5 !important;
+}
+
+.qpm-heal:hover:not(:disabled) {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%) !important;
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5) !important;
+  transform: translateY(-2px) scale(1.02);
+  color: #ffffff !important;
+}
+
+.qpm-maxheal {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 60%, #1d4ed8 100%) !important;
+  color: #ffffff !important;
+  border-color: #dbeafe !important;
+}
+
+.qpm-maxheal:hover:not(:disabled) {
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 60%, #2563eb 100%) !important;
+  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.6) !important;
+  transform: translateY(-2px) scale(1.02);
+  color: #ffffff !important;
 }
 
 #ctl .mv small {
@@ -1472,15 +1695,83 @@ tr:last-child td {
   #fld {
     aspect-ratio: auto;
     flex: 1 1 auto;
-    min-height: 300px;
+    min-height: 280px;
     border-radius: 14px;
   }
   #msg {
     min-height: 44px;
     padding: 8px 12px;
-    font-size: 14px;
+    font-size: 13px;
   }
   #ctl button {
     padding: 8px 10px;
+    font-size: 12px;
+  }
+  .quick-actions-bar {
+    gap: 6px;
+    margin: 10px 0;
+  }
+  .qpm-btn {
+    font-size: 11px !important;
+    padding: 8px 4px !important;
+    min-height: 40px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  #dex-bar {
+    padding: 8px 12px;
+    gap: 10px;
+  }
+  .dex-lens-bezel {
+    width: 36px;
+    height: 36px;
+  }
+  .dex-badge {
+    font-size: 8px;
+    padding: 2px 8px;
+  }
+  .scr {
+    padding: 8px;
+    margin: 4px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 6px 0;
+  }
+  #ov {
+    padding: 8px;
+  }
+  #ov .box {
+    padding: 14px 10px;
+    border-radius: 16px;
+    max-height: 90vh;
+  }
+  #ov .box > div:first-child {
+    font-size: 15px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+  }
+  .champ-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  .champ-card {
+    padding: 6px 3px;
+  }
+  .champ-card img {
+    width: 50px !important;
+    height: 50px !important;
+  }
+  .champ-card b {
+    font-size: 10px;
+  }
+  .quick-actions-bar {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .qpm-btn {
+    font-size: 12px !important;
+    padding: 10px !important;
   }
 }

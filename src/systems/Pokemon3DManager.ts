@@ -160,6 +160,10 @@ export class Pokemon3DManager {
     if (this.renderer) {
       this.renderer.stop();
     }
+    const fldEl = document.querySelector('#fld');
+    if (fldEl) {
+      fldEl.classList.remove('has-3d-player', 'has-3d-foe');
+    }
   }
 
   /**
@@ -247,6 +251,11 @@ export class Pokemon3DManager {
       const shEl = document.querySelector(isPlayer ? '#psh' : '#fsh') as HTMLElement | null;
       if (shEl) shEl.style.display = 'none';
 
+      const fldEl = document.querySelector('#fld');
+      if (fldEl) {
+        fldEl.classList.add(isPlayer ? 'has-3d-player' : 'has-3d-foe');
+      }
+
       return true;
     } catch (err) {
       console.warn(`[Pokemon3DManager] Falling back to 2D sprite for ${side === 'p' ? 'player' : 'foe'} (Pokemon #${pokemonId}):`, err);
@@ -256,6 +265,11 @@ export class Pokemon3DManager {
       }
       const shEl = document.querySelector(isPlayer ? '#psh' : '#fsh') as HTMLElement | null;
       if (shEl) shEl.style.display = '';
+
+      const fldEl = document.querySelector('#fld');
+      if (fldEl) {
+        fldEl.classList.remove(isPlayer ? 'has-3d-player' : 'has-3d-foe');
+      }
       return false;
     }
   }

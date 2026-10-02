@@ -1689,13 +1689,13 @@ tr:last-child td {
   #bat.on {
     display: flex;
     flex-direction: column;
-    flex: 1;
-    min-height: 0;
+    justify-content: flex-start;
   }
   #fld {
-    aspect-ratio: auto;
-    flex: 1 1 auto;
-    min-height: 280px;
+    aspect-ratio: 10/8;
+    width: 100%;
+    height: auto;
+    flex: 0 0 auto;
     border-radius: 14px;
   }
   #msg {

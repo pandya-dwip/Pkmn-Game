@@ -51,7 +51,7 @@ export const Pokemon3DConfig = {
   POSITIONS: {
     // Player on the grass field directly above player's info box (bottom-left)
     player: {
-      x: -1.35,
+      x: -1.15,
       y: 0,
       z: 1.2,
       // Facing toward opponent (top-right along battle diagonal)
@@ -59,7 +59,7 @@ export const Pokemon3DConfig = {
     },
     // Opponent on the grass field aligned with opponent's info box (top-right)
     foe: {
-      x: 1.45,
+      x: 1.25,
       y: 0,
       z: -1.6,
       // Facing toward player (bottom-left along battle diagonal)

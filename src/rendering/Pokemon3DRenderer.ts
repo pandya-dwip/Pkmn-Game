@@ -97,6 +97,8 @@ export class Pokemon3DRenderer {
     }
   }
 
+  private boundCamera: THREE.PerspectiveCamera | null = null;
+
   public getQuality(): QualityLevel {
     return this.currentQualityLevel;
   }
@@ -109,9 +111,22 @@ export class Pokemon3DRenderer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxPr));
     this.renderer.setSize(width, height, false);
 
-    if (camera) {
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
+    const activeCam = camera || this.boundCamera;
+    if (activeCam) {
+      const aspect = width / height;
+      activeCam.aspect = aspect;
+
+      // Preserve horizontal framing on narrow / mobile viewports so Pokémon are never cut off
+      const baseAspect = 1.25;
+      if (aspect < baseAspect) {
+        const defaultFovRad = (36 * Math.PI) / 180;
+        const targetHRad = 2 * Math.atan(Math.tan(defaultFovRad / 2) * baseAspect);
+        const newVFovRad = 2 * Math.atan(Math.tan(targetHRad / 2) / aspect);
+        activeCam.fov = (newVFovRad * 180) / Math.PI;
+      } else {
+        activeCam.fov = 36;
+      }
+      activeCam.updateProjectionMatrix();
     }
   }
 
@@ -119,6 +134,9 @@ export class Pokemon3DRenderer {
    * Starts the animation loop
    */
   public start(scene: Pokemon3DScene, onUpdate: (delta: number) => void): void {
+    this.boundCamera = scene.camera;
+    this.handleResize(this.canvas.parentElement || document.body, scene.camera);
+
     if (this.isRendering) return;
     this.isRendering = true;
     this.onUpdateCallback = onUpdate;

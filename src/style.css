@@ -682,8 +682,8 @@ h1 {
   background: #7cc3ff;
   box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5);
   --ih: 104px;
-  --ow: min(34cqw, 27dvh);
-  --pw: min(54cqw, 38dvh);
+  --ow: min(21cqw, 17dvh);
+  --pw: min(27cqw, 22dvh);
 }
 
 #world, #bg {
@@ -704,8 +704,8 @@ h1 {
   position: absolute;
   left: 72.8%;
   top: 52.5%;
-  width: calc(var(--ow) * 0.72);
-  height: calc(var(--ow) * 0.16);
+  width: calc(var(--ow) * 0.85);
+  height: calc(var(--ow) * 0.22);
   transform: translate(-50%, -50%);
 }
 
@@ -713,8 +713,8 @@ h1 {
   position: absolute;
   left: 24.9%;
   top: 81.4%;
-  width: calc(var(--pw) * 0.76);
-  height: calc(var(--pw) * 0.16);
+  width: calc(var(--pw) * 0.85);
+  height: calc(var(--pw) * 0.22);
   transform: translate(-50%, -50%);
 }
 
@@ -733,7 +733,8 @@ h1 {
 #fw {
   width: var(--ow);
   left: 72.8%;
-  top: calc(52.5% - var(--ow) * 0.92);
+  bottom: calc(100% - 52.5%);
+  top: auto;
   right: auto;
   --ry: -14deg;
   transform: translateX(-50%);
@@ -771,14 +772,14 @@ h1 {
 }
 
 @keyframes fl2 {
-  0%, 100% { transform: perspective(800px) rotateY(var(--ry)); }
-  50% { transform: perspective(800px) rotateY(var(--ry)) translateY(-6%); }
+  0%, 100% { transform: translateX(-50%) perspective(800px) rotateY(var(--ry)); }
+  50% { transform: translateX(-50%) perspective(800px) rotateY(var(--ry)) translateY(-6%); }
 }
 
 @keyframes bn {
-  0%, 100% { transform: perspective(800px) rotateY(var(--ry)); }
-  40% { transform: perspective(800px) rotateY(var(--ry)) translateY(-4%) scale(0.99, 1.04); }
-  60% { transform: perspective(800px) rotateY(var(--ry)) scale(1.03, 0.96); }
+  0%, 100% { transform: translateX(-50%) perspective(800px) rotateY(var(--ry)); }
+  40% { transform: translateX(-50%) perspective(800px) rotateY(var(--ry)) translateY(-4%) scale(0.99, 1.04); }
+  60% { transform: translateX(-50%) perspective(800px) rotateY(var(--ry)) scale(1.03, 0.96); }
 }
 
 .pk[data-t="f"] {
@@ -796,6 +797,7 @@ h1 {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  object-position: bottom center;
   image-rendering: auto;
 }
 

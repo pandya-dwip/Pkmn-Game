@@ -94,6 +94,9 @@ export interface GameSaveState {
     activeMember?: string | null;
   };
   defeated?: boolean;
+  savedRoutePos?: { routeId: number; x: number; y: number } | null;
+  currentRouteId?: number;
+  wildBattlesCount?: number;
 }
 
 export let G: GameSaveState;
@@ -649,9 +652,40 @@ export function starterScr(trainerName: string = 'DWIP'): void {
 // ============================================================================
 // SCREEN 5: ROUTE EXPLORATION LAYER (Interactive Kanto Travel)
 // ============================================================================
+export function saveCurrentRoutePosition(): void {
+  if (routeExplorationEngine.currentRoute && G) {
+    G.currentRouteId = routeExplorationEngine.currentRoute.id;
+    G.savedRoutePos = {
+      routeId: routeExplorationEngine.currentRoute.id,
+      x: Math.round(routeExplorationEngine.player.x),
+      y: Math.round(routeExplorationEngine.player.y),
+    };
+    save();
+  }
+}
+
 export function enterRouteExploration(routeId?: number, resumeX?: number, resumeY?: number): void {
-  const rId = routeId !== undefined ? routeId : Math.min(KANTO_JOURNEY_ROUTES.length - 1, G?.gymIndex || 0);
+  // Determine active route: explicit param > G.savedRoutePos.routeId > G.currentRouteId > G.gymIndex
+  const rId =
+    routeId !== undefined
+      ? routeId
+      : (G?.savedRoutePos?.routeId !== undefined
+          ? G.savedRoutePos.routeId
+          : (G?.currentRouteId !== undefined
+              ? G.currentRouteId
+              : Math.min(KANTO_JOURNEY_ROUTES.length - 1, G?.gymIndex || 0)));
+
+  if (G) {
+    G.currentRouteId = rId;
+  }
+
   const routeDef = KANTO_JOURNEY_ROUTES[rId] || KANTO_JOURNEY_ROUTES[0];
+
+  // Resume saved position if returning to route without explicit coordinates
+  if (resumeX === undefined && resumeY === undefined && G?.savedRoutePos && G.savedRoutePos.routeId === rId) {
+    resumeX = G.savedRoutePos.x;
+    resumeY = G.savedRoutePos.y;
+  }
 
   sound.music('menu');
   show('route');
@@ -684,11 +718,13 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
 
   // Connect engine callbacks
   routeExplorationEngine.onTriggerEncounter = (wildMon, x, y) => {
+    saveCurrentRoutePosition();
     routeExplorationEngine.stop();
     battleWild(wildMon, { routeId: rId, x, y });
   };
 
   routeExplorationEngine.onEnterGym = (gymIndex) => {
+    saveCurrentRoutePosition();
     routeExplorationEngine.stop();
     gymBattleScr(gymIndex);
   };
@@ -721,8 +757,60 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
   };
 
   routeExplorationEngine.onEnterMart = () => {
+    saveCurrentRoutePosition();
     routeExplorationEngine.stop();
     shopScr();
+  };
+
+  routeExplorationEngine.onEnterGate = async (building) => {
+    routeExplorationEngine.isPaused = true;
+    sound.beep(880, 0.15, 'sine');
+    const nextRouteIdx = routeExplorationEngine.currentRoute ? routeExplorationEngine.currentRoute.id + 1 : 1;
+    const nextRouteDef = KANTO_JOURNEY_ROUTES[nextRouteIdx];
+    const destination = nextRouteDef ? nextRouteDef.name : 'the next area';
+    const choice = await pick(
+      `🚪 <b>${building.label}</b><br><br>Officer Jenny: "Halt, Trainer! This checkpoint gate connects to <b>${destination}</b>.<br>Would you like to pass through the gatehouse?"`,
+      [
+        { h: `🌲 PROCEED TO ${destination.toUpperCase()} ➔` },
+        { h: `🎒 RETURN TO CITY HUB` },
+        { h: `CANCEL (Stay on current route)` },
+      ],
+      false
+    );
+    if (choice === 0) {
+      if (G) {
+        G.currentRouteId = nextRouteIdx;
+        G.savedRoutePos = {
+          routeId: nextRouteIdx,
+          x: nextRouteDef ? nextRouteDef.startX : 70,
+          y: nextRouteDef ? nextRouteDef.startY : 230,
+        };
+        // Award 5 fresh training sessions for reaching a new area/city!
+        G.tk = (G.tk || 0) + 5;
+        G.tmax = Math.max(G.tmax || 5, G.tk);
+        save();
+      }
+      routeExplorationEngine.stop();
+      sound.beep(659, 0.15, 'sine');
+      sound.beep(880, 0.25, 'sine', 0.1, 0.12);
+      await note([
+        `<h1>🎉 ARRIVED AT ${destination.toUpperCase()}!</h1>`,
+        `You have successfully passed through the gatehouse and arrived at <b>${destination}</b>!`,
+        `<b>+5 fresh training sessions have been granted for reaching a new area!</b> (Total: ${G?.tk || 5})`,
+        `Explore the city, visit the Pokémon Center and Poké Mart, and prepare for the Gym challenge!`,
+      ]);
+      if (nextRouteIdx < KANTO_JOURNEY_ROUTES.length) {
+        enterRouteExploration(nextRouteIdx);
+      } else {
+        journeyHubScr();
+      }
+    } else if (choice === 1) {
+      saveCurrentRoutePosition();
+      routeExplorationEngine.stop();
+      journeyHubScr();
+    } else {
+      routeExplorationEngine.isPaused = false;
+    }
   };
 
   routeExplorationEngine.onPickItem = async (it) => {
@@ -763,27 +851,48 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
     routeExplorationEngine.isPaused = false;
   };
 
-  routeExplorationEngine.onRouteExit = (nextRouteId) => {
-    routeExplorationEngine.stop();
+  routeExplorationEngine.onRouteExit = async (nextRouteId) => {
     if (nextRouteId < KANTO_JOURNEY_ROUTES.length) {
+      const nextRouteDef = KANTO_JOURNEY_ROUTES[nextRouteId];
+      if (G) {
+        G.currentRouteId = nextRouteId;
+        G.savedRoutePos = {
+          routeId: nextRouteId,
+          x: nextRouteDef.startX,
+          y: nextRouteDef.startY,
+        };
+        G.tk = (G.tk || 0) + 5;
+        G.tmax = Math.max(G.tmax || 5, G.tk);
+        save();
+      }
+      routeExplorationEngine.stop();
+      sound.beep(659, 0.15, 'sine');
+      sound.beep(880, 0.25, 'sine', 0.1, 0.12);
+      await note([
+        `<h1>🎉 ARRIVED AT ${nextRouteDef.name.toUpperCase()}!</h1>`,
+        `You have arrived at <b>${nextRouteDef.name}</b>!`,
+        `<b>+5 fresh training sessions have been granted!</b> (Total: ${G?.tk || 5})`,
+      ]);
       enterRouteExploration(nextRouteId);
     } else {
+      routeExplorationEngine.stop();
       journeyHubScr();
     }
   };
 
   routeExplorationEngine.onOpenMenu = () => {
+    saveCurrentRoutePosition();
     routeExplorationEngine.stop();
     journeyHubScr();
   };
 }
 
 export function routeEncounterScr(): void {
-  enterRouteExploration(G.gymIndex);
+  enterRouteExploration(G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? G.gymIndex);
 }
 
 export function postGymInteractionScr(): void {
-  enterRouteExploration(G.gymIndex);
+  enterRouteExploration(G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? G.gymIndex);
 }
 
 // ============================================================================
@@ -795,6 +904,8 @@ export function journeyHubScr(): void {
 
   const gymIdx = G.gymIndex;
   const currentGym = gymIdx < 8 ? KANTO_GYMS[gymIdx] : null;
+  const activeRouteId = G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? gymIdx;
+  const currentRouteDef = KANTO_JOURNEY_ROUTES[activeRouteId] || KANTO_JOURNEY_ROUTES[gymIdx];
   const cityName = currentGym ? currentGym.city : 'Indigo Plateau';
 
   let heroCardHTML = '';
@@ -806,7 +917,7 @@ export function journeyHubScr(): void {
           <span class="journey-step-badge" style="background:#0284c7">KANTO ROUTE EXPLORATION</span>
           <span style="font-size:12px;font-weight:800;color:#facc15">${currentGym!.badgeIcon} GYM ${gymIdx + 1} OF 8</span>
         </div>
-        <div class="journey-card-title">${KANTO_JOURNEY_ROUTES[gymIdx]?.name || 'Route'} ➔ ${currentGym!.city}</div>
+        <div class="journey-card-title">${currentRouteDef?.name || 'Route'} ➔ ${currentRouteDef?.destinationLabel || currentGym!.city}</div>
         <div class="journey-card-desc">
           Walk through the Kanto world! Explore tall grass, battle wild Pokémon, catch partners with Poké Balls, and visit Pokémon Centers, Poké Marts, and Gyms!
         </div>
@@ -888,7 +999,7 @@ export function journeyHubScr(): void {
 
   // Attach event handlers
   if ($('#btn-explore-route')) {
-    $('#btn-explore-route').onclick = () => enterRouteExploration(G.gymIndex);
+    $('#btn-explore-route').onclick = () => enterRouteExploration(G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? G.gymIndex);
   }
 
   if ($('#btn-gym-battle')) {
@@ -896,7 +1007,7 @@ export function journeyHubScr(): void {
   }
 
   if ($('#btn-continue-journey')) {
-    $('#btn-continue-journey').onclick = () => enterRouteExploration(G.gymIndex);
+    $('#btn-continue-journey').onclick = () => enterRouteExploration(G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? G.gymIndex);
   }
 
   if ($('#btn-enter-championship')) {
@@ -1081,7 +1192,7 @@ export function shopScr(): void {
     };
   });
 
-  $('#shop-back').onclick = () => enterRouteExploration(G.gymIndex);
+  $('#shop-back').onclick = () => enterRouteExploration(G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? G.gymIndex);
 }
 
 // ============================================================================
@@ -1396,16 +1507,42 @@ export async function battleWild(
   }
 
   if (res === 'win') {
-    await note([`Defeated wild ${wildMon.name.toUpperCase()}! Your team gained valuable battle experience.`]);
+    const rewardMoney = Math.floor(wildMon.lv * 35 + ri(35, 75));
+    G.money = (G.money || 0) + rewardMoney;
+    save();
+
+    const ballsVal = $('#hud-balls-val');
+    const moneyVal = $('#hud-money-val');
+    if (ballsVal) ballsVal.textContent = String(G.balls || 0);
+    if (moneyVal) moneyVal.textContent = (G.money || 0).toLocaleString();
+
+    sound.beep(880, 0.15, 'sine');
+    await note([
+      `<h1>WILD BATTLE VICTORY!</h1>`,
+      `Defeated wild <b>${wildMon.name.toUpperCase()}</b>!`,
+      `💰 Earned <b>+₽${rewardMoney.toLocaleString()}</b> in prize money! (Total: ₽${(G.money || 0).toLocaleString()})`,
+      `Your team gained valuable battle experience.`,
+    ]);
   }
 
-  // After 5 encounters milestone before Gym 1
-  if (G.gymIndex === 0 && (G.routeEncountersDone || 0) >= 5) {
+  // Count wild battles
+  G.routeEncountersDone = (G.routeEncountersDone || 0) + 1;
+  G.wildBattlesCount = (G.wildBattlesCount || 0) + 1;
+  save();
+
+  // Every 5 wild battles grant 5 fresh training sessions!
+  if (G.wildBattlesCount % 5 === 0) {
+    G.tk = (G.tk || 0) + 5;
+    G.tmax = Math.max(G.tmax || 5, G.tk);
+    save();
+    sound.beep(659, 0.15, 'sine');
+    sound.beep(880, 0.25, 'sine', 0.1, 0.12);
     await note([
-      `<h1>PEWTER CITY ARRIVAL</h1>`,
-      `You have completed your journey across Route 1 and arrived in Pewter City!`,
-      `The Pewter Gym is now open for challenge!`,
-      `5 fresh training sessions have been granted.`,
+      `<h1>💪 BATTLE TRAINING REWARD</h1>`,
+      `You have completed <b>5 wild Pokémon battles</b>!`,
+      `<b>+5 fresh training sessions have been granted!</b>`,
+      `<p style="font-size:15px;color:#16a34a;font-weight:800;margin-top:8px">Total Training Sessions Available: ${G.tk}</p>`,
+      `Use your training sessions in the City Hub or Menu to power up your team!`,
     ]);
   }
 
@@ -2988,7 +3125,7 @@ export async function turn(pa: any): Promise<string | null> {
     if (B && B.isWild) {
       G.balls = Math.max(0, (G.balls || 1) - 1);
       save();
-      await say(`${G.trainerName.toUpperCase()} threw a POKÉ BALL!`, 300);
+      await say(`${G.trainerName.toUpperCase()} threw a POKÉ BALL!`, 200);
 
       // Poké Ball flight animation across battlefield
       const pw = $('#pw');
@@ -2996,62 +3133,201 @@ export async function turn(pa: any): Promise<string | null> {
       const pRect = pw ? ctr(pw) : { x: 250, y: 750 };
       const fRect = fw ? ctr(fw) : { x: 730, y: 520 };
 
-      sound.beep(600, 0.15, 'sine');
-      const ballEl = el('ball', {
-        left: pRect.x + 'px',
-        top: pRect.y + 'px',
-        zIndex: '99',
-      });
+      // Create high-detail realistic SVG Poké Ball projectile
+      const ballContainer = document.createElement('div');
+      ballContainer.className = 'pokeball-projectile';
+      ballContainer.style.left = pRect.x + 'px';
+      ballContainer.style.top = pRect.y + 'px';
+      ballContainer.innerHTML = `
+        <div class="pkb-shadow"></div>
+        <div class="pkb-rotator">
+          <svg class="pkb-svg" viewBox="0 0 100 100" width="46" height="46">
+            <defs>
+              <radialGradient id="pkb-red-grad" cx="35%" cy="30%" r="65%">
+                <stop offset="0%" stop-color="#ff4d4d"/>
+                <stop offset="60%" stop-color="#dc2626"/>
+                <stop offset="100%" stop-color="#881337"/>
+              </radialGradient>
+              <radialGradient id="pkb-white-grad" cx="35%" cy="30%" r="65%">
+                <stop offset="0%" stop-color="#ffffff"/>
+                <stop offset="70%" stop-color="#e2e8f0"/>
+                <stop offset="100%" stop-color="#94a3b8"/>
+              </radialGradient>
+              <linearGradient id="pkb-metal-grad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#f8fafc"/>
+                <stop offset="50%" stop-color="#94a3b8"/>
+                <stop offset="100%" stop-color="#475569"/>
+              </linearGradient>
+            </defs>
+            <circle cx="50" cy="50" r="48" fill="#0f172a" />
+            <path d="M 4 50 A 46 46 0 0 1 96 50 Z" fill="url(#pkb-red-grad)" />
+            <ellipse cx="36" cy="24" rx="14" ry="7" fill="rgba(255,255,255,0.4)" transform="rotate(-15 36 24)" />
+            <path d="M 4 50 A 46 46 0 0 0 96 50 Z" fill="url(#pkb-white-grad)" />
+            <rect x="3" y="46" width="94" height="8" fill="#0f172a" />
+            <circle cx="50" cy="50" r="14" fill="#0f172a" />
+            <circle cx="50" cy="50" r="10" fill="url(#pkb-metal-grad)" />
+            <circle class="pkb-center-led" cx="50" cy="50" r="6" fill="#f8fafc" stroke="#475569" stroke-width="1" />
+          </svg>
+        </div>
+      `;
+      const world = $('#world') || document.body;
+      world.appendChild(ballContainer);
 
-      await fly(
-        ballEl,
+      const rotator = ballContainer.querySelector('.pkb-rotator') as HTMLElement;
+      const ledEl = ballContainer.querySelector('.pkb-center-led') as SVGElement;
+
+      // 1. High Parabolic Throw Arc with 3D Rotation
+      sound.swp(350, 800, 0.22, 'sine', 0.15);
+      sound.beep(620, 0.12, 'triangle');
+
+      const dx = fRect.x - pRect.x;
+      const dy = fRect.y - pRect.y - 70; // Hover above wild Pokémon
+
+      rotator.animate(
         [
-          { transform: 'translate(0, 0) scale(0.6)' },
-          { transform: `translate(${(fRect.x - pRect.x) * 0.5}px, ${(fRect.y - pRect.y) * 0.5 - 120}px) scale(1.1)`, offset: 0.5 },
-          { transform: `translate(${fRect.x - pRect.x}px, ${fRect.y - pRect.y}px) scale(0.9)` },
+          { transform: 'rotate(0deg)' },
+          { transform: 'rotate(720deg)' },
         ],
-        { duration: 650, easing: 'ease-out' }
+        { duration: 680, easing: 'ease-out', fill: 'forwards' }
       );
 
-      // Impact sound & puff
-      sound.beep(280, 0.15, 'sawtooth');
-      puff(fRect.x, fRect.y, '✨', 10, 60, 450);
+      await ballContainer.animate(
+        [
+          { transform: 'translate(-50%, -50%) scale(0.6)' },
+          { transform: `translate(calc(-50% + ${dx * 0.45}px), calc(-50% + ${dy * 0.45 - 130}px)) scale(1.15)`, offset: 0.45 },
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1.0)` },
+        ],
+        { duration: 680, easing: 'cubic-bezier(0.22, 0.9, 0.36, 1)', fill: 'forwards' }
+      ).finished;
 
-      // Pull wild mon into ball
+      // 2. Open Ball & Capture Beam
+      sound.swp(880, 260, 0.32, 'sawtooth', 0.15);
+      puff(fRect.x, fRect.y, '✨', 12, 70, 500);
+
+      // Expanding Crimson Energy Wave
+      fly(
+        el('ring', {
+          borderColor: '#ef4444',
+          left: fRect.x + 'px',
+          top: (fRect.y - 30) + 'px',
+          width: '40px',
+          height: '40px',
+        }),
+        [
+          { transform: 'translate(-50%,-50%) scale(0.5)', opacity: '1' },
+          { transform: 'translate(-50%,-50%) scale(2.8)', opacity: '0' },
+        ],
+        { duration: 420 }
+      );
+
+      // Suck wild Pokémon into ball
       await recall('f');
-      await sleep(350);
+      sound.beep(650, 0.1, 'square'); // Click shut
+      await sleep(200);
 
-      // Ball wobbles/shakes
+      // 3. Ground Fall & Physics Bounces
+      const groundDy = fRect.y - pRect.y + 40; // Ground turf level under foe
+
+      // Drop down
+      await ballContainer.animate(
+        [
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1.0)` },
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${groundDy}px)) scale(1.0)` },
+        ],
+        { duration: 240, easing: 'cubic-bezier(0.5, 0, 0.8, 0.4)', fill: 'forwards' }
+      ).finished;
+
+      // Bounce 1
+      sound.beep(150, 0.08, 'triangle');
+      puff(fRect.x, fRect.y + 50, '💨', 4, 30, 250);
+      await ballContainer.animate(
+        [
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${groundDy}px)) scale(1.0)` },
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${groundDy - 32}px)) scale(1.0)`, offset: 0.5 },
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${groundDy}px)) scale(1.0)` },
+        ],
+        { duration: 280, easing: 'ease-out', fill: 'forwards' }
+      ).finished;
+
+      // Bounce 2
+      sound.beep(180, 0.06, 'triangle');
+      await ballContainer.animate(
+        [
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${groundDy}px)) scale(1.0)` },
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${groundDy - 12}px)) scale(1.0)`, offset: 0.5 },
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${groundDy}px)) scale(1.0)` },
+        ],
+        { duration: 180, easing: 'ease-out', fill: 'forwards' }
+      ).finished;
+
+      // 4. Suspenseful Wobble Sequence
       const catchResult = calculateCatchSuccess(F());
       const success = catchResult.success;
       const shakeCount = catchResult.shakeCount;
+      const maxShakes = success ? 3 : Math.max(1, shakeCount);
 
-      for (let s = 1; s <= (success ? 3 : Math.max(1, shakeCount)); s++) {
-        await sleep(400);
-        sound.beep(400, 0.12, 'triangle');
-        await fly(
-          ballEl,
+      await sleep(450);
+
+      for (let s = 1; s <= maxShakes; s++) {
+        // LED Glows Red + Rattle Sound
+        if (ledEl) {
+          ledEl.style.fill = '#ef4444';
+          ledEl.style.filter = 'drop-shadow(0 0 6px #ef4444)';
+        }
+        sound.swp(460, 320, 0.14, 'sine', 0.12);
+        sound.beep(380, 0.12, 'triangle');
+
+        // Tilt left, tilt right, settle
+        await rotator.animate(
           [
-            { transform: `translate(${fRect.x - pRect.x}px, ${fRect.y - pRect.y}px) rotate(0deg)` },
-            { transform: `translate(${fRect.x - pRect.x}px, ${fRect.y - pRect.y}px) rotate(-22deg)` },
-            { transform: `translate(${fRect.x - pRect.x}px, ${fRect.y - pRect.y}px) rotate(22deg)` },
-            { transform: `translate(${fRect.x - pRect.x}px, ${fRect.y - pRect.y}px) rotate(0deg)` },
+            { transform: 'rotate(0deg)' },
+            { transform: 'rotate(-28deg)', offset: 0.25 },
+            { transform: 'rotate(24deg)', offset: 0.65 },
+            { transform: 'rotate(0deg)' },
           ],
-          { duration: 320 }
-        );
+          { duration: 380, easing: 'cubic-bezier(0.25, 1, 0.5, 1)', fill: 'forwards' }
+        ).finished;
+
+        if (ledEl) {
+          ledEl.style.fill = '#f8fafc';
+          ledEl.style.filter = 'none';
+        }
+
+        await sleep(420);
       }
-      await sleep(400);
 
+      // 5. Catch Resolution
       if (success) {
-        puff(fRect.x, fRect.y, '⭐', 14, 90, 600);
-        sound.music('victory');
-        sound.beep(880, 0.4, 'sine');
-        ballEl.remove();
+        // Final click & victory fanfare
+        if (ledEl) {
+          ledEl.style.fill = '#facc15';
+          ledEl.style.filter = 'drop-shadow(0 0 10px #facc15)';
+        }
+        sound.beep(1046.5, 0.18, 'sine');
+        sound.beep(1318.5, 0.35, 'sine', 0.2, 0.12);
+        puff(fRect.x, fRect.y + 40, '⭐', 16, 95, 700);
 
-        // CRITICAL REQUIREMENTS #14 & #15:
-        // Newly captured Pokémon MUST always start at 100% full HP with clean status!
+        fly(
+          el('ring', {
+            borderColor: '#facc15',
+            left: fRect.x + 'px',
+            top: (fRect.y + 40) + 'px',
+            width: '40px',
+            height: '40px',
+          }),
+          [
+            { transform: 'translate(-50%,-50%) scale(0.5)', opacity: '1' },
+            { transform: 'translate(-50%,-50%) scale(3)', opacity: '0' },
+          ],
+          { duration: 600 }
+        );
+
+        sound.music('victory');
+        await sleep(500);
+        ballContainer.remove();
+
         const captured = mk(F().id, F().lv);
-        captured.hp = st(captured).max; // STRICT 100% FULL HP!
+        captured.hp = st(captured).max;
         captured.se = undefined;
 
         let destinationMsg = '';
@@ -3072,9 +3348,9 @@ export async function turn(pa: any): Promise<string | null> {
         S.phase = 'BATTLE_OVER';
         return 'caught';
       } else {
-        ballEl.remove();
-        sound.swp(200, 400, 0.2, 'sawtooth', 0.15);
-        puff(fRect.x, fRect.y, '💥', 8, 70, 400);
+        ballContainer.remove();
+        sound.swp(180, 480, 0.25, 'sawtooth', 0.18);
+        puff(fRect.x, fRect.y + 40, '💥', 10, 80, 450);
         await release('f');
         await say(`Oh no! The wild ${NM('f')} broke free!`, 500);
 
@@ -3342,33 +3618,111 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  // Route Exploration Virtual D-Pad & Controls
+  // Route Exploration Virtual D-Pad & Controls (Continuous Drag & Touch Auto-Move)
   const dpad = q('v-dpad');
   if (dpad) {
-    dpad.querySelectorAll<HTMLButtonElement>('.dpad-btn').forEach(btn => {
-      const dir = btn.dataset.dir as 'up' | 'down' | 'left' | 'right';
-      btn.addEventListener('pointerdown', e => {
-        e.preventDefault();
-        routeExplorationEngine.setDirection(dir);
+    let activePointerId: number | null = null;
+    const buttons = dpad.querySelectorAll<HTMLButtonElement>('.dpad-btn');
+
+    const setActiveDir = (dir: 'up' | 'down' | 'left' | 'right' | null) => {
+      routeExplorationEngine.setDirection(dir);
+      buttons.forEach(btn => {
+        if (dir && btn.dataset.dir === dir) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
       });
-      const clearDir = () => routeExplorationEngine.setDirection(null);
-      btn.addEventListener('pointerup', clearDir);
-      btn.addEventListener('pointerleave', clearDir);
-      btn.addEventListener('pointercancel', clearDir);
+    };
+
+    const handlePointerCoord = (clientX: number, clientY: number) => {
+      const rect = dpad.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const dx = clientX - centerX;
+      const dy = clientY - centerY;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist < 12) {
+        setActiveDir(null);
+        return;
+      }
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        setActiveDir(dx > 0 ? 'right' : 'left');
+      } else {
+        setActiveDir(dy > 0 ? 'down' : 'up');
+      }
+    };
+
+    dpad.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      activePointerId = e.pointerId;
+      try {
+        dpad.setPointerCapture(e.pointerId);
+      } catch {}
+      handlePointerCoord(e.clientX, e.clientY);
+    });
+
+    dpad.addEventListener('pointermove', e => {
+      if (activePointerId !== null && e.pointerId === activePointerId) {
+        e.preventDefault();
+        handlePointerCoord(e.clientX, e.clientY);
+      }
+    });
+
+    const endPointer = (e: PointerEvent) => {
+      if (activePointerId !== null && e.pointerId === activePointerId) {
+        activePointerId = null;
+        try {
+          dpad.releasePointerCapture(e.pointerId);
+        } catch {}
+        setActiveDir(null);
+      }
+    };
+
+    dpad.addEventListener('pointerup', endPointer);
+    dpad.addEventListener('pointercancel', endPointer);
+    dpad.addEventListener('lostpointercapture', () => setActiveDir(null));
+
+    // Touch events fallback for mobile browsers
+    dpad.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (e.touches.length > 0) {
+        handlePointerCoord(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: false });
+
+    dpad.addEventListener('touchend', e => {
+      e.preventDefault();
+      setActiveDir(null);
     });
   }
 
+  const doInteract = (e: Event) => {
+    e.preventDefault();
+    e.stopPropagation();
+    routeExplorationEngine.interact();
+  };
+
   const btnInteract = q('btn-interact');
   if (btnInteract) {
-    btnInteract.addEventListener('pointerdown', e => {
-      e.preventDefault();
-      routeExplorationEngine.interact();
-    });
+    btnInteract.addEventListener('pointerdown', doInteract);
+    btnInteract.addEventListener('touchstart', doInteract, { passive: false });
+    btnInteract.addEventListener('click', doInteract);
+  }
+
+  const promptEl = q('route-prompt');
+  if (promptEl) {
+    promptEl.addEventListener('pointerdown', doInteract);
+    promptEl.addEventListener('touchstart', doInteract, { passive: false });
+    promptEl.addEventListener('click', doInteract);
   }
 
   const hudMenuBtn = q('hud-menu-btn');
   if (hudMenuBtn) {
     hudMenuBtn.onclick = () => {
+      saveCurrentRoutePosition();
       routeExplorationEngine.stop();
       journeyHubScr();
     };

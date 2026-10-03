@@ -88,7 +88,7 @@ export class RouteExplorationEngine {
     h: 28,
     vx: 0,
     vy: 0,
-    speed: 155,
+    speed: 235,
     dir: 'down' as 'down' | 'up' | 'left' | 'right',
     stepTimer: 0,
     animFrame: 0,
@@ -115,6 +115,7 @@ export class RouteExplorationEngine {
   public onEnterGym: ((gymIndex: number) => void) | null = null;
   public onEnterMart: (() => void) | null = null;
   public onEnterCenter: (() => void) | null = null;
+  public onEnterGate: ((building: RouteBuilding) => void) | null = null;
   public onPickItem: ((item: RouteItem) => void) | null = null;
   public onTalkNPC: ((npc: RouteNPC) => void) | null = null;
   public onRouteExit: ((nextRouteIndex: number) => void) | null = null;
@@ -174,7 +175,7 @@ export class RouteExplorationEngine {
     // Check NPC interaction
     for (const npc of this.currentRoute.npcs) {
       const dist = Math.hypot(this.player.x - npc.x, this.player.y - npc.y);
-      if (dist < 48) {
+      if (dist < 55) {
         sound.beep(660, 0.1, 'triangle');
         if (this.onTalkNPC) this.onTalkNPC(npc);
         return;
@@ -184,10 +185,10 @@ export class RouteExplorationEngine {
     // Check Building interaction
     for (const b of this.currentRoute.buildings) {
       const nearDoor =
-        this.player.x >= b.x - 10 &&
-        this.player.x <= b.x + b.w + 10 &&
-        this.player.y >= b.y + b.h - 10 &&
-        this.player.y <= b.y + b.h + 30;
+        this.player.x >= b.x - 20 &&
+        this.player.x <= b.x + b.w + 24 &&
+        this.player.y >= b.y + b.h - 16 &&
+        this.player.y <= b.y + b.h + 45;
 
       if (nearDoor) {
         sound.beep(880, 0.15, 'sine');
@@ -197,10 +198,50 @@ export class RouteExplorationEngine {
           this.onEnterMart();
         } else if (b.type === 'center' && this.onEnterCenter) {
           this.onEnterCenter();
+        } else if (b.type === 'gate') {
+          if (this.onEnterGate) {
+            this.onEnterGate(b);
+          } else if (this.onRouteExit) {
+            this.onRouteExit(this.currentRoute.id + 1);
+          }
         }
         return;
       }
     }
+
+    // Check Route Exit Signpost
+    if (this.currentRoute.exitX > 0) {
+      const ex = this.currentRoute.exitX - 30;
+      const ey = 200;
+      if (Math.hypot(this.player.x - ex, this.player.y - ey) < 55) {
+        sound.beep(880, 0.15, 'sine');
+        if (this.onRouteExit) {
+          this.onRouteExit(this.currentRoute.id + 1);
+        }
+        return;
+      }
+    }
+  }
+
+  public hasNearbyInteractable(): boolean {
+    if (!this.currentRoute) return false;
+    for (const npc of this.currentRoute.npcs) {
+      if (Math.hypot(this.player.x - npc.x, this.player.y - npc.y) < 55) return true;
+    }
+    for (const b of this.currentRoute.buildings) {
+      const nearDoor =
+        this.player.x >= b.x - 20 &&
+        this.player.x <= b.x + b.w + 24 &&
+        this.player.y >= b.y + b.h - 16 &&
+        this.player.y <= b.y + b.h + 45;
+      if (nearDoor) return true;
+    }
+    if (this.currentRoute.exitX > 0) {
+      const ex = this.currentRoute.exitX - 30;
+      const ey = 200;
+      if (Math.hypot(this.player.x - ex, this.player.y - ey) < 55) return true;
+    }
+    return false;
   }
 
   public loadRoute(routeDef: RouteDefinition, resumeX?: number, resumeY?: number): void {
@@ -263,16 +304,16 @@ export class RouteExplorationEngine {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D', ' ', 'e', 'E', 'Escape'].includes(e.key)) {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D', ' ', 'e', 'E', 'z', 'Z', 'Enter', 'Escape'].includes(e.key)) {
       e.preventDefault();
     }
     const key = e.key.toLowerCase();
     if (key === 'arrowup' || key === 'w') this.keys['ArrowUp'] = true;
     if (key === 'arrowdown' || key === 's') this.keys['ArrowDown'] = true;
-    if (key === 'arrowleft' || key === 'a') this.keys['ArrowLeft'] = true;
+    if (key === 'arrowleft' || (key === 'a' && !this.hasNearbyInteractable())) this.keys['ArrowLeft'] = true;
     if (key === 'arrowright' || key === 'd') this.keys['ArrowRight'] = true;
 
-    if (key === ' ' || key === 'e') {
+    if (key === ' ' || key === 'e' || key === 'enter' || key === 'z' || (key === 'a' && this.hasNearbyInteractable())) {
       this.interact();
     }
     if (key === 'escape' && this.onOpenMenu) {
@@ -350,7 +391,7 @@ export class RouteExplorationEngine {
 
     if (isMoving) {
       this.player.stepTimer += dt;
-      if (this.player.stepTimer > 0.18) {
+      if (this.player.stepTimer > 0.12) {
         this.player.stepTimer = 0;
         this.player.animFrame = (this.player.animFrame + 1) % 4;
       }
@@ -436,7 +477,7 @@ export class RouteExplorationEngine {
 
     for (const npc of this.currentRoute.npcs) {
       const dist = Math.hypot(this.player.x - npc.x, this.player.y - npc.y);
-      if (dist < 48) {
+      if (dist < 55) {
         promptText = `💬 Press [A] to talk to ${npc.name}`;
         break;
       }
@@ -445,14 +486,22 @@ export class RouteExplorationEngine {
     if (!promptText) {
       for (const b of this.currentRoute.buildings) {
         const nearDoor =
-          this.player.x >= b.x - 12 &&
-          this.player.x <= b.x + b.w + 12 &&
-          this.player.y >= b.y + b.h - 10 &&
-          this.player.y <= b.y + b.h + 28;
+          this.player.x >= b.x - 20 &&
+          this.player.x <= b.x + b.w + 24 &&
+          this.player.y >= b.y + b.h - 16 &&
+          this.player.y <= b.y + b.h + 45;
         if (nearDoor) {
           promptText = `🚪 Press [A] to enter ${b.label}`;
           break;
         }
+      }
+    }
+
+    if (!promptText && this.currentRoute.exitX > 0) {
+      const ex = this.currentRoute.exitX - 30;
+      const ey = 200;
+      if (Math.hypot(this.player.x - ex, this.player.y - ey) < 55) {
+        promptText = `🚪 Press [A] to proceed to Next Route ➔`;
       }
     }
 

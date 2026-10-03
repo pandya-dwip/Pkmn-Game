@@ -42,6 +42,15 @@ const $ = (s: string) => document.querySelector(s) as HTMLElement;
 const R = Math.random;
 
 export const ctr = (e: HTMLElement): { x: number; y: number } => {
+  const fld = $('#fld');
+  if (fld) {
+    const fRect = fld.getBoundingClientRect();
+    const eRect = e.getBoundingClientRect();
+    return {
+      x: eRect.left - fRect.left + eRect.width / 2,
+      y: eRect.top - fRect.top + eRect.height / 2,
+    };
+  }
   return {
     x: e.offsetLeft + e.offsetWidth / 2,
     y: e.offsetTop + e.offsetHeight / 2,
@@ -56,10 +65,13 @@ export const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, t
 export const el = (className: string, css?: Partial<CSSStyleDeclaration>, text?: string): HTMLElement => {
   const d = document.createElement('div');
   d.className = className;
+  d.style.position = 'absolute';
+  d.style.pointerEvents = 'none';
+  d.style.zIndex = '45'; // Always render on top of 3D canvas and sprites
   if (css) Object.assign(d.style, css);
   if (text) d.textContent = text;
-  const world = $('#world');
-  if (world) world.appendChild(d);
+  const fld = $('#fld') || $('#world') || document.body;
+  if (fld) fld.appendChild(d);
   return d;
 };
 
@@ -560,12 +572,12 @@ export class MoveAnimationSystem {
       const delay = i * 65;
       const ember = el('ember-bullet', {
         position: 'absolute',
-        width: '14px',
-        height: '14px',
+        width: '26px',
+        height: '26px',
         borderRadius: '50%',
-        background: 'radial-gradient(circle, #fff, #ff7a00 50%, #ff1100 85%, transparent)',
-        boxShadow: '0 0 10px #ff5500',
-        zIndex: '32',
+        background: 'radial-gradient(circle, #ffffff 15%, #fef08a 40%, #f97316 70%, #dc2626 95%)',
+        boxShadow: '0 0 16px #ff5500, 0 0 30px #ea580c',
+        zIndex: '46',
       });
 
       const scatterX = (R() - 0.5) * 36;
@@ -575,13 +587,13 @@ export class MoveAnimationSystem {
       const anim = fly(
         ember,
         [
-          { transform: tr(A, 0.4), opacity: '1' },
-          { transform: tr(lerp(A, targetPos, 0.5), 1.2), opacity: '1', offset: 0.5 },
-          { transform: tr(targetPos, 0.7), opacity: '0.8' },
+          { transform: tr(A, 0.5), opacity: '1' },
+          { transform: tr(lerp(A, targetPos, 0.5), 1.3), opacity: '1', offset: 0.5 },
+          { transform: tr(targetPos, 0.9), opacity: '0.8' },
         ],
         { duration: 320, delay, easing: 'cubic-bezier(0.2, 0.8, 0.4, 1)' }
       ).then(() => {
-        this.createImpactSparks(targetPos, '#ff4400', 4);
+        this.createImpactBurst(targetPos, '#ff5500', 0.85);
       });
 
       promises.push(anim);
@@ -593,22 +605,23 @@ export class MoveAnimationSystem {
   /** FLAMETHROWER: Continuous high-pressure dense flame stream */
   private async playFlamethrower(A: { x: number; y: number }, D: { x: number; y: number }): Promise<void> {
     sound.sfxA('l', { t: 'Fi' }, 'stream', 2, 1.3);
-    const particleCount = 28;
+    const particleCount = 36;
     const totalDuration = 650;
 
     for (let i = 0; i < particleCount; i++) {
-      const delay = i * 20;
+      const delay = i * 18;
+      const size = 30 + R() * 26;
       const flame = el('flame-stream-pt', {
         position: 'absolute',
-        width: `${18 + R() * 16}px`,
-        height: `${18 + R() * 16}px`,
+        width: `${size}px`,
+        height: `${size}px`,
         borderRadius: '50%',
-        background: `radial-gradient(circle, #ffff88, #ff8800 45%, #ff2200 80%, transparent)`,
-        filter: 'blur(2px)',
-        zIndex: '32',
+        background: `radial-gradient(circle, #ffffff 10%, #ffff88 30%, #ff8800 60%, #ff2200 90%, transparent)`,
+        boxShadow: '0 0 18px #ff4400, 0 0 32px #ea580c',
+        zIndex: '46',
       });
 
-      const coneSpread = (i / particleCount) * 44;
+      const coneSpread = (i / particleCount) * 48;
       const target = {
         x: D.x + (R() - 0.5) * coneSpread,
         y: D.y + (R() - 0.5) * coneSpread,
@@ -617,8 +630,8 @@ export class MoveAnimationSystem {
       fly(
         flame,
         [
-          { transform: tr(A, 0.3), opacity: '0.9' },
-          { transform: tr(lerp(A, target, 0.4), 1.1), opacity: '0.8', offset: 0.4 },
+          { transform: tr(A, 0.4), opacity: '0.95' },
+          { transform: tr(lerp(A, target, 0.45), 1.25), opacity: '1', offset: 0.45 },
           { transform: tr(target, 1.8), opacity: '0' },
         ],
         { duration: 400, delay, easing: 'ease-in' }
@@ -627,6 +640,7 @@ export class MoveAnimationSystem {
 
     screenShake('medium', 450);
     await new Promise(r => setTimeout(r, totalDuration));
+    this.createImpactBurst(D, '#ff4400', 1.3);
   }
 
   /** FIRE BLAST: Kanji/Star shaped massive explosive fire attack */
@@ -781,35 +795,37 @@ export class MoveAnimationSystem {
 
   // --- WATER MOVES ---
 
-  /** WATER GUN: Narrow pressurized water stream */
+  /** WATER GUN: Pressurized glowing water stream */
   private async playWaterGun(A: { x: number; y: number }, D: { x: number; y: number }): Promise<void> {
-    sound.sfxA('l', { t: 'Wa' }, 'stream', 1, 0.9);
-    const count = 16;
+    sound.sfxA('l', { t: 'Wa' }, 'stream', 1, 1.0);
+    const count = 22;
     for (let i = 0; i < count; i++) {
       const drop = el('water-drop', {
         position: 'absolute',
-        width: '12px',
-        height: '12px',
+        width: `${24 + R() * 12}px`,
+        height: `${24 + R() * 12}px`,
         borderRadius: '50%',
-        background: 'radial-gradient(circle, #ffffff, #38bdf8 60%, #0284c7 90%)',
-        boxShadow: '0 0 8px #0ea5e9',
-        zIndex: '33',
+        background: 'radial-gradient(circle, #ffffff 20%, #7dd3fc 50%, #0284c7 85%)',
+        boxShadow: '0 0 16px #38bdf8, 0 0 30px #0284c7',
+        zIndex: '46',
       });
 
-      const spread = (R() - 0.5) * 12;
+      const spread = (R() - 0.5) * 16;
       const target = { x: D.x + spread, y: D.y + spread };
 
       fly(
         drop,
         [
-          { transform: tr(A, 0.5), opacity: '0.9' },
-          { transform: tr(target, 1.2), opacity: '0.1' },
+          { transform: tr(A, 0.4), opacity: '0.95' },
+          { transform: tr(lerp(A, target, 0.5), 1.2), opacity: '1', offset: 0.5 },
+          { transform: tr(target, 1.5), opacity: '0' },
         ],
-        { duration: 320, delay: i * 22, easing: 'ease-in' }
+        { duration: 320, delay: i * 18, easing: 'ease-in' }
       );
     }
-    await new Promise(r => setTimeout(r, 450));
-    this.createSplash(D, 10);
+    await new Promise(r => setTimeout(r, 420));
+    this.createImpactBurst(D, '#38bdf8', 1.0);
+    this.createSplash(D, 14);
   }
 
   /** HYDRO PUMP: Massive high-pressure water blast torrent */
@@ -965,30 +981,60 @@ export class MoveAnimationSystem {
 
   // --- ELECTRIC MOVES ---
 
-  /** THUNDER SHOCK: Small electrical spark discharge */
+  /** THUNDER SHOCK: Jagged crackling electric lightning discharges + shock burst */
   private async playThunderShock(D: { x: number; y: number }): Promise<void> {
-    sound.sfxA('l', { t: 'El' }, 'bolt', 1, 0.9);
-    for (let i = 0; i < 6; i++) {
-      const spark = el('electric-spark', {
-        position: 'absolute',
-        width: '18px',
-        height: '18px',
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, #ffffff, #fef08a 50%, #eab308 90%)',
-        boxShadow: '0 0 10px #facc15',
-        zIndex: '34',
+    sound.sfxA('l', { t: 'El' }, 'bolt', 1, 1.0);
+    screenFlash('#fef9c3', 180);
+
+    const fld = $('#fld') || $('#world') || document.body;
+
+    // 1. Jagged electric lightning bolts arcing across target
+    for (let bolt = 0; bolt < 4; bolt++) {
+      const angle = (bolt / 4) * Math.PI * 2 + (R() - 0.5) * 0.5;
+      const startX = D.x + Math.cos(angle) * 60;
+      const startY = D.y + Math.sin(angle) * 60;
+      const midX = D.x + (R() - 0.5) * 35;
+      const midY = D.y + (R() - 0.5) * 35;
+
+      const pathData = `M ${startX} ${startY} L ${midX} ${midY} L ${D.x + (R() - 0.5) * 15} ${D.y + (R() - 0.5) * 15}`;
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('style', 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:46;');
+      svg.innerHTML = `
+        <path d="${pathData}" fill="none" stroke="#fef08a" stroke-width="8" stroke-linecap="round" filter="drop-shadow(0 0 10px #eab308)"/>
+        <path d="${pathData}" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+      `;
+      fld.appendChild(svg);
+      fly(svg as unknown as HTMLElement, [{ opacity: '1' }, { opacity: '0.8', offset: 0.5 }, { opacity: '0' }], {
+        duration: 300,
+        delay: bolt * 40,
       });
-      const offset = { x: D.x + (R() - 0.5) * 45, y: D.y + (R() - 0.5) * 45 };
-      fly(
-        spark,
-        [
-          { transform: tr(D, 0.2), opacity: '1' },
-          { transform: tr(offset, 1.2), opacity: '0' },
-        ],
-        { duration: 250, delay: i * 35 }
-      );
     }
-    await new Promise(r => setTimeout(r, 320));
+
+    // 2. Center electric shock burst
+    const burst = el('electric-shock-burst', {
+      position: 'absolute',
+      left: D.x + 'px',
+      top: D.y + 'px',
+      width: '65px',
+      height: '65px',
+      transform: 'translate(-50%, -50%)',
+      borderRadius: '50%',
+      background: 'radial-gradient(circle, #ffffff, #fef08a 40%, #eab308 75%, transparent)',
+      boxShadow: '0 0 25px #facc15, 0 0 50px #eab308',
+      zIndex: '47',
+    });
+    fly(
+      burst,
+      [
+        { transform: 'translate(-50%, -50%) scale(0.3)', opacity: '1' },
+        { transform: 'translate(-50%, -50%) scale(1.6)', opacity: '1', offset: 0.4 },
+        { transform: 'translate(-50%, -50%) scale(2.2)', opacity: '0' },
+      ],
+      { duration: 320, easing: 'ease-out' }
+    );
+
+    this.createImpactBurst(D, '#facc15', 1.0);
+    await new Promise(r => setTimeout(r, 360));
   }
 
   /** SPARK: Charged electrical dash */
@@ -2022,45 +2068,64 @@ export class MoveAnimationSystem {
     await new Promise(r => setTimeout(r, 6 * 40 + 260));
   }
 
-  /** BITE / BUG BITE / FIRE FANG: Massive clamping translucent fangs */
+  /** BITE / BUG BITE / FIRE FANG: Massive clamping glowing fangs + crunch burst */
   private async playBite(attackerEl: HTMLElement, A: { x: number; y: number }, D: { x: number; y: number }, subType: string): Promise<void> {
-    sound.sfxA('l', { t: subType === 'fire_fang' ? 'Fi' : 'No' }, 'bite', 1, 1.0);
+    sound.sfxA('l', { t: subType === 'fire_fang' ? 'Fi' : 'No' }, 'bite', 1, 1.2);
 
-    // Attacker slight lunge
-    attackerEl.animate(
-      [
-        { transform: 'none' },
-        { transform: `translate(${(D.x - A.x) * 0.4}px, ${(D.y - A.y) * 0.4}px)`, offset: 0.5 },
-        { transform: 'none' },
-      ],
-      { duration: 260 }
-    );
+    const has3D = attackerEl.closest('#fld')?.classList.contains('has-3d-player') || attackerEl.closest('#fld')?.classList.contains('has-3d-foe');
+    if (!has3D) {
+      attackerEl.animate(
+        [
+          { transform: 'translateX(-50%)' },
+          { transform: `translateX(-50%) translate(${(D.x - A.x) * 0.45}px, ${(D.y - A.y) * 0.45}px) scale(1.06)`, offset: 0.5 },
+          { transform: 'translateX(-50%)' },
+        ],
+        { duration: 280, easing: 'ease-in-out' }
+      );
+    }
 
     const fangColor = subType === 'fire_fang' ? '#ff4400' : '#ffffff';
-    const fangA = el('bite-fang-top', {
-      position: 'absolute',
-      width: '40px',
-      height: '24px',
-      clipPath: 'polygon(50% 100%, 0 0, 100% 0)',
-      background: fangColor,
-      boxShadow: `0 0 14px ${fangColor}`,
-      zIndex: '35',
-    });
+    const glowColor = subType === 'fire_fang' ? '#ea580c' : '#94a3b8';
 
-    const fangB = el('bite-fang-bottom', {
-      position: 'absolute',
-      width: '40px',
-      height: '24px',
-      clipPath: 'polygon(50% 0, 0 100%, 100% 100%)',
-      background: fangColor,
-      boxShadow: `0 0 14px ${fangColor}`,
-      zIndex: '35',
-    });
+    // 3 upper fangs and 3 lower fangs
+    for (let f = 0; f < 3; f++) {
+      const offsetX = (f - 1) * 22;
+      const fangTop = el('bite-fang-top', {
+        position: 'absolute',
+        width: '28px',
+        height: '24px',
+        clipPath: 'polygon(50% 100%, 0 0, 100% 0)',
+        background: fangColor,
+        boxShadow: `0 0 16px ${glowColor}, 0 0 25px ${fangColor}`,
+        zIndex: '48',
+      });
+      const fangBottom = el('bite-fang-bottom', {
+        position: 'absolute',
+        width: '28px',
+        height: '24px',
+        clipPath: 'polygon(50% 0, 0 100%, 100% 100%)',
+        background: fangColor,
+        boxShadow: `0 0 16px ${glowColor}, 0 0 25px ${fangColor}`,
+        zIndex: '48',
+      });
 
-    fly(fangA, [{ transform: tr({ x: D.x, y: D.y - 35 }, 1), opacity: '0' }, { transform: tr({ x: D.x, y: D.y - 4 }, 1.3), opacity: '1', offset: 0.6 }, { opacity: '0' }], { duration: 320 });
-    await fly(fangB, [{ transform: tr({ x: D.x, y: D.y + 35 }, 1), opacity: '0' }, { transform: tr({ x: D.x, y: D.y + 4 }, 1.3), opacity: '1', offset: 0.6 }, { opacity: '0' }], { duration: 320 });
+      fly(fangTop, [
+        { transform: tr({ x: D.x + offsetX, y: D.y - 45 }, 0.8), opacity: '0' },
+        { transform: tr({ x: D.x + offsetX, y: D.y - 6 }, 1.3), opacity: '1', offset: 0.6 },
+        { transform: tr({ x: D.x + offsetX, y: D.y }, 1.5), opacity: '0' },
+      ], { duration: 300 });
 
-    screenShake('medium', 250);
+      fly(fangBottom, [
+        { transform: tr({ x: D.x + offsetX, y: D.y + 45 }, 0.8), opacity: '0' },
+        { transform: tr({ x: D.x + offsetX, y: D.y + 6 }, 1.3), opacity: '1', offset: 0.6 },
+        { transform: tr({ x: D.x + offsetX, y: D.y }, 1.5), opacity: '0' },
+      ], { duration: 300 });
+    }
+
+    await new Promise(r => setTimeout(r, 200));
+    screenShake('medium', 280);
+    this.createImpactBurst(D, fangColor, 1.2);
+    await new Promise(r => setTimeout(r, 120));
   }
 
   // --- POISON MOVES ---
@@ -2240,17 +2305,48 @@ export class MoveAnimationSystem {
       fly(trail, [{ transform: tr(pos, 1, angle), opacity: '1' }, { transform: tr(pos, 1.5, angle), opacity: '0' }], { duration: 250, delay: t * 40 });
     }
 
-    await attackerEl.animate(
+    // High-speed kinetic dash streak for Quick Attack
+    const angleQA = Math.atan2(D.y - A.y, D.x - A.x) * (180 / Math.PI);
+    const distQA = Math.hypot(D.x - A.x, D.y - A.y);
+    const dashStreakQA = el('kinetic-dash-streak', {
+      position: 'absolute',
+      left: A.x + 'px',
+      top: A.y + 'px',
+      width: `${distQA * 0.95}px`,
+      height: '42px',
+      transformOrigin: '0 50%',
+      transform: `rotate(${angleQA}deg)`,
+      background: 'linear-gradient(90deg, transparent 0%, rgba(56,189,248,0.8) 40%, #ffffff 80%, #bae6fd 100%)',
+      borderRadius: '21px',
+      filter: 'drop-shadow(0 0 16px #38bdf8) drop-shadow(0 0 26px #ffffff)',
+      zIndex: '46',
+    });
+    fly(
+      dashStreakQA,
       [
-        { transform: 'none' },
-        { transform: `translate(${(D.x - A.x) * 0.95}px, ${(D.y - A.y) * 0.95}px)`, offset: 0.45 },
-        { transform: 'none' },
+        { transform: `rotate(${angleQA}deg) scaleX(0.05)`, opacity: '0.9' },
+        { transform: `rotate(${angleQA}deg) scaleX(1.05)`, opacity: '1', offset: 0.6 },
+        { transform: `rotate(${angleQA}deg) scaleX(1.1) translateX(25px)`, opacity: '0' },
       ],
-      { duration: 280, easing: 'cubic-bezier(0.2, 0.9, 0.3, 1)' }
-    ).finished;
+      { duration: 250, easing: 'ease-out' }
+    );
 
-    screenShake('light', 220);
-    this.createImpactSparks(D, '#ffffff', 6);
+    const has3DQA = attackerEl.closest('#fld')?.classList.contains('has-3d-player') || attackerEl.closest('#fld')?.classList.contains('has-3d-foe');
+    if (!has3DQA) {
+      attackerEl.animate(
+        [
+          { transform: 'translateX(-50%)' },
+          { transform: `translateX(-50%) translate(${(D.x - A.x) * 0.85}px, ${(D.y - A.y) * 0.85}px)`, offset: 0.5 },
+          { transform: 'translateX(-50%)' },
+        ],
+        { duration: 280, easing: 'cubic-bezier(0.2, 0.9, 0.3, 1)' }
+      );
+    }
+
+    await new Promise(r => setTimeout(r, 200));
+    screenShake('medium', 250);
+    this.createImpactBurst(D, '#38bdf8', 1.2);
+    await new Promise(r => setTimeout(r, 120));
   }
 
   /** HYPER BEAM: Epic screen-filling destructive beam */
@@ -2273,55 +2369,94 @@ export class MoveAnimationSystem {
       background: 'linear-gradient(to right, #ffffff, #fbbf24 20%, #ef4444 50%, #8b5cf6 80%, #ffffff)',
       boxShadow: '0 0 35px #f59e0b, 0 0 60px #ef4444',
       borderRadius: '27px',
-      zIndex: '38',
+      zIndex: '48',
     });
 
     await fly(beam, [{ opacity: '0.4', transform: `rotate(${angle}deg) scaleY(0.3)` }, { opacity: '1', transform: `rotate(${angle}deg) scaleY(1.8)` }, { opacity: '0', transform: `rotate(${angle}deg) scaleY(0.2)` }], {
       duration: 650,
     });
+    this.createImpactBurst(D, '#ef4444', 1.8);
   }
 
-  /** SCRATCH: Three sharp claw marks */
+  /** SCRATCH: Three sharp glowing claw marks */
   private async playScratch(D: { x: number; y: number }): Promise<void> {
     sound.sfxA('l', { t: 'No' }, 'claw', 1, 1.0);
     for (let c = 0; c < 3; c++) {
       const scratch = el('scratch-mark', {
         position: 'absolute',
-        width: '45px',
-        height: '4px',
-        borderRadius: '2px',
-        background: '#ffffff',
-        boxShadow: '0 0 8px #94a3b8',
-        transform: `translate(-50%, -50%) rotate(-35deg) translate(${(c - 1) * 12}px, 0)`,
-        zIndex: '34',
+        left: D.x + (c - 1) * 16 + 'px',
+        top: D.y + 'px',
+        width: '65px',
+        height: '6px',
+        borderRadius: '3px',
+        background: 'linear-gradient(90deg, transparent, #ffffff 30%, #fef08a 70%, transparent)',
+        boxShadow: '0 0 16px #eab308, 0 0 25px #ffffff',
+        transform: 'translate(-50%, -50%) rotate(-35deg)',
+        zIndex: '48',
       });
       fly(
         scratch,
         [
-          { transform: `translate(-50%, -50%) rotate(-35deg) translate(${(c - 1) * 12}px, -20px) scaleX(0.2)`, opacity: '1' },
-          { transform: `translate(-50%, -50%) rotate(-35deg) translate(${(c - 1) * 12}px, 20px) scaleX(1.4)`, opacity: '0' },
+          { transform: 'translate(-50%, -50%) rotate(-35deg) scaleX(0.1)', opacity: '1' },
+          { transform: 'translate(-50%, -50%) rotate(-35deg) scaleX(1.3) translateY(10px)', opacity: '1', offset: 0.5 },
+          { transform: 'translate(-50%, -50%) rotate(-35deg) scaleX(1.6) translateY(20px)', opacity: '0' },
         ],
-        { duration: 250, delay: c * 25 }
+        { duration: 280, delay: c * 40 }
       );
     }
-    screenShake('light', 220);
-    await new Promise(r => setTimeout(r, 280));
+    screenShake('medium', 250);
+    this.createImpactBurst(D, '#facc15', 1.1);
+    await new Promise(r => setTimeout(r, 320));
   }
 
-  /** PHYSICAL LUNGE (Tackle, Slam, Headbutt): Pokemon physically moving */
+  /** PHYSICAL LUNGE (Tackle, Slam, Headbutt): Kinetic dash streak + dynamic impact */
   private async playPhysicalLunge(attackerEl: HTMLElement, A: { x: number; y: number }, D: { x: number; y: number }, scale: number): Promise<void> {
     sound.sfxA('l', { t: 'No' }, 'slam', 1, scale);
-    await attackerEl.animate(
+
+    // 1. High-speed kinetic dash streak from A to D
+    const angle = Math.atan2(D.y - A.y, D.x - A.x) * (180 / Math.PI);
+    const dist = Math.hypot(D.x - A.x, D.y - A.y);
+    const dashStreak = el('kinetic-dash-streak', {
+      position: 'absolute',
+      left: A.x + 'px',
+      top: A.y + 'px',
+      width: `${dist * 0.95}px`,
+      height: '42px',
+      transformOrigin: '0 50%',
+      transform: `rotate(${angle}deg)`,
+      background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.7) 35%, #ffffff 75%, #fef08a 100%)',
+      borderRadius: '20px',
+      filter: 'drop-shadow(0 0 14px rgba(255,255,255,0.95)) drop-shadow(0 0 25px #eab308)',
+      zIndex: '46',
+    });
+    fly(
+      dashStreak,
       [
-        { transform: 'none' },
-        { transform: `translate(${(D.x - A.x) * 0.7}px, ${(D.y - A.y) * 0.7}px) scale(1.05)`, offset: 0.5 },
-        { transform: 'none' },
+        { transform: `rotate(${angle}deg) scaleX(0.05)`, opacity: '0.9' },
+        { transform: `rotate(${angle}deg) scaleX(1.05)`, opacity: '1', offset: 0.6 },
+        { transform: `rotate(${angle}deg) scaleX(1.1) translateX(25px)`, opacity: '0' },
       ],
-      { duration: 320, easing: 'ease-in-out' }
-    ).finished;
+      { duration: 280, easing: 'ease-out' }
+    );
+
+    // 2. In 2D mode, animate attacker sprite lunge
+    const has3D = attackerEl.closest('#fld')?.classList.contains('has-3d-player') || attackerEl.closest('#fld')?.classList.contains('has-3d-foe');
+    if (!has3D) {
+      attackerEl.animate(
+        [
+          { transform: 'translateX(-50%)' },
+          { transform: `translateX(-50%) translate(${(D.x - A.x) * 0.65}px, ${(D.y - A.y) * 0.65}px) scale(1.1)`, offset: 0.5 },
+          { transform: 'translateX(-50%)' },
+        ],
+        { duration: 320, easing: 'ease-in-out' }
+      );
+    }
+
+    await new Promise(r => setTimeout(r, 220));
 
     screenShake(scale > 1.2 ? 'heavy' : 'medium', 280);
-    this.createImpactSparks(D, '#ffffff', Math.round(5 * scale));
+    this.createImpactBurst(D, '#ffffff', scale);
+    await new Promise(r => setTimeout(r, 120));
   }
 
   // --- STATUS MOVES ---
@@ -2456,40 +2591,107 @@ export class MoveAnimationSystem {
 
     screenShake(shakeIntensity, isSuper ? 400 : 250);
 
-    // Hit flash reaction on sprite
-    await defenderEl.animate(
-      [
-        { transform: 'none', filter: 'brightness(3)' },
-        { transform: 'translateX(-12px)', opacity: '0.4', offset: 0.3 },
-        { transform: 'translateX(10px)', opacity: '0.9', offset: 0.6 },
-        { transform: 'none', filter: 'none', opacity: '1' },
-      ],
-      { duration: 350 }
-    ).finished;
+    const D = ctr(defenderEl);
+
+    // 1. Luminous hit-burst directly over target's center (visible in both 2D and 3D!)
+    this.createImpactBurst(D, isCritical ? '#fbbf24' : isSuper ? '#ef4444' : '#ffffff', Math.max(0.9, powerScale));
+
+    // 2. Sprite hit reaction (for 2D mode, keeping translateX(-50%))
+    const is3D = defenderEl.closest('#fld')?.classList.contains('has-3d-player') || defenderEl.closest('#fld')?.classList.contains('has-3d-foe');
+    if (!is3D && defenderEl.style.opacity !== '0') {
+      defenderEl.animate(
+        [
+          { transform: 'translateX(-50%)', filter: 'brightness(3.5)' },
+          { transform: 'translateX(calc(-50% - 12px))', offset: 0.3 },
+          { transform: 'translateX(calc(-50% + 10px))', offset: 0.6 },
+          { transform: 'translateX(-50%)', filter: 'none' },
+        ],
+        { duration: 320 }
+      );
+    }
   }
 
-  private createImpactSparks(pos: { x: number; y: number }, color: string, count: number): void {
-    for (let i = 0; i < count; i++) {
+  public createImpactBurst(pos: { x: number; y: number }, color: string = '#ffffff', scale: number = 1.0): void {
+    const size = Math.round(55 * scale);
+
+    // 1. Central blinding impact flash star
+    const star = el('impact-flash-star', {
+      position: 'absolute',
+      left: pos.x + 'px',
+      top: pos.y + 'px',
+      width: `${size}px`,
+      height: `${size}px`,
+      transform: 'translate(-50%, -50%)',
+      background: `radial-gradient(circle, #ffffff 30%, ${color} 70%, transparent 95%)`,
+      filter: `drop-shadow(0 0 15px #ffffff) drop-shadow(0 0 25px ${color})`,
+      borderRadius: '50%',
+      zIndex: '48',
+    });
+    fly(
+      star,
+      [
+        { transform: 'translate(-50%, -50%) scale(0.2) rotate(0deg)', opacity: '1' },
+        { transform: 'translate(-50%, -50%) scale(1.6) rotate(90deg)', opacity: '1', offset: 0.4 },
+        { transform: 'translate(-50%, -50%) scale(2.2) rotate(180deg)', opacity: '0' },
+      ],
+      { duration: 280, easing: 'ease-out' }
+    );
+
+    // 2. Expanding shockwave ring
+    const ring = el('impact-shockwave-ring', {
+      position: 'absolute',
+      left: pos.x + 'px',
+      top: pos.y + 'px',
+      width: `${Math.round(size * 0.9)}px`,
+      height: `${Math.round(size * 0.9)}px`,
+      transform: 'translate(-50%, -50%)',
+      borderRadius: '50%',
+      border: `3.5px solid ${color}`,
+      boxShadow: `0 0 18px ${color}, inset 0 0 12px ${color}`,
+      zIndex: '47',
+    });
+    fly(
+      ring,
+      [
+        { transform: 'translate(-50%, -50%) scale(0.2)', opacity: '1' },
+        { transform: 'translate(-50%, -50%) scale(2.4)', opacity: '0' },
+      ],
+      { duration: 320, easing: 'ease-out' }
+    );
+
+    // 3. Dynamic diamond sparks scattering outward
+    const sparkCount = Math.round(8 * scale);
+    for (let i = 0; i < sparkCount; i++) {
+      const angle = (i / sparkCount) * Math.PI * 2 + (R() - 0.5) * 0.5;
+      const dist = (35 + R() * 45) * scale;
       const spark = el('impact-spark', {
         position: 'absolute',
-        width: '8px',
-        height: '8px',
-        borderRadius: '50%',
-        background: color,
-        boxShadow: `0 0 6px ${color}`,
-        zIndex: '35',
+        left: pos.x + 'px',
+        top: pos.y + 'px',
+        width: `${Math.round(12 * scale)}px`,
+        height: `${Math.round(12 * scale)}px`,
+        borderRadius: '2px',
+        transform: 'translate(-50%, -50%) rotate(45deg)',
+        background: '#ffffff',
+        boxShadow: `0 0 10px ${color}, 0 0 20px #ffffff`,
+        zIndex: '49',
       });
-      const a = R() * Math.PI * 2;
-      const dist = 15 + R() * 25;
       fly(
         spark,
         [
-          { transform: tr(pos, 1), opacity: '1' },
-          { transform: tr({ x: pos.x + Math.cos(a) * dist, y: pos.y + Math.sin(a) * dist }, 0.2), opacity: '0' },
+          { transform: 'translate(-50%, -50%) rotate(45deg) scale(1)', opacity: '1' },
+          {
+            transform: `translate(${Math.cos(angle) * dist - 6}px, ${Math.sin(angle) * dist - 6}px) rotate(${45 + R() * 90}deg) scale(0.2)`,
+            opacity: '0',
+          },
         ],
-        { duration: 250, easing: 'ease-out' }
+        { duration: 300, delay: i * 15, easing: 'ease-out' }
       );
     }
+  }
+
+  private createImpactSparks(pos: { x: number; y: number }, color: string, count: number): void {
+    this.createImpactBurst(pos, color, Math.max(0.8, count / 5));
   }
 
   private createSplash(pos: { x: number; y: number }, count: number, color: string = '#38bdf8'): void {

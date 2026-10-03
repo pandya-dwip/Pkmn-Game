@@ -172,6 +172,8 @@ body {
    ========================================================================== */
 .scr {
   display: none;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 14px;
   /* Crisp White Outer Frame with Pokédex Dark LCD Screen */
   background: #ffffff;
@@ -185,7 +187,12 @@ body {
 }
 
 .scr.on {
-  display: block;
+  display: flex;
+  flex-direction: column;
+}
+
+#title, #map {
+  overflow-y: auto;
 }
 
 /* ==========================================================================
@@ -1708,113 +1715,490 @@ tr:last-child td {
 }
 
 /* ==========================================================================
-   MOBILE RESPONSIVENESS
+   MOBILE FULL-SCREEN RESPONSIVENESS (<= 768px)
+   Immersive Edge-to-Edge Pokédex Experience for Mobile Devices
    ========================================================================== */
-@media (max-width: 700px) {
-  body {
+@media (max-width: 768px) {
+  html, body {
+    width: 100vw;
+    height: 100dvh;
+    max-width: 100vw;
+    max-height: 100dvh;
+    margin: 0;
     padding: 0;
-    display: block;
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
+    touch-action: manipulation;
+    background: #090d16;
   }
+
   #g {
-    max-width: none;
-    min-height: 100dvh;
+    position: absolute;
+    inset: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: none;
     border-radius: 0;
-    border-width: 0;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    background: #0f172a;
+    align-self: stretch;
+  }
+
+  /* Compact Pokédex Sensor Bar at Top */
+  #dex-bar {
+    flex: 0 0 auto;
+    height: 38px;
+    padding: 0 12px;
+    background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%);
+    border-bottom: 2px solid #7f1d1d;
+    gap: 10px;
+    z-index: 50;
+  }
+
+  .dex-lens-bezel {
+    width: 26px;
+    height: 26px;
+    padding: 2px;
+  }
+
+  .dex-lens {
+    box-shadow: 0 0 8px var(--dex-lens-blue);
+  }
+
+  .dex-led-group {
+    gap: 5px;
+  }
+
+  .dex-led {
+    width: 8px;
+    height: 8px;
+    border-width: 1px;
+  }
+
+  .dex-badge {
+    font-size: 8.5px;
+    font-weight: 800;
+    padding: 2px 7px;
+    letter-spacing: 0.08em;
+  }
+
+  /* Full Screen Sub-Chassis Screens */
+  .scr {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 10px;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: hidden;
+  }
+
+  .scr.on {
     display: flex;
     flex-direction: column;
   }
-  .scr {
-    padding: 10px;
-    margin: 6px;
-    border-radius: 16px;
+
+  /* --------------------------------------------------------------------------
+     ROUTE EXPLORATION: 100% Mobile Edge-to-Edge Gameplay
+     -------------------------------------------------------------------------- */
+  #route {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: #020617;
+    position: relative;
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
   }
+
+  #route.on {
+    display: flex;
+  }
+
+  /* Hide bottom dex-footer during Route Exploration so canvas gets full phone height! */
+  #route.on ~ #dex-footer {
+    display: none;
+  }
+
+  /* Slim Route HUD */
+  #route-hud {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.12);
+    z-index: 30;
+    gap: 8px;
+  }
+
+  .hud-badge {
+    font-size: 13px;
+    font-weight: 900;
+    color: #38bdf8;
+    gap: 4px;
+  }
+
+  .hud-sub {
+    font-size: 10px;
+    font-weight: 700;
+    color: #94a3b8;
+  }
+
+  .hud-enc-meter {
+    padding: 3px 8px;
+    border-radius: 10px;
+  }
+
+  .hud-enc-label {
+    font-size: 8.5px;
+  }
+
+  .hud-enc-dots {
+    gap: 4px;
+  }
+
+  .hud-enc-dots .h-dot {
+    width: 7px;
+    height: 7px;
+  }
+
+  .hud-pill {
+    font-size: 10.5px;
+    padding: 3px 6px;
+    border-radius: 10px;
+    gap: 3px;
+  }
+
+  .hud-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 800;
+    border-radius: 8px;
+  }
+
+  /* Route Viewport & Canvas - Takes 100% remaining vertical space */
+  #route-viewport {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    background: #1b4332;
+  }
+
+  #route-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+  }
+
+  .route-prompt {
+    bottom: 84px;
+    font-size: 12px;
+    padding: 8px 16px;
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.94);
+    border: 1.5px solid #38bdf8;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+    z-index: 35;
+  }
+
+  /* Mobile Ergonomic Route Controls (D-Pad bottom-left, Action A bottom-right) */
+  #route-controls {
+    position: absolute;
+    bottom: 14px;
+    left: 12px;
+    right: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    pointer-events: none;
+    z-index: 40;
+    padding: 0;
+  }
+
+  .virtual-dpad {
+    position: relative;
+    width: 114px;
+    height: 114px;
+    pointer-events: auto;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 20px;
+    border: 1.5px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+
+  .dpad-btn {
+    width: 38px;
+    height: 38px;
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    font-size: 15px;
+  }
+
+  .dpad-up { top: 0; left: 38px; border-radius: 12px 12px 0 0; }
+  .dpad-down { bottom: 0; left: 38px; border-radius: 0 0 12px 12px; }
+  .dpad-left { top: 38px; left: 0; border-radius: 12px 0 0 12px; }
+  .dpad-right { top: 38px; right: 0; border-radius: 0 12px 12px 0; }
+  .dpad-center {
+    position: absolute;
+    top: 38px;
+    left: 38px;
+    width: 38px;
+    height: 38px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #475569;
+    font-size: 8px;
+  }
+
+  .dpad-btn:active {
+    background: #38bdf8 !important;
+    color: #0f172a !important;
+    border-color: #bae6fd !important;
+  }
+
+  .action-btn-cluster {
+    pointer-events: auto;
+  }
+
+  .action-btn {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #ef4444 0%, #b91c1c 100%);
+    border: 3px solid rgba(255, 255, 255, 0.85);
+    color: #ffffff;
+    font-size: 22px;
+    font-weight: 900;
+    box-shadow: 0 8px 24px rgba(220, 38, 38, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.4);
+  }
+
+  .action-btn:active {
+    transform: scale(0.92);
+    background: radial-gradient(circle at 35% 35%, #f87171 0%, #dc2626 100%);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.7);
+  }
+
+  /* --------------------------------------------------------------------------
+     TITLE SCREEN
+     -------------------------------------------------------------------------- */
+  #title {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 20px 14px;
+    text-align: center;
+    background: #ffffff;
+  }
+
+  #title h1 {
+    font-size: clamp(22px, 6vw, 30px);
+    margin: 10px 0 4px;
+  }
+
+  #title .col {
+    margin: 16px auto;
+    gap: 10px;
+    max-width: 300px;
+  }
+
+  #title .col button {
+    min-height: 48px;
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  /* --------------------------------------------------------------------------
+     JOURNEY HUB & TOURNAMENT SCREEN (#map)
+     -------------------------------------------------------------------------- */
+  #map {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px 12px 24px;
+    background: #ffffff;
+  }
+
+  #map h1 {
+    font-size: 20px;
+    margin: 4px 0 10px;
+  }
+
+  .champ-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .champ-card {
+    padding: 6px 3px;
+  }
+
+  .champ-card img {
+    width: 48px !important;
+    height: 48px !important;
+  }
+
+  .champ-card b {
+    font-size: 10px;
+  }
+
+  .quick-actions-bar {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .qpm-btn {
+    font-size: 12px !important;
+    padding: 8px 6px !important;
+    min-height: 40px !important;
+  }
+
+  /* --------------------------------------------------------------------------
+     BATTLEFIELD SCREEN (#bat)
+     -------------------------------------------------------------------------- */
+  #bat {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 6px;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: #0f172a;
+    display: none;
+    flex-direction: column;
+  }
+
   #bat.on {
     display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
   }
+
   #fld {
     aspect-ratio: 10/8;
     width: 100%;
+    max-height: 48dvh;
     height: auto;
     flex: 0 0 auto;
     border-radius: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
   }
+
   #msg {
     min-height: 44px;
     padding: 8px 12px;
     font-size: 13px;
+    margin: 6px 0;
+    flex: 0 0 auto;
   }
+
+  #ctl {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
   #ctl button {
     padding: 8px 10px;
     font-size: 12px;
+    min-height: 40px;
   }
-  .quick-actions-bar {
-    gap: 6px;
-    margin: 10px 0;
-  }
-  .qpm-btn {
-    font-size: 11px !important;
-    padding: 8px 4px !important;
-    min-height: 40px !important;
-  }
-}
 
-@media (max-width: 480px) {
-  #dex-bar {
-    padding: 8px 12px;
-    gap: 10px;
-  }
-  .dex-lens-bezel {
-    width: 36px;
+  /* --------------------------------------------------------------------------
+     BOTTOM HARDWARE BAR (#dex-footer on non-route screens)
+     -------------------------------------------------------------------------- */
+  #dex-footer {
+    flex: 0 0 auto;
     height: 36px;
+    padding: 2px 14px;
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
   }
-  .dex-badge {
-    font-size: 8px;
-    padding: 2px 8px;
+
+  .dex-speaker-grill {
+    padding: 4px 8px;
+    gap: 3px;
   }
-  .scr {
-    padding: 8px;
-    margin: 4px;
+
+  .dex-speaker-grill span {
+    width: 30px;
+    height: 2px;
   }
-  h1 {
-    font-size: 22px;
-    margin: 6px 0;
+
+  .dex-sound-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 800;
+    border-radius: 999px;
   }
+
+  /* --------------------------------------------------------------------------
+     MODALS & DIALOGS
+     -------------------------------------------------------------------------- */
   #ov {
-    padding: 8px;
+    padding: 10px;
   }
+
   #ov .box {
-    padding: 14px 10px;
-    border-radius: 16px;
-    max-height: 90vh;
+    padding: 14px 12px;
+    border-radius: 18px;
+    max-height: 88dvh;
+    width: 95%;
+    max-width: 440px;
+    overflow-y: auto;
   }
+
   #ov .box > div:first-child {
     font-size: 15px;
     margin-bottom: 8px;
     padding-bottom: 6px;
   }
-  .champ-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 6px;
+
+  .caught-modal-overlay {
+    padding: 10px;
   }
-  .champ-card {
-    padding: 6px 3px;
-  }
-  .champ-card img {
-    width: 50px !important;
-    height: 50px !important;
-  }
-  .champ-card b {
-    font-size: 10px;
-  }
-  .quick-actions-bar {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-  .qpm-btn {
-    font-size: 12px !important;
-    padding: 10px !important;
+
+  .caught-modal-card {
+    padding: 16px 14px;
+    border-radius: 20px;
+    max-height: 90dvh;
+    width: 95%;
+    max-width: 380px;
+    overflow-y: auto;
   }
 }
 
@@ -2594,10 +2978,17 @@ tr:last-child td {
    ========================================================================== */
 #route {
   display: none;
+  flex: 1 1 auto;
+  min-height: 0;
   flex-direction: column;
   position: relative;
   width: 100%;
   height: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   background: #020617;
   overflow: hidden;
   user-select: none;

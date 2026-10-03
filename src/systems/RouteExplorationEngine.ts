@@ -213,6 +213,7 @@ export class RouteExplorationEngine {
 
   public start(): void {
     if (this.animFrameId) return;
+    this.resize();
     this.lastTime = performance.now();
     this.animFrameId = requestAnimationFrame(this.loop);
   }
@@ -425,11 +426,20 @@ export class RouteExplorationEngine {
     if (this.canvas) {
       const targetCamX = this.player.x - this.canvas.width / 2;
       const targetCamY = this.player.y - this.canvas.height / 2;
-      const maxCamX = Math.max(0, this.currentRoute.worldWidth - this.canvas.width);
-      const maxCamY = Math.max(0, this.currentRoute.worldHeight - this.canvas.height);
 
-      this.camX = Math.max(0, Math.min(maxCamX, targetCamX));
-      this.camY = Math.max(0, Math.min(maxCamY, targetCamY));
+      if (this.canvas.width >= this.currentRoute.worldWidth) {
+        this.camX = -(this.canvas.width - this.currentRoute.worldWidth) / 2;
+      } else {
+        const maxCamX = this.currentRoute.worldWidth - this.canvas.width;
+        this.camX = Math.max(0, Math.min(maxCamX, targetCamX));
+      }
+
+      if (this.canvas.height >= this.currentRoute.worldHeight) {
+        this.camY = -(this.canvas.height - this.currentRoute.worldHeight) / 2;
+      } else {
+        const maxCamY = this.currentRoute.worldHeight - this.canvas.height;
+        this.camY = Math.max(0, Math.min(maxCamY, targetCamY));
+      }
     }
   }
 
@@ -458,14 +468,15 @@ export class RouteExplorationEngine {
     if (!ctx || !canvas || !route) return;
 
     ctx.save();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Fill full canvas with route background theme
+    const baseGreen = route.theme === 'forest' ? '#1b4332' : route.theme === 'city' ? '#2d6a4f' : '#2d5a27';
+    ctx.fillStyle = baseGreen;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Apply Camera Translation
     ctx.translate(-Math.floor(this.camX), -Math.floor(this.camY));
 
     // 1. Base Terrain Grass
-    const baseGreen = route.theme === 'forest' ? '#1b4332' : route.theme === 'city' ? '#2d6a4f' : '#2d5a27';
-    ctx.fillStyle = baseGreen;
     ctx.fillRect(0, 0, route.worldWidth, route.worldHeight);
 
     // Subtle terrain texture dots
@@ -527,9 +538,6 @@ export class RouteExplorationEngine {
     this.renderOverheadScenery(ctx, route);
 
     ctx.restore();
-
-    // 9. Static Screen HUD Overlay (Minimap / Arrow)
-    this.renderScreenHUD(ctx, canvas, route);
   }
 
   private renderBuilding(ctx: CanvasRenderingContext2D, b: RouteBuilding): void {

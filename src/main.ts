@@ -290,16 +290,25 @@ export const mh = (m: MonInstance) =>
 export const mvh = (v: any, e: number = 1) => {
   const mv = v && v.typeShort ? v : getMoveData(typeof v === 'string' ? v : (v?.name || 'Tackle'));
   const icon = MOVE_ICONS[mv.typeShort as keyof typeof MOVE_ICONS] || '💥';
-  return (
-    `<span class="mn">${icon} ${mv.name.toUpperCase()}</span><small>${mv.type.toUpperCase()} · POWER ${mv.power}</small><small>${'●'.repeat(
-      Math.max(1, Math.round(mv.accuracy / 25))
-    )} ACC ${mv.accuracy}</small>` +
-    (e === 1
-      ? ''
-      : `<small><b class="e${e > 1 ? 's' : e ? 'w' : 'n'}">${
-          e > 1 ? 'SUPER EFFECTIVE' : e ? 'NOT VERY EFFECTIVE' : 'NO EFFECT'
-        }</b></small>`)
-  );
+  const effTag =
+    e > 1
+      ? `<span class="mv-eff es">2× EFF</span>`
+      : e < 1 && e > 0
+      ? `<span class="mv-eff ew">½× EFF</span>`
+      : e === 0
+      ? `<span class="mv-eff en">0× EFF</span>`
+      : '';
+
+  return `
+    <div class="mv-row-top">
+      <span class="mn">${icon} ${mv.name.toUpperCase()}</span>
+      ${effTag}
+    </div>
+    <div class="mv-row-sub">
+      <span class="t ${mv.typeShort}">${mv.type.toUpperCase()}</span>
+      <span class="mv-meta">PWR ${mv.power} · ACC ${mv.accuracy}</span>
+    </div>
+  `;
 };
 
 export const show = (id: string) => {
@@ -347,17 +356,25 @@ export const renderBadgesBar = (badges: string[]): string => {
     { n: 'Earth Badge', s: 'Earth', ic: '🌍' },
   ];
 
+  const earnedCount = BADGES_LIST.filter(b => (badges || []).includes(b.n) || (badges || []).includes(b.s)).length;
+
   return `
-    <div class="badges-strip">
-      ${BADGES_LIST.map(b => {
-    const earned = badges.includes(b.n) || badges.includes(b.s);
-    return `
-          <div class="badge-slot ${earned ? 'earned' : 'locked'}" title="${b.n} ${earned ? '(Earned)' : '(Locked)'}">
-            <div class="badge-slot-icon">${b.ic}</div>
-            <div class="badge-slot-name">${b.s}</div>
-          </div>
-        `;
-  }).join('')}
+    <div class="badges-strip-container">
+      <div class="badges-strip-header">
+        <span class="badges-strip-title">🏆 KANTO GYM BADGES</span>
+        <span class="badges-strip-count">${earnedCount} / 8 EARNED</span>
+      </div>
+      <div class="badges-strip">
+        ${BADGES_LIST.map(b => {
+          const earned = (badges || []).includes(b.n) || (badges || []).includes(b.s);
+          return `
+            <div class="badge-slot ${earned ? 'earned' : 'locked'}" title="${b.n} ${earned ? '(Earned)' : '(Locked)'}">
+              <div class="badge-slot-icon">${b.ic}</div>
+              <div class="badge-slot-name">${b.s}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
     </div>
   `;
 };
@@ -1245,7 +1262,7 @@ export async function battleGym(gymIndex: number): Promise<void> {
   pokemon3DManager.stop();
 
   if (res === 'lose') {
-    return showDefeat(false, `Leader ${gym.leader} (${gym.city} Gym)`);
+    return showGymDefeat(gymIndex, gym);
   }
 
   // Victory!
@@ -1375,7 +1392,7 @@ export async function battleWild(
   pokemon3DManager.stop();
 
   if (res === 'lose') {
-    return showDefeat(false, `Wild ${wildMon.name}`);
+    return showWildDefeat(wildMon, returnCoords);
   }
 
   if (res === 'win') {
@@ -2026,7 +2043,85 @@ export async function hallOfFameScr(): Promise<void> {
 }
 
 // ============================================================================
-// SCREEN 13: DEFEAT SCREEN & PERMANENT RUN RESET
+// GYM & WILD DEFEAT HANDLERS (CONTINUE FROM CURRENT GYM / ROUTE)
+// ============================================================================
+export async function showGymDefeat(gymIndex: number, gym: GymLeaderDefinition): Promise<void> {
+  pokemon3DManager.stop();
+  sound.music('menu');
+  sound.beep(160, 0.4, 'sawtooth');
+
+  // Fully restore all Pokémon on the team (Nurse Joy Pokémon Center treatment)
+  G.team.forEach(m => {
+    m.hp = st(m).max;
+  });
+
+  // Small loss fee: 10% of cash or max 250 (classic Pokémon white-out fee)
+  const lossFee = Math.min(250, Math.floor(G.money * 0.1));
+  G.money = Math.max(0, G.money - lossFee);
+
+  // Grant 3 fresh training sessions so the player can train to defeat the leader
+  G.tk = Math.max(G.tk || 0, 3);
+  save();
+
+  const choice = await pick(
+    `<div class="defeat-screen gym-recovery">
+      <div class="defeat-badge" style="font-size:36px;margin-bottom:6px">${gym.badgeIcon}</div>
+      <div class="defeat-title" style="color:#ef4444;font-size:22px;font-weight:900">DEFEATED AT ${gym.city.toUpperCase()} GYM</div>
+      <div class="defeat-dialogue" style="font-style:italic;color:#64748b;margin:10px 0;background:#f8fafc;padding:8px 12px;border-radius:10px;border-left:3px solid #ef4444">
+        "${gym.dialogue.defeat}"<br><small style="font-weight:700;color:#0f172a">— Leader ${gym.leader}</small>
+      </div>
+      <div class="defeat-subtitle" style="font-size:13px;line-height:1.45;color:#1e293b">
+        You whited out and rushed to the <b>${gym.city} Pokémon Center</b>.<br>
+        Nurse Joy has fully restored all your Pokémon to full health!<br>
+        <span style="color:#16a34a;font-weight:800">💪 +3 Training sessions granted to power up your team!</span>
+        ${lossFee > 0 ? `<br><small style="color:#ef4444">Dropped ₽${lossFee.toLocaleString()} in prize money to the Gym.</small>` : ''}
+      </div>
+    </div>`,
+    [
+      { h: '⚔️ <b>RETRY GYM BATTLE</b>' },
+      { h: '🚶 <b>EXPLORE ROUTE & TRAIN</b>' },
+      { h: '🛒 <b>VISIT POKÉ MART</b>' },
+      { h: '🎒 <b>TEAM MANAGEMENT & HUB</b>' },
+    ],
+    false,
+    'defeat-actions'
+  );
+
+  if (choice === 0) {
+    await gymBattleScr(gymIndex);
+  } else if (choice === 1) {
+    enterRouteExploration(gymIndex);
+  } else if (choice === 2) {
+    shopScr();
+  } else {
+    journeyHubScr();
+  }
+}
+
+export async function showWildDefeat(wildMon: EncounterMon, returnCoords?: { routeId: number; x: number; y: number }): Promise<void> {
+  pokemon3DManager.stop();
+  sound.music('menu');
+  sound.beep(160, 0.3, 'sawtooth');
+
+  // Fully restore team
+  G.team.forEach(m => {
+    m.hp = st(m).max;
+  });
+  save();
+
+  await note([
+    `<h1>WILD BATTLE DEFEAT</h1>`,
+    `All your Pokémon fainted against wild <b>${wildMon.name.toUpperCase()}</b>!`,
+    `You scurried back to safety and rested your team.`,
+    `<b>All your Pokémon have been fully healed and restored!</b>`,
+  ]);
+
+  const routeId = returnCoords ? returnCoords.routeId : G.gymIndex;
+  enterRouteExploration(routeId);
+}
+
+// ============================================================================
+// SCREEN 13: TOURNAMENT ELIMINATION (PERMANENT RUN RESET ON TOURNAMENT LOSS)
 // ============================================================================
 export async function showDefeat(isEliteFour: boolean = false, foeName: string = ''): Promise<void> {
   pokemon3DManager.stop();
@@ -2043,12 +2138,12 @@ export async function showDefeat(isEliteFour: boolean = false, foeName: string =
 
   const choice = await pick(
     `<div class="defeat-screen">
-      <div class="defeat-skull">💀</div>
-      <div class="defeat-title">${isEliteFour ? 'ELITE FOUR DEFEAT' : 'DEFEATED'}</div>
-      <div class="defeat-subtitle">Your journey has ended. All Pokémon on your team have fainted.</div>
+      <div class="defeat-skull">🏆</div>
+      <div class="defeat-title">${isEliteFour ? 'ELITE FOUR ELIMINATION' : 'TOURNAMENT ELIMINATION'}</div>
+      <div class="defeat-subtitle">You have been eliminated from the Kanto Tournament!</div>
       <div class="defeat-stats">
-        Fallen against: <b>${foeName || 'Gym Leader / Opponent'}</b><br>
-        Losses in the Kanto League journey are permanent.
+        Eliminated by: <b>${foeName || 'Tournament Opponent'}</b><br>
+        In the official Pokémon League Championship, tournament losses are final.
       </div>
     </div>`,
     [

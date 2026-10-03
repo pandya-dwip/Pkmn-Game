@@ -49,55 +49,55 @@ export const Pokemon3DConfig = {
 
   // Battle positioning in 3D world coordinates
   POSITIONS: {
-    // Player on the grass field directly above player's info box (bottom-left)
+    // Player on the stadium field (bottom-left quadrant, completely clear of bottom-right info card)
     player: {
-      x: -1.15,
+      x: -1.35,
       y: 0,
-      z: 1.2,
+      z: 1.05,
       // Facing toward opponent (top-right along battle diagonal)
-      rotationY: 2.356, // 135 deg: perfectly aligns with foe position (+2.8, -2.8)
+      rotationY: 2.356, // 135 deg: perfectly aligns with foe position
     },
-    // Opponent on the grass field aligned with opponent's info box (top-right)
+    // Opponent on the stadium field (top-right quadrant, completely clear of top-left info card)
     foe: {
-      x: 1.25,
+      x: 1.35,
       y: 0,
-      z: -1.6,
+      z: -1.5,
       // Facing toward player (bottom-left along battle diagonal)
-      rotationY: -0.785, // -45 deg: perfectly aligns with player position (-2.8, +2.8)
+      rotationY: -0.785, // -45 deg: perfectly aligns with player position
     },
   },
 
   // Base normalization scale: target height in world units (compact & proportional)
-  TARGET_HEIGHT: 1.15,
+  TARGET_HEIGHT: 1.1,
 
-  // Custom scale adjustments for specific Pokemon species (to reflect canon sizes naturally)
+  // Custom scale adjustments for specific Pokemon species (to reflect canon sizes naturally without clipping)
   SPECIES_SCALE_MODIFIERS: {
     // Large / giant Pokemon
-    95: 1.35,  // Onix
-    130: 1.3,  // Gyarados
-    143: 1.25, // Snorlax
-    149: 1.2,  // Dragonite
-    131: 1.2,  // Lapras
-    6: 1.15,   // Charizard
-    9: 1.15,   // Blastoise
-    3: 1.15,   // Venusaur
-    68: 1.1,   // Machamp
-    103: 1.2,  // Exeggutor
-    144: 1.15, // Articuno
-    145: 1.15, // Zapdos
-    146: 1.2,  // Moltres
-    150: 1.15, // Mewtwo
+    95: 1.25,  // Onix
+    130: 1.22, // Gyarados
+    143: 1.18, // Snorlax
+    149: 1.15, // Dragonite
+    131: 1.15, // Lapras
+    6: 1.1,    // Charizard
+    9: 1.1,    // Blastoise
+    3: 1.1,    // Venusaur
+    68: 1.08,  // Machamp
+    103: 1.15, // Exeggutor
+    144: 1.1,  // Articuno
+    145: 1.1,  // Zapdos
+    146: 1.15, // Moltres
+    150: 1.1,  // Mewtwo
 
     // Tiny / small Pokemon (scaled to be clearly visible)
-    10: 0.9,   // Caterpie
-    13: 0.9,   // Weedle
-    16: 0.9,   // Pidgey
-    19: 0.9,   // Rattata
-    25: 0.95,  // Pikachu
-    39: 0.95,  // Jigglypuff
+    10: 0.95,  // Caterpie
+    13: 0.95,  // Weedle
+    16: 0.95,  // Pidgey
+    19: 0.95,  // Rattata
+    25: 0.98,  // Pikachu
+    39: 0.98,  // Jigglypuff
     50: 1.0,   // Diglett
-    41: 0.9,   // Zubat
-    43: 0.9,   // Oddish
+    41: 0.95,  // Zubat
+    43: 0.95,  // Oddish
     60: 0.9,   // Poliwag
     151: 0.9,  // Mew
   } as Record<number, number>,

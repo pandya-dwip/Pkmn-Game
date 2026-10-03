@@ -18,6 +18,8 @@ const MUS: Record<string, { b: number; r: number; s: number[]; p: number[]; c: n
   semi: { b: 170, r: 55, s: MI, p: [0, 3, 4, 3, 7, 4, 3, 0, 5, 4, 3, 2, 4, 3, 2, 0], c: [0, 6, 5, 4], w: 'sawtooth', d: 2 },
   final: { b: 178, r: 52, s: MI, p: [0, 4, 7, 4, 9, 7, 4, 0, 5, 9, 7, 5, 4, 7, 9, 11], c: [0, 5, 6, 4], w: 'sawtooth', d: 2 },
   victory: { b: 140, r: 60, s: MJ, p: [0, 2, 4, 7, 4, 2, 0, -1, 2, 4, 5, 7, 9, 7, 5, -1], c: [0, 3, 4, 0], w: 'square', d: 1 },
+  eliteFour: { b: 184, r: 50, s: MI, p: [0, 3, 5, 6, 7, 6, 5, 3, 0, 5, 7, 8, 10, 8, 7, 5], c: [0, 6, 7, 5], w: 'sawtooth', d: 2 },
+  championCeremony: { b: 132, r: 62, s: MJ, p: [0, 4, 7, 12, 11, 9, 7, 4, 5, 7, 9, 12, 14, 12, 9, 7], c: [0, 3, 4, 0], w: 'triangle', d: 1 },
 };
 
 const hz = (n: number) => 440 * 2 ** ((n - 69) / 12);

@@ -34,6 +34,8 @@ export class Pokemon3DManager {
   private enabled = true;
   private isInitialized = false;
 
+  private lastMon: { p?: { id: number; shiny: boolean }; f?: { id: number; shiny: boolean } } = {};
+
   private constructor() {
     // Check localStorage preference
     try {
@@ -98,7 +100,7 @@ export class Pokemon3DManager {
   public is3DActive(side: 'p' | 'f'): boolean {
     if (!this.enabled) return false;
     const slot = side === 'p' ? this.playerSlot : this.foeSlot;
-    return !!(slot && slot.loaded && !slot.failed);
+    return !!(slot && slot.loaded && !slot.failed && slot.wrapper.visible);
   }
 
   public setEnabled(val: boolean): void {
@@ -107,20 +109,52 @@ export class Pokemon3DManager {
       localStorage.setItem('pkmn_3d_enabled', val ? 'true' : 'false');
     } catch {}
 
+    const fldEl = document.querySelector('#fld');
+    const ps = document.querySelector('#ps') as HTMLElement | null;
+    const fs = document.querySelector('#fs') as HTMLElement | null;
+    const pw = document.querySelector('#pw') as HTMLElement | null;
+    const fw = document.querySelector('#fw') as HTMLElement | null;
+    const psh = document.querySelector('#psh') as HTMLElement | null;
+    const fsh = document.querySelector('#fsh') as HTMLElement | null;
+
     if (this.renderer?.canvas) {
       this.renderer.canvas.style.display = val ? 'block' : 'none';
     }
 
-    // Toggle 2D sprite visibility accordingly
-    const ps = document.querySelector('#ps') as HTMLElement | null;
-    const fs = document.querySelector('#fs') as HTMLElement | null;
-
     if (!val) {
-      if (ps) ps.style.opacity = '1';
-      if (fs) fs.style.opacity = '1';
+      // 3D OFF: cleanly show 2D sprites, hide 3D meshes without resetting any battle data
+      if (this.playerSlot?.wrapper) this.playerSlot.wrapper.visible = false;
+      if (this.foeSlot?.wrapper) this.foeSlot.wrapper.visible = false;
+
+      if (fldEl) {
+        fldEl.classList.remove('has-3d-player', 'has-3d-foe');
+      }
+      [ps, fs, pw, fw, psh, fsh].forEach(el => {
+        if (el) {
+          el.style.opacity = '1';
+          el.style.visibility = 'visible';
+          el.style.display = '';
+        }
+      });
     } else {
-      if (ps && this.playerSlot?.loaded) ps.style.opacity = '0';
-      if (fs && this.foeSlot?.loaded) fs.style.opacity = '0';
+      // 3D ON: restore active 3D meshes or load them
+      if (this.playerSlot?.loaded && this.playerSlot.wrapper) {
+        this.playerSlot.wrapper.visible = true;
+        if (fldEl) fldEl.classList.add('has-3d-player');
+        if (ps) ps.style.opacity = '0';
+        if (psh) psh.style.display = 'none';
+      } else if (this.lastMon.p) {
+        this.setPokemon('p', this.lastMon.p.id, this.lastMon.p.shiny);
+      }
+
+      if (this.foeSlot?.loaded && this.foeSlot.wrapper) {
+        this.foeSlot.wrapper.visible = true;
+        if (fldEl) fldEl.classList.add('has-3d-foe');
+        if (fs) fs.style.opacity = '0';
+        if (fsh) fsh.style.display = 'none';
+      } else if (this.lastMon.f) {
+        this.setPokemon('f', this.lastMon.f.id, this.lastMon.f.shiny);
+      }
     }
   }
 
@@ -212,9 +246,18 @@ export class Pokemon3DManager {
 
     // Sprite element reference for smooth crossfade
     const sprEl = document.querySelector(isPlayer ? '#ps' : '#fs') as HTMLElement | null;
+    this.lastMon[side] = { id: pokemonId, shiny: isShiny };
 
     if (!this.enabled) {
-      if (sprEl) sprEl.style.opacity = '1';
+      if (sprEl) {
+        sprEl.style.opacity = '1';
+        sprEl.style.display = 'block';
+        sprEl.style.visibility = 'visible';
+      }
+      const shEl = document.querySelector(isPlayer ? '#psh' : '#fsh') as HTMLElement | null;
+      if (shEl) shEl.style.display = '';
+      const fldEl = document.querySelector('#fld');
+      if (fldEl) fldEl.classList.remove(isPlayer ? 'has-3d-player' : 'has-3d-foe');
       return false;
     }
 

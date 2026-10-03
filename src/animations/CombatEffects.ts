@@ -484,70 +484,20 @@ export const KIND: Record<string, (X: any) => Promise<void>> = {
   },
 };
 
+import { moveAnimationSystem } from './MoveAnimationSystem';
+
 export async function playMoveEffect(
   s: 'p' | 'f',
   moveName: string,
   moveType: string,
   movePower: number,
   effMultiplier: number,
-  sndHelper: (st: string, mv: any, kind: string, i: number, k: number, crit?: boolean) => void,
-  cryHelper: (s: 'p' | 'f', k: string) => void
+  _sndHelper?: (st: string, mv: any, kind: string, i: number, k: number, crit?: boolean) => void,
+  cryHelper?: (s: 'p' | 'f', k: string) => void,
+  isCritical: boolean = false
 ): Promise<void> {
-  const o = s === 'p' ? 'f' : 'p';
-  const A = ctr($('#' + s + 'w'));
-  const T = ctr($('#' + o + 'w'));
-  const k = MK[moveName] || 'spark';
-  const c = COL[moveType] || '#ffffff';
-  const e = FXE[moveType] || '💥';
-  const i = Math.min(1, Math.max(0, (movePower - 30) / 90));
-  const kk = 0.9 + (hash(moveName) % 25) / 100;
-  const mel = 'bite claw punch dash slam quake'.includes(k);
-
-  const mvObj = { n: moveName, t: moveType, p: movePower };
-  const X = {
-    A,
-    T,
-    c,
-    e,
-    mv: mvObj,
-    s,
-    k: kk,
-    i,
-    big: movePower >= 100 || k === 'blast',
-    snd: (z: string) => sndHelper(z, mvObj, k, i, kk),
-  };
-
-  cryHelper(s, 'atk');
-  $('#' + s + 'w').animate([{ scale: '1' }, { scale: '1.1' }, { scale: '1' }], { duration: 700 });
-  const world = $('#world');
-  if (world) {
-    world.style.transformOrigin = `${A.x}px ${A.y}px`;
-    world.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.07)' }, { transform: 'scale(1)' }], {
-      duration: 1100,
-    });
+  if (cryHelper) {
+    cryHelper(s, 'atk');
   }
-
-  if (!mel) {
-    X.snd('c');
-    await fly(el('chg', { background: `radial-gradient(${c},transparent 70%)`, left: A.x + 'px', top: A.y + 'px' }), [
-      { transform: 'translate(-50%,-50%) scale(.2)', opacity: '0.3' },
-      { transform: 'translate(-50%,-50%) scale(1.3)', opacity: '1' },
-    ], { duration: 420 });
-    puff(A.x, A.y, e, 4, 50, 300);
-  }
-
-  const kindFn = KIND[k] || KIND.spark;
-  await kindFn(X);
-
-  if (!mel && k !== 'quake') {
-    X.snd('h');
-  }
-
-  fly(el('glow', { background: `radial-gradient(circle at ${T.x}px ${T.y}px,${c}cc,transparent ${effMultiplier > 1 ? 70 : effMultiplier < 1 ? 30 : 50}%)` }), [
-    { opacity: '0' },
-    { opacity: '1' },
-    { opacity: '0' },
-  ], { duration: 600 });
-
-  puff(T.x, T.y, e, effMultiplier > 1 ? 16 : effMultiplier < 1 ? 3 : 9, effMultiplier > 1 ? 130 : effMultiplier < 1 ? 40 : 90, 650);
+  await moveAnimationSystem.playMove(s, moveName, moveType, movePower, effMultiplier, isCritical);
 }

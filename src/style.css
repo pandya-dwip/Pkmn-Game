@@ -701,19 +701,19 @@ h1 {
 }
 
 #fsh {
-  top: calc(var(--ih) + 2% + var(--ow) * 0.8);
+  top: calc(13% + var(--ow) * 0.85);
   width: calc(var(--ow) * 0.72);
   height: calc(var(--ow) * 0.12);
   left: auto;
-  right: calc(7% + var(--ow) * 0.14);
+  right: calc(12% + var(--ow) * 0.14);
 }
 
 #psh {
   top: auto;
-  bottom: calc(var(--ih) + 2% - var(--pw) * 0.02);
+  bottom: calc(11% - var(--pw) * 0.02);
   width: calc(var(--pw) * 0.76);
   height: calc(var(--pw) * 0.13);
-  left: calc(2% + var(--pw) * 0.12);
+  left: calc(8% + var(--pw) * 0.12);
 }
 
 @keyframes shd {
@@ -730,37 +730,35 @@ h1 {
 
 #fw {
   width: var(--ow);
-  top: calc(var(--ih) + 2%);
-  right: 7%;
+  top: 13%;
+  right: 12%;
   left: auto;
   --ry: -14deg;
 }
 
 #pw {
   width: var(--pw);
-  left: 2%;
-  bottom: calc(var(--ih) + 2%);
+  left: 8%;
+  bottom: 11%;
   top: auto;
   right: auto;
   --ry: 14deg;
   animation-delay: -1s;
 }
 
-/* When 3D model is active, strictly hide 2D sprites and their CSS shadows */
+/* When 3D model is active, gracefully hide 2D sprites and their CSS shadows without breaking manual toggles */
 #fld.has-3d-player #pw,
 #fld.has-3d-player #ps,
 #fld.has-3d-player #psh {
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
+  opacity: 0;
+  pointer-events: none;
 }
 
 #fld.has-3d-foe #fw,
 #fld.has-3d-foe #fs,
 #fld.has-3d-foe #fsh {
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
+  opacity: 0;
+  pointer-events: none;
 }
 
 @keyframes br {
@@ -802,7 +800,7 @@ h1 {
    ========================================================================== */
 .info {
   position: absolute;
-  z-index: 4;
+  z-index: 10;
   font-size: max(11px, 2.3cqw);
   /* Crisp Pure White Pokédex Data Badge */
   background: #ffffff;
@@ -810,22 +808,25 @@ h1 {
   border: 2.5px solid var(--dex-red);
   border-radius: 12px;
   padding: 0.8cqw 1.2cqw;
-  width: 46%;
+  width: 44%;
+  max-width: 270px;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
 }
 
+/* Opponent Info Badge: Strictly TOP-LEFT so Opponent Pokemon (Top-Right) is 100% visible */
 .info.f {
   top: 3%;
-  right: 3%;
-  left: auto;
+  left: 3%;
+  right: auto;
   bottom: auto;
   border-top: 4px solid var(--dex-red);
 }
 
+/* Player Info Badge: Strictly BOTTOM-RIGHT so Player Pokemon (Bottom-Left) is 100% visible */
 .info.p {
   bottom: 3%;
-  left: 3%;
-  right: auto;
+  right: 3%;
+  left: auto;
   top: auto;
   border-top: 4px solid #3b82f6;
 }
@@ -1774,4 +1775,283 @@ tr:last-child td {
     font-size: 12px !important;
     padding: 10px !important;
   }
+}
+
+/* ==========================================================================
+   DEFEAT SCREEN & LOSS FLOW
+   ========================================================================== */
+.defeat-screen {
+  text-align: center;
+  padding: 16px 8px;
+  background: radial-gradient(circle at 50% 20%, #450a0a 0%, #1e1b4b 60%, #09090b 100%);
+  border: 3px solid #ef4444;
+  border-radius: 20px;
+  box-shadow: 0 15px 40px rgba(239, 68, 68, 0.35);
+  color: #ffffff;
+}
+
+.defeat-skull {
+  font-size: 54px;
+  margin-bottom: 6px;
+  animation: pulse-slow 1.6s infinite alternate;
+  filter: drop-shadow(0 0 16px rgba(239, 68, 68, 0.8));
+}
+
+.defeat-title {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #f87171;
+  text-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+  margin-bottom: 4px;
+}
+
+.defeat-subtitle {
+  font-size: 13px;
+  color: #cbd5e1;
+  margin-bottom: 18px;
+}
+
+.defeat-stats {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1.5px solid #334155;
+  border-radius: 12px;
+  padding: 12px;
+  margin: 12px 0 20px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.defeat-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.defeat-btn-restart {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.defeat-btn-restart:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(239, 68, 68, 0.6);
+}
+
+.defeat-btn-menu {
+  background: #1e293b;
+  color: #cbd5e1;
+  border: 1.5px solid #475569;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   POST-CHAMPIONSHIP ELITE FOUR SYSTEM STYLES
+   ========================================================================== */
+.e4-hub {
+  padding: 10px;
+  color: #ffffff;
+  text-align: center;
+}
+
+.e4-title {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b, #ef4444);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 2px;
+}
+
+.e4-subtitle {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 14px;
+}
+
+.e4-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.e4-card {
+  position: relative;
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border: 2px solid #334155;
+  border-radius: 16px;
+  padding: 12px 8px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.e4-card:not(.defeated):hover {
+  transform: translateY(-3px);
+  border-color: #facc15;
+  box-shadow: 0 12px 28px rgba(250, 204, 21, 0.35);
+}
+
+.e4-card.defeated {
+  opacity: 0.65;
+  border-color: #22c55e;
+  cursor: default;
+  background: linear-gradient(135deg, #0f172a, #064e3b);
+}
+
+.e4-avatar {
+  font-size: 34px;
+  margin-bottom: 2px;
+}
+
+.e4-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.e4-type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 99px;
+  letter-spacing: 0.5px;
+  margin: 2px 0;
+}
+
+.e4-type-ice { background: #0284c7; color: #ffffff; }
+.e4-type-fighting { background: #b91c1c; color: #ffffff; }
+.e4-type-ghost { background: #6b21a8; color: #ffffff; }
+.e4-type-dragon { background: #4338ca; color: #ffffff; }
+
+.e4-status-badge {
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 99px;
+  margin-top: 4px;
+}
+
+.e4-status-available {
+  background: linear-gradient(90deg, #eab308, #ca8a04);
+  color: #0f172a;
+  animation: glow-pulse 1.8s infinite alternate;
+}
+
+.e4-status-done {
+  background: #15803d;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@keyframes glow-pulse {
+  0% { box-shadow: 0 0 6px rgba(234, 179, 8, 0.4); }
+  100% { box-shadow: 0 0 16px rgba(234, 179, 8, 0.8); }
+}
+
+/* ==========================================================================
+   ELITE FOUR FULL HEAL SCREEN STYLES
+   ========================================================================== */
+.heal-screen {
+  text-align: center;
+  padding: 12px;
+  color: #ffffff;
+}
+
+.heal-header-icon {
+  font-size: 44px;
+  margin-bottom: 6px;
+  animation: pulse-slow 1.4s infinite alternate;
+}
+
+.heal-title {
+  font-size: 20px;
+  font-weight: 900;
+  color: #4ade80;
+  margin-bottom: 2px;
+}
+
+.heal-desc {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 14px;
+}
+
+.heal-team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.heal-mon-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #1e293b;
+  border: 1.5px solid #334155;
+  border-radius: 12px;
+  padding: 6px 12px;
+}
+
+.heal-mon-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.heal-mon-info img {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+}
+
+.heal-mon-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: #f8fafc;
+  text-align: left;
+}
+
+.heal-mon-lv {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.heal-hp-badge {
+  background: #15803d;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 99px;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+}
+
+@keyframes pulse-slow {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.08); }
 }

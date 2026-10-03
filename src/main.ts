@@ -213,6 +213,11 @@ export interface GameSaveState {
   tmax?: number;
   ev?: number;
   last?: { e: number; it: string };
+  defeated?: boolean;
+  eliteFour?: {
+    defeated: string[];
+    activeMember?: string | null;
+  };
 }
 
 export let G: GameSaveState;
@@ -231,11 +236,12 @@ export const load = (): GameSaveState | null => {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const g: GameSaveState = JSON.parse(raw);
-    if (g && g.br) {
+    if (g && g.br && !g.defeated) {
       g.tmax = g.tmax || 5;
       g.ev = g.ev || 0;
       g.b50 = g.b50 ?? 2;
       g.b75 = g.b75 ?? 1;
+      g.eliteFour = g.eliteFour || { defeated: [], activeMember: null };
       g.team.forEach(m => {
         m.uid = m.uid || nu();
       });
@@ -306,6 +312,37 @@ export const pickTeam = (t: string, c?: boolean) =>
 
 export const note = (l: string[]) => pick(l.join('<br>'), [{ h: 'OK' }]);
 
+export async function startNewGame(): Promise<void> {
+  sound.music('select');
+  const i = await pick(
+    'CHOOSE YOUR FIRST POKÉMON<br>(Lv.5)',
+    STARTERS.map(id => ({
+      h: `${img(id)}<span><b>${POKEMON_SPECIES_MAP[id]?.name}</b><small>${POKEMON_SPECIES_MAP[id]?.typesShort
+        .map(tb)
+        .join('')}</small></span>`,
+    }))
+  );
+  G = {
+    r: 0,
+    team: [mk(STARTERS[i], 5)],
+    b: 3,
+    b50: 2,
+    b75: 1,
+    fh: 2,
+    rv: 2,
+    st: {},
+    ph: 'br',
+    br: genBracket(),
+    tk: 5,
+    tmax: 5,
+    ev: 0,
+    defeated: false,
+    eliteFour: { defeated: [], activeMember: null },
+  };
+  save();
+  mapScr();
+}
+
 // Screen 1: Title Screen
 export function titleScr(): void {
   sound.music('menu');
@@ -313,15 +350,21 @@ export function titleScr(): void {
   // Lazy pre-warm starters in background
   [1, 4, 7, 25].forEach(id => Pokemon3DApiService.getInstance().preloadPokemon(id));
   const has = !!load();
+  const hasHistory = !!localStorage.getItem('kantoChampion');
+  const hasE4History = !!localStorage.getItem('kantoEliteFourRecord');
+
   $('#title').innerHTML = `<h1>KANTO CUP</h1><p style="text-align:center">A Gen 1 tournament roguelite</p><div class="col"><button id="bc" ${
     has ? '' : 'disabled'
   }>CONTINUE</button><button id="bn">NEW GAME</button><button id="br">RESET SAVE</button>${
-    localStorage.getItem('kantoChampion') ? '<button id="bh">🏆 CHAMPIONSHIP HISTORY</button>' : ''
+    hasE4History ? '<button id="be4">👑 ELITE FOUR CHAMPION HISTORY</button>' : ''
+  }${
+    hasHistory ? '<button id="bh">🏆 CHAMPIONSHIP HISTORY</button>' : ''
   }</div>`;
 
   $('#bc').onclick = () => {
     G = load()!;
-    if (G.ph === 'hub') hubScr();
+    if (G.ph === 'elite_four') eliteFourHub();
+    else if (G.ph === 'hub') hubScr();
     else mapScr();
   };
 
@@ -336,42 +379,26 @@ export function titleScr(): void {
     $('#bh').onclick = () => {
       const r = JSON.parse(localStorage.getItem('kantoChampion') || '{}');
       note([
-        '<h1>🏆 KANTO CHAMPION</h1>' + r.date,
-        'Final opponent: ' + r.finalOpponent,
-        'Defeated: ' + r.finalOpponentTeam.join(', '),
-        'Your team: ' + r.playerTeam.join(', '),
+        '<h1>🏆 KANTO CHAMPION</h1>' + (r.date || ''),
+        'Final opponent: ' + (r.finalOpponent || 'Rival'),
+        'Defeated: ' + ((r.finalOpponentTeam || []).join(', ') || 'Rival Team'),
+        'Your team: ' + ((r.playerTeam || []).join(', ') || 'Champion Team'),
       ]);
     };
   }
 
-  $('#bn').onclick = async () => {
-    sound.music('select');
-    const i = await pick(
-      'CHOOSE YOUR FIRST POKÉMON<br>(Lv.5)',
-      STARTERS.map(id => ({
-        h: `${img(id)}<span><b>${POKEMON_SPECIES_MAP[id]?.name}</b><small>${POKEMON_SPECIES_MAP[id]?.typesShort
-          .map(tb)
-          .join('')}</small></span>`,
-      }))
-    );
-    G = {
-      r: 0,
-      team: [mk(STARTERS[i], 5)],
-      b: 3,
-      b50: 2,
-      b75: 1,
-      fh: 2,
-      rv: 2,
-      st: {},
-      ph: 'br',
-      br: genBracket(),
-      tk: 5,
-      tmax: 5,
-      ev: 0,
+  if ($('#be4')) {
+    $('#be4').onclick = () => {
+      const r = JSON.parse(localStorage.getItem('kantoEliteFourRecord') || '{}');
+      note([
+        '<h1>👑 ELITE FOUR GRAND CHAMPION</h1>' + (r.date || ''),
+        '<b>Conquest Order:</b> ' + (r.orderDisplay || (r.order || []).join(' ➔ ')),
+        '<br><b>Your Grand Champion Team:</b><br>' + ((r.playerTeam || []).join(', ') || ''),
+      ]);
     };
-    save();
-    mapScr();
-  };
+  }
+
+  $('#bn').onclick = () => startNewGame();
 }
 
 // Screen 2: Tournament Bracket Screen
@@ -992,6 +1019,7 @@ export async function attack(s: 'p' | 'f', mv: any): Promise<void> {
 
   const e = calculateTypeEffectiveness(mv.typeShort, POKEMON_SPECIES_MAP[d.id]?.typesShort || ['No']);
   const ph = mv.category === 'Physical';
+  const cr = R() < 0.0625;
   const attack3d = pokemon3DManager.playAttackAction(s, mv.name, ph);
 
   await playMoveEffect(
@@ -1001,13 +1029,13 @@ export async function attack(s: 'p' | 'f', mv: any): Promise<void> {
     mv.power,
     e,
     (st, m, kind, i, k, crit) => sound.sfxA(st, m, kind, i, k, crit),
-    (side, mood) => sound.cry(M(side).id, mood)
+    (side, mood) => sound.cry(M(side).id, mood),
+    cr
   );
   await attack3d;
 
   const A = st(a)[ph ? 'atk' : 'spa'];
   const Df = st(d)[ph ? 'def' : 'spd'];
-  const cr = R() < 0.0625;
 
   if (!e) {
     await say(`It doesn't affect ${NM(o)}!`);
@@ -1516,8 +1544,7 @@ export async function battle(r: number): Promise<void> {
 
   if (res === 'lose') {
     pokemon3DManager.stop();
-    await pick('<h1>TOURNAMENT OVER</h1>Your entire team has fainted.', [{ h: 'TRY AGAIN' }]);
-    return titleScr();
+    return showDefeat(false, r);
   }
 
   if (r === 5) {
@@ -1601,11 +1628,131 @@ export function confetti(): void {
   }
 }
 
-export async function champion(): Promise<void> {
+// ============================================================================
+// DEFEAT FLOW & PERMANENT RUN RESET
+// ============================================================================
+export async function showDefeat(isEliteFour: boolean = false, roundIndex: number = 0): Promise<void> {
+  pokemon3DManager.stop();
   try {
     localStorage.removeItem(KEY);
   } catch {}
+  if (G) {
+    G.defeated = true;
+  }
 
+  sound.music('menu');
+  sound.beep(140, 0.6, 'sawtooth');
+
+  const roundName = isEliteFour ? 'Elite Four Challenge' : (RD[roundIndex]?.n || `Round ${roundIndex + 1}`);
+
+  const choice = await pick(
+    `<div class="defeat-screen">
+      <div class="defeat-skull">💀</div>
+      <div class="defeat-title">${isEliteFour ? 'ELITE FOUR DEFEAT' : 'DEFEATED'}</div>
+      <div class="defeat-subtitle">Your tournament run has ended. All Pokémon have fainted.</div>
+      <div class="defeat-stats">
+        Fallen in: <b>${roundName}</b><br>
+        Losses in the tournament are permanent.
+      </div>
+    </div>`,
+    [
+      { h: '<b>START NEW TOURNAMENT</b>' },
+      { h: 'MAIN MENU' },
+    ],
+    false,
+    'defeat-actions'
+  );
+
+  if (choice === 0) {
+    await startNewGame();
+  } else {
+    titleScr();
+  }
+}
+
+// ============================================================================
+// POST-CHAMPIONSHIP ELITE FOUR SYSTEM
+// ============================================================================
+
+export interface EliteFourMember {
+  id: string;
+  name: string;
+  avatar: string;
+  title: string;
+  type: string;
+  badgeClass: string;
+  intro: string;
+  team: { id: number; lv: number }[];
+}
+
+export const ELITE_FOUR_MEMBERS: Record<string, EliteFourMember> = {
+  lorelei: {
+    id: 'lorelei',
+    name: 'Lorelei',
+    avatar: '❄️',
+    title: 'Elite Four Master of Ice & Water',
+    type: 'ICE / WATER',
+    badgeClass: 'e4-type-ice',
+    intro: 'Welcome to the Pokémon League! No one can withstand my freezing ice combinations. Show me what you’ve got!',
+    team: [
+      { id: 87, lv: 54 },  // Dewgong
+      { id: 91, lv: 53 },  // Cloyster
+      { id: 80, lv: 54 },  // Slowbro
+      { id: 124, lv: 56 }, // Jynx
+      { id: 131, lv: 56 }, // Lapras
+    ],
+  },
+  bruno: {
+    id: 'bruno',
+    name: 'Bruno',
+    avatar: '🥋',
+    title: 'Elite Four Master of Fighting & Rock',
+    type: 'FIGHTING / ROCK',
+    badgeClass: 'e4-type-fighting',
+    intro: 'We have trained day and night! My Pokémon will crush you with pure disciplined power. Prepare yourself!',
+    team: [
+      { id: 95, lv: 53 },  // Onix
+      { id: 107, lv: 55 }, // Hitmonchan
+      { id: 106, lv: 55 }, // Hitmonlee
+      { id: 95, lv: 56 },  // Onix
+      { id: 68, lv: 58 },  // Machamp
+    ],
+  },
+  agatha: {
+    id: 'agatha',
+    name: 'Agatha',
+    avatar: '👻',
+    title: 'Elite Four Master of Ghost & Poison',
+    type: 'GHOST / POISON',
+    badgeClass: 'e4-type-ghost',
+    intro: 'You have courage to face me! But spirit and poison dwell in these shadows. Let us see if your bond can survive!',
+    team: [
+      { id: 94, lv: 56 },  // Gengar
+      { id: 42, lv: 56 },  // Golbat
+      { id: 93, lv: 55 },  // Haunter
+      { id: 24, lv: 58 },  // Arbok
+      { id: 94, lv: 60 },  // Gengar
+    ],
+  },
+  lance: {
+    id: 'lance',
+    name: 'Lance',
+    avatar: '🐲',
+    title: 'Elite Four Leader & Dragon Master',
+    type: 'DRAGON / FLYING',
+    badgeClass: 'e4-type-dragon',
+    intro: 'I am Lance, dragon master! Dragons are mythical, virtually indestructible forces of nature. Show me true championship spirit!',
+    team: [
+      { id: 130, lv: 58 }, // Gyarados
+      { id: 148, lv: 56 }, // Dragonair
+      { id: 148, lv: 56 }, // Dragonair
+      { id: 142, lv: 60 }, // Aerodactyl
+      { id: 149, lv: 62 }, // Dragonite
+    ],
+  },
+};
+
+export async function champion(): Promise<void> {
   const T = G.br.T[G.br.al[1]] || { nm: 'Trainer Rival', av: '⭐' };
   const fo = B.foe;
   const pl = G.team;
@@ -1660,9 +1807,252 @@ export async function champion(): Promise<void> {
   await pick(
     `<h1>🏆 HALL OF FAME 🏆</h1><p style="text-align:center;font-weight:700">★ YOUR CHAMPIONSHIP SQUAD ★</p>${cards(
       pl
-    )}<p style="text-align:center;font-size:11px;font-weight:600;margin-top:8px;color:#64748b">Defeated ${T.nm}'s Squad in the Grand Finals · ${rec.date}</p>`,
-    [{ h: 'PLAY AGAIN' }]
+    )}<p style="text-align:center;font-size:12px;font-weight:700;margin-top:8px;color:#f59e0b">You are the Kanto Cup Champion!<br>A new legendary trial has opened...</p>`,
+    [{ h: 'CHALLENGE THE ELITE FOUR ➔' }]
   );
+
+  // Transition into Elite Four
+  G.ph = 'elite_four';
+  G.eliteFour = G.eliteFour || { defeated: [], activeMember: null };
+  save();
+  return eliteFourHub();
+}
+
+export async function eliteFourHub(): Promise<void> {
+  G.ph = 'elite_four';
+  G.eliteFour = G.eliteFour || { defeated: [], activeMember: null };
+  save();
+
+  if (G.eliteFour.defeated.length >= 4) {
+    return eliteFourCeremony();
+  }
+
+  sound.music('select');
+
+  const memberKeys = ['lorelei', 'bruno', 'agatha', 'lance'];
+  const items = memberKeys.map(k => {
+    const mem = ELITE_FOUR_MEMBERS[k];
+    const isDefeated = G.eliteFour?.defeated.includes(k);
+    return {
+      d: isDefeated,
+      h: `
+        <div class="e4-card ${isDefeated ? 'defeated' : ''}">
+          <div class="e4-avatar">${mem.avatar}</div>
+          <div class="e4-name">${mem.name.toUpperCase()}</div>
+          <div class="e4-type-badge ${mem.badgeClass}">${mem.type}</div>
+          <div class="e4-status-badge ${isDefeated ? 'e4-status-done' : 'e4-status-available'}">
+            ${isDefeated ? 'DEFEATED ✓' : 'CHALLENGE AVAILABLE'}
+          </div>
+        </div>
+      `,
+    };
+  });
+
+  const selectedIdx = await pick(
+    `<div class="e4-hub">
+      <div class="e4-title">THE ELITE FOUR AWAIT</div>
+      <div class="e4-subtitle">Choose your opponent. Defeat all 4 masters in any order!</div>
+    </div>`,
+    items,
+    false,
+    'e4-grid'
+  );
+
+  const selectedKey = memberKeys[selectedIdx];
+  const member = ELITE_FOUR_MEMBERS[selectedKey];
+
+  await note([
+    `<h1>${member.avatar} ${member.name}</h1>`,
+    `<b>${member.title}</b>`,
+    `<p style="margin-top:8px;font-style:italic">"${member.intro}"</p>`,
+  ]);
+
+  await battleEliteFour(selectedKey);
+}
+
+export async function battleEliteFour(memberId: string): Promise<void> {
+  const member = ELITE_FOUR_MEMBERS[memberId];
+  if (!member) return;
+
+  const slots = Math.min(6, G.team.filter(m => m.hp > 0).length);
+  let pl = G.team.filter(m => m.hp > 0);
+  let sq: MonInstance[] = [];
+
+  sound.music('eliteFour');
+  show('bat');
+  $('#ctl').innerHTML = '';
+  $('#msg').textContent = '';
+  $('#fld').className = 'final ' + member.id;
+
+  pokemon3DManager.init($('#world'));
+  pokemon3DManager.start();
+
+  if (pl.length <= slots) sq = pl;
+  else {
+    while (sq.length < slots) {
+      const i = await pick(`Choose your team (${sq.length + 1}/${slots})`, pl.map(m => ({ h: mh(m) })), false, 'l');
+      sq.push(pl.splice(i, 1)[0]);
+    }
+  }
+
+  const foeSquad = member.team.map(m => mk(m.id, m.lv));
+
+  B = {
+    r: 6,
+    tn: member.name,
+    ai: 3, // Strongest AI
+    fb: 2, // 2 Full Heal Berries
+    foe: foeSquad,
+    tm: sq,
+    fu: null,
+    pu: null,
+    get fi() {
+      return this.foe.findIndex((m: MonInstance) => m.uid === this.fu);
+    },
+    set fi(v: number) {
+      this.fu = this.foe[v].uid;
+    },
+    get pi() {
+      return this.tm.findIndex((m: MonInstance) => m.uid === this.pu);
+    },
+    set pi(v: number) {
+      this.pu = this.tm[v].uid;
+    },
+    gain: 0,
+    sent: 0,
+    part: new Set<number>(),
+  };
+  B.fi = 0;
+  B.pi = 0;
+  ['p', 'f'].forEach(s => ($('#' + s + 's').dataset.k = ''));
+  ui();
+
+  if (sq.length > 1) {
+    B.pi = await pickTeam('Choose your lead Pokémon', false);
+    ui();
+  }
+  B.part.add(B.pi);
+
+  await say(`${member.name} (${member.title}) wants to battle!`);
+  await say(`${member.name} sent out ${POKEMON_SPECIES_MAP[F().id]?.name.toUpperCase()}!`);
+  await say(`Go! ${POKEMON_SPECIES_MAP[P().id]?.name.toUpperCase()}!`);
+
+  let res: string | null = null;
+  while (!res) {
+    res = await turn(await menu());
+  }
+
+  pokemon3DManager.stop();
+
+  if (res === 'lose') {
+    return showDefeat(true, 6);
+  }
+
+  // Defeated Elite Four Member!
+  if (!G.eliteFour) G.eliteFour = { defeated: [], activeMember: null };
+  if (!G.eliteFour.defeated.includes(memberId)) {
+    G.eliteFour.defeated.push(memberId);
+  }
+
+  // STRICT FULL HEAL REQUIREMENT
+  G.team.forEach(m => {
+    m.hp = st(m).max;
+  });
+
+  save();
+
+  sound.music('victory');
+  sound.cry(P().id, 'win');
+
+  // Show Elite Four Healing Screen
+  const healRows = G.team
+    .map(
+      m => `
+      <div class="heal-mon-row">
+        <div class="heal-mon-info">
+          ${img(m.id)}
+          <div>
+            <div class="heal-mon-name">${POKEMON_SPECIES_MAP[m.id]?.name}</div>
+            <div class="heal-mon-lv">Lv.${m.lv}</div>
+          </div>
+        </div>
+        <div class="heal-hp-badge">❤️ FULL HP (${st(m).max}/${st(m).max})</div>
+      </div>`
+    )
+    .join('');
+
+  await pick(
+    `<div class="heal-screen">
+      <div class="heal-header-icon">✨</div>
+      <div class="heal-title">${member.name.toUpperCase()} DEFEATED!</div>
+      <div class="heal-desc">All of your Pokémon have been fully restored and revived.</div>
+      <div class="heal-team-list">${healRows}</div>
+    </div>`,
+    [{ h: 'CONTINUE ➔' }]
+  );
+
+  if (G.eliteFour.defeated.length >= 4) {
+    return eliteFourCeremony();
+  } else {
+    return eliteFourHub();
+  }
+}
+
+export async function eliteFourCeremony(): Promise<void> {
+  sound.music('championCeremony');
+  [523, 659, 784, 1046, 1318, 1568].forEach((f, i) => setTimeout(() => sound.beep(f, 0.3, 'square'), i * 160));
+
+  confetti();
+
+  const L = (m: MonInstance) => `${POKEMON_SPECIES_MAP[m.id]?.name} Lv.${m.lv}`;
+  const cards = (l: MonInstance[]) =>
+    `<div class="champ-grid">${l
+      .map(
+        m =>
+          `<div class="champ-card">${img(m.id)}<b>${POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase()}</b><small>Lv.${
+            m.lv
+          }</small><div class="champ-types">${POKEMON_SPECIES_MAP[m.id]?.typesShort.map(tb).join('')}</div></div>`
+      )
+      .join('')}</div>`;
+
+  const orderNames = (G.eliteFour?.defeated || []).map(id => ELITE_FOUR_MEMBERS[id]?.name || id).join(' ➔ ');
+  const rec = {
+    completed: true,
+    tournament: 'Kanto Elite Four Grand Championship',
+    order: G.eliteFour?.defeated || [],
+    orderDisplay: orderNames,
+    playerTeam: G.team.map(L),
+    date: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+  };
+
+  try {
+    localStorage.setItem('kantoEliteFourRecord', JSON.stringify(rec));
+    localStorage.removeItem(KEY); // Clear active run after full victory!
+  } catch {}
+
+  await pick(
+    `<div style="text-align:center">
+      <div style="font-size:60px;margin-bottom:8px;animation:pulse-slow 1.2s infinite alternate">🏆</div>
+      <h1 style="color:#f59e0b">THE ELITE FOUR HAVE BEEN DEFEATED!</h1>
+      <p style="font-size:15px;font-weight:800;color:#38bdf8">KANTO LEAGUE GRAND CHAMPION</p>
+      <p style="font-size:12px;color:#94a3b8">You have conquered all four Elite Four masters!</p>
+      <div style="background:#1e293b;border:1.5px solid #334155;border-radius:12px;padding:10px;margin:12px 0;font-size:12px;color:#facc15">
+        <b>Conquest Order:</b><br>${orderNames}
+      </div>
+    </div>`,
+    [{ h: 'VIEW GRAND CHAMPION SQUAD ➔' }]
+  );
+
+  confetti();
+  await pick(
+    `<div style="text-align:center">
+      <h1>🏆 GRAND CHAMPION TEAM 🏆</h1>
+      <p style="font-weight:700;color:#94a3b8;font-size:12px">HALL OF FAME INDUCTION · ${rec.date}</p>
+      ${cards(G.team)}
+    </div>`,
+    [{ h: 'RETURN TO TITLE SCREEN' }]
+  );
+
   titleScr();
 }
 

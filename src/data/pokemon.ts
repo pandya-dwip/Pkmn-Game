@@ -51,7 +51,7 @@ Spearow,NoFl,40,60,30,31,31,70,9
 Fearow,NoFl,65,90,65,61,61,100,0
 Ekans,Po,35,60,44,40,54,55,10
 Arbok,Po,60,95,69,65,79,80,0
-Pikachu,El,35,55,40,50,50,90,12
+Pikachu,El,42,55,45,55,50,90,15
 Raichu,El,60,90,55,90,80,110,0
 Sandshrew,Gd,50,75,85,20,30,40,10
 Sandslash,Gd,75,100,110,45,55,65,0
@@ -159,7 +159,7 @@ Magikarp,Wa,20,10,55,15,20,80,10
 Gyarados,WaFl,95,125,79,60,100,81,0
 Lapras,WaIc,130,85,80,85,95,60,0
 Ditto,No,48,48,48,48,48,48,0
-Eevee,No,55,55,50,45,65,55,12
+Eevee,No,55,55,50,45,65,55,15
 Vaporeon,Wa,130,65,60,110,95,65,0
 Jolteon,El,65,65,60,110,95,130,0
 Flareon,Fi,65,130,60,95,110,65,0
@@ -262,4 +262,4 @@ export function isEvolutionLine(id: number): boolean {
   return (id > 1 && (POKEMON_SPECIES_MAP[id - 1]?.evolutionLevel || 0) > 0) || id in STONE_EVOLUTIONS;
 }
 
-export const STARTER_IDS = [1, 4, 7]; // Bulbasaur, Charmander, Squirtle
+export const STARTER_IDS = [1, 4, 7, 25, 133]; // Bulbasaur, Charmander, Squirtle, Pikachu, Eevee

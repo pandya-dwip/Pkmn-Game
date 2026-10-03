@@ -1,0 +1,813 @@
+/**
+ * routes.ts
+ * Detailed definitions for controlled Kanto journey routes.
+ * Each route provides visual environment, paths, grass patches,
+ * ground items, interactive NPCs, and destination buildings (Center, Mart, Gym).
+ */
+
+import { RouteDefinition } from '../systems/RouteExplorationEngine';
+
+export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
+  // --------------------------------------------------------------------------
+  // ROUTE 0: Pallet Town ➔ Route 1 ➔ Viridian City (Before Gym 1 Exploration)
+  // --------------------------------------------------------------------------
+  {
+    id: 0,
+    name: 'Route 1',
+    locationLabel: 'Route 1 & Viridian City',
+    destinationLabel: 'Pewter City (Gym 1)',
+    worldWidth: 1400,
+    worldHeight: 520,
+    theme: 'route',
+    startX: 70,
+    startY: 230,
+    path: [
+      // Main horizontal trail from Pallet to Viridian
+      { x: 30, y: 200, w: 720, h: 70 },
+      // Path branching north into town
+      { x: 680, y: 140, w: 80, h: 220 },
+      // Viridian City Plaza
+      { x: 740, y: 140, w: 580, h: 180 },
+    ],
+    grassPatches: [
+      { x: 160, y: 100, w: 160, h: 90 },
+      { x: 180, y: 280, w: 180, h: 110 },
+      { x: 380, y: 100, w: 160, h: 90 },
+      { x: 420, y: 280, w: 190, h: 120 },
+    ],
+    buildings: [
+      {
+        type: 'center',
+        x: 820,
+        y: 120,
+        w: 90,
+        h: 70,
+        label: 'Pokémon Center',
+      },
+      {
+        type: 'mart',
+        x: 960,
+        y: 120,
+        w: 80,
+        h: 68,
+        label: 'Poké Mart',
+      },
+      {
+        type: 'gate',
+        x: 1260,
+        y: 130,
+        w: 80,
+        h: 80,
+        label: 'Route 2 Gate ➔',
+      },
+    ],
+    items: [
+      {
+        id: 'r0_ball1',
+        x: 230,
+        y: 130,
+        name: 'Poké Ball',
+        type: 'ball',
+        amount: 2,
+        collected: false,
+      },
+      {
+        id: 'r0_berry1',
+        x: 480,
+        y: 330,
+        name: 'Oran Berry',
+        type: 'berry',
+        amount: 2,
+        collected: false,
+      },
+      {
+        id: 'r0_money1',
+        x: 350,
+        y: 320,
+        name: 'Poké Dollars',
+        type: 'money',
+        amount: 300,
+        collected: false,
+      },
+    ],
+    npcs: [
+      {
+        id: 'r0_npc1',
+        x: 140,
+        y: 160,
+        avatar: '🚶‍♂️',
+        name: 'Trainer Red',
+        dialogue: 'Watch out for wild Pokémon in the tall grass! You can weaken them and throw Poké Balls from your Bag to catch them!',
+        gift: { type: 'ball', name: 'Poké Ball', amount: 2 },
+      },
+      {
+        id: 'r0_npc2',
+        x: 770,
+        y: 260,
+        avatar: '👩',
+        name: 'Viridian Guide',
+        dialogue: 'Welcome to Viridian City! Stop by the Pokémon Center to heal your team anytime!',
+      },
+    ],
+    targetEncounters: 5,
+    exitX: 1320,
+  },
+
+  // --------------------------------------------------------------------------
+  // ROUTE 1: Route 2 & Pewter City (Gym 1 - Brock)
+  // --------------------------------------------------------------------------
+  {
+    id: 1,
+    name: 'Route 2',
+    locationLabel: 'Route 2 & Pewter City',
+    destinationLabel: 'Pewter Gym (Brock)',
+    worldWidth: 1500,
+    worldHeight: 520,
+    theme: 'rock',
+    startX: 70,
+    startY: 230,
+    path: [
+      { x: 30, y: 200, w: 750, h: 70 },
+      { x: 740, y: 130, w: 80, h: 240 },
+      // Pewter City Main Square
+      { x: 780, y: 130, w: 660, h: 220 },
+    ],
+    grassPatches: [
+      { x: 180, y: 90, w: 180, h: 100 },
+      { x: 220, y: 280, w: 180, h: 120 },
+      { x: 440, y: 90, w: 190, h: 100 },
+      { x: 480, y: 280, w: 180, h: 120 },
+    ],
+    buildings: [
+      {
+        type: 'center',
+        x: 840,
+        y: 120,
+        w: 90,
+        h: 70,
+        label: 'Pokémon Center',
+      },
+      {
+        type: 'mart',
+        x: 980,
+        y: 120,
+        w: 80,
+        h: 68,
+        label: 'Poké Mart',
+      },
+      {
+        type: 'gym',
+        x: 1140,
+        y: 110,
+        w: 110,
+        h: 85,
+        label: 'Pewter Gym (Brock)',
+        gymIndex: 0,
+      },
+    ],
+    items: [
+      {
+        id: 'r1_ball1',
+        x: 290,
+        y: 140,
+        name: 'Poké Ball',
+        type: 'ball',
+        amount: 2,
+        collected: false,
+      },
+      {
+        id: 'r1_berry1',
+        x: 520,
+        y: 330,
+        name: 'Sitrus Berry',
+        type: 'berry',
+        amount: 1,
+        collected: false,
+      },
+      {
+        id: 'r1_money1',
+        x: 400,
+        y: 330,
+        name: 'Poké Dollars',
+        type: 'money',
+        amount: 500,
+        collected: false,
+      },
+    ],
+    npcs: [
+      {
+        id: 'r1_npc1',
+        x: 130,
+        y: 280,
+        avatar: '🏕️',
+        name: 'Camper Jeff',
+        dialogue: 'Brock at the Pewter Gym uses Rock-type Pokémon like Geodude and Onix! Grass and Water moves are super effective against them!',
+      },
+      {
+        id: 'r1_npc2',
+        x: 790,
+        y: 270,
+        avatar: '⛏️',
+        name: 'Museum Curator',
+        dialogue: 'Pewter City is famous for its fossils. Have you visited the Gym yet?',
+      },
+    ],
+    targetEncounters: 5,
+    exitX: 1420,
+  },
+
+  // --------------------------------------------------------------------------
+  // ROUTE 2: Route 3 ➔ Cerulean City (Gym 2 - Misty)
+  // --------------------------------------------------------------------------
+  {
+    id: 2,
+    name: 'Route 3',
+    locationLabel: 'Route 3 & Cerulean City',
+    destinationLabel: 'Cerulean Gym (Misty)',
+    worldWidth: 1500,
+    worldHeight: 520,
+    theme: 'water',
+    startX: 70,
+    startY: 230,
+    path: [
+      { x: 30, y: 200, w: 760, h: 70 },
+      { x: 750, y: 130, w: 80, h: 240 },
+      { x: 800, y: 130, w: 640, h: 220 },
+    ],
+    grassPatches: [
+      { x: 170, y: 90, w: 180, h: 100 },
+      { x: 230, y: 280, w: 190, h: 120 },
+      { x: 450, y: 90, w: 180, h: 100 },
+      { x: 490, y: 280, w: 190, h: 120 },
+    ],
+    buildings: [
+      {
+        type: 'center',
+        x: 840,
+        y: 120,
+        w: 90,
+        h: 70,
+        label: 'Pokémon Center',
+      },
+      {
+        type: 'mart',
+        x: 970,
+        y: 120,
+        w: 80,
+        h: 68,
+        label: 'Poké Mart',
+      },
+      {
+        type: 'gym',
+        x: 1130,
+        y: 110,
+        w: 110,
+        h: 85,
+        label: 'Cerulean Gym (Misty)',
+        gymIndex: 1,
+      },
+    ],
+    items: [
+      {
+        id: 'r2_ball1',
+        x: 270,
+        y: 140,
+        name: 'Poké Ball',
+        type: 'ball',
+        amount: 3,
+        collected: false,
+      },
+      {
+        id: 'r2_money1',
+        x: 520,
+        y: 330,
+        name: 'Poké Dollars',
+        type: 'money',
+        amount: 750,
+        collected: false,
+      },
+    ],
+    npcs: [
+      {
+        id: 'r2_npc1',
+        x: 140,
+        y: 160,
+        avatar: '🏊',
+        name: 'Swimmer Luis',
+        dialogue: 'Misty is the tombish mermaid! Her Starmie packs incredible Water and Psychic power!',
+      },
+    ],
+    targetEncounters: 5,
+    exitX: 1420,
+  },
+
+  // --------------------------------------------------------------------------
+  // ROUTE 3: Route 6 ➔ Vermilion City (Gym 3 - Lt. Surge)
+  // --------------------------------------------------------------------------
+  {
+    id: 3,
+    name: 'Route 6',
+    locationLabel: 'Route 6 & Vermilion City',
+    destinationLabel: 'Vermilion Gym (Lt. Surge)',
+    worldWidth: 1500,
+    worldHeight: 520,
+    theme: 'route',
+    startX: 70,
+    startY: 230,
+    path: [
+      { x: 30, y: 200, w: 760, h: 70 },
+      { x: 750, y: 130, w: 80, h: 240 },
+      { x: 800, y: 130, w: 640, h: 220 },
+    ],
+    grassPatches: [
+      { x: 180, y: 90, w: 180, h: 100 },
+      { x: 230, y: 280, w: 190, h: 120 },
+      { x: 460, y: 90, w: 180, h: 100 },
+      { x: 500, y: 280, w: 190, h: 120 },
+    ],
+    buildings: [
+      {
+        type: 'center',
+        x: 840,
+        y: 120,
+        w: 90,
+        h: 70,
+        label: 'Pokémon Center',
+      },
+      {
+        type: 'mart',
+        x: 970,
+        y: 120,
+        w: 80,
+        h: 68,
+        label: 'Poké Mart',
+      },
+      {
+        type: 'gym',
+        x: 1130,
+        y: 110,
+        w: 110,
+        h: 85,
+        label: 'Vermilion Gym (Lt. Surge)',
+        gymIndex: 2,
+      },
+    ],
+    items: [
+      {
+        id: 'r3_ball1',
+        x: 280,
+        y: 140,
+        name: 'Poké Ball',
+        type: 'ball',
+        amount: 3,
+        collected: false,
+      },
+      {
+        id: 'r3_money1',
+        x: 530,
+        y: 330,
+        name: 'Poké Dollars',
+        type: 'money',
+        amount: 1000,
+        collected: false,
+      },
+    ],
+    npcs: [
+      {
+        id: 'r3_npc1',
+        x: 140,
+        y: 160,
+        avatar: '⚡',
+        name: 'Sailor Bob',
+        dialogue: 'Lt. Surge shocked everyone in the war with Electric Pokémon! Ground types are immune to electricity!',
+      },
+    ],
+    targetEncounters: 5,
+    exitX: 1420,
+  },
+
+  // --------------------------------------------------------------------------
+  // ROUTE 4: Route 7 ➔ Celadon City (Gym 4 - Erika)
+  // --------------------------------------------------------------------------
+  {
+    id: 4,
+    name: 'Route 7',
+    locationLabel: 'Route 7 & Celadon City',
+    destinationLabel: 'Celadon Gym (Erika)',
+    worldWidth: 1500,
+    worldHeight: 520,
+    theme: 'city',
+    startX: 70,
+    startY: 230,
+    path: [
+      { x: 30, y: 200, w: 760, h: 70 },
+      { x: 750, y: 130, w: 80, h: 240 },
+      { x: 800, y: 130, w: 640, h: 220 },
+    ],
+    grassPatches: [
+      { x: 180, y: 90, w: 180, h: 100 },
+      { x: 230, y: 280, w: 190, h: 120 },
+      { x: 460, y: 90, w: 180, h: 100 },
+      { x: 500, y: 280, w: 190, h: 120 },
+    ],
+    buildings: [
+      {
+        type: 'center',
+        x: 840,
+        y: 120,
+        w: 90,
+        h: 70,
+        label: 'Pokémon Center',
+      },
+      {
+        type: 'mart',
+        x: 970,
+        y: 120,
+        w: 80,
+        h: 68,
+        label: 'Department Store',
+      },
+      {
+        type: 'gym',
+        x: 1130,
+        y: 110,
+        w: 110,
+        h: 85,
+        label: 'Celadon Gym (Erika)',
+        gymIndex: 3,
+      },
+    ],
+    items: [
+      {
+        id: 'r4_ball1',
+        x: 280,
+        y: 140,
+        name: 'Poké Ball',
+        type: 'ball',
+        amount: 3,
+        collected: false,
+      },
+      {
+        id: 'r4_money1',
+        x: 530,
+        y: 330,
+        name: 'Poké Dollars',
+        type: 'money',
+        amount: 1200,
+        collected: false,
+      },
+    ],
+    npcs: [
+      {
+        id: 'r4_npc1',
+        x: 140,
+        y: 160,
+        avatar: '🌸',
+        name: 'Beauty Tamia',
+        dialogue: 'Erika teaches flower arrangement and commands lovely Grass Pokémon like Vileplume and Victreebel!',
+      },
+    ],
+    targetEncounters: 5,
+    exitX: 1420,
+  },
+
+  // --------------------------------------------------------------------------
+  // ROUTE 5: Route 18 ➔ Fuchsia City (Gym 5 - Koga)
+  // --------------------------------------------------------------------------
+  {
+    id: 5,
+    name: 'Route 18',
+    locationLabel: 'Route 18 & Fuchsia City',
+    destinationLabel: 'Fuchsia Gym (Koga)',
+    worldWidth: 1500,
+    worldHeight: 520,
+    theme: 'forest',
+    startX: 70,
+    startY: 230,
+    path: [
+      { x: 30, y: 200, w: 760, h: 70 },
+      { x: 750, y: 130, w: 80, h: 240 },
+      { x: 800, y: 130, w: 640, h: 220 },
+    ],
+    grassPatches: [
+      { x: 180, y: 90, w: 180, h: 100 },
+      { x: 230, y: 280, w: 190, h: 120 },
+      { x: 460, y: 90, w: 180, h: 100 },
+      { x: 500, y: 280, w: 190, h: 120 },
+    ],
+    buildings: [
+      {
+        type: 'center',
+        x: 840,
+        y: 120,
+        w: 90,
+        h: 70,
+        label: 'Pokémon Center',
+      },
+      {
+        type: 'mart',
+        x: 970,
+        y: 120,
+        w: 80,
+        h: 68,
+        label: 'Poké Mart',
+      },
+      {
+        type: 'gym',
+        x: 1130,
+        y: 110,
+        w: 110,
+        h: 85,
+        label: 'Fuchsia Gym (Koga)',
+        gymIndex: 4,
+      },
+    ],
+    items: [
+      {
+        id: 'r5_ball1',
+        x: 280,
+        y: 140,
+        name: 'Poké Ball',
+        type: 'ball',
+        amount: 4,
+        collected: false,
+      },
+      {
+        id: 'r5_money1',
+        x: 530,
+        y: 330,
+        name: 'Poké Dollars',
+        type: 'money',
+        amount: 1500,
+        collected: false,
+      },
+    ],
+    npcs: [
+      {
+        id: 'r5_npc1',
+        x: 140,
+        y: 160,
+        avatar: '🥷',
+        name: 'Ninja Boy',
+        dialogue: 'Master Koga is a ninja master who uses toxic Poison types! Watch your health closely!',
+      },
+    ],
+    targetEncounters: 5,
+    exitX: 1420,
+  },
+
+  // --------------------------------------------------------------------------
+  // ROUTE 6: Route 8 ➔ Saffron City (Gym 6 - Sabrina)
+  // --------------------------------------------------------------------------
+  {
+    id: 6,
+    name: 'Route 8',
+    locationLabel: 'Route 8 & Saffron City',
+    destinationLabel: 'Saffron Gym (Sabrina)',
+    worldWidth: 1500,
+    worldHeight: 520,
+    theme: 'city',
+    startX: 70,
+    startY: 230,
+    path: [
+      { x: 30, y: 200, w: 760, h: 70 },
+      { x: 750, y: 130, w: 80, h: 240 },
+      { x: 800, y: 130, w: 640, h: 220 },
+    ],
+    grassPatches: [
+      { x: 180, y: 90, w: 180, h: 100 },
+      { x: 230, y: 280, w: 190, h: 120 },
+      { x: 460, y: 90, w: 180, h: 100 },
+      { x: 500, y: 280, w: 190, h: 120 },
+    ],
+    buildings: [
+      {
+        type: 'center',
+        x: 840,
+        y: 120,
+        w: 90,
+        h: 70,
+        label: 'Pokémon Center',
+      },
+      {
+        type: 'mart',
+        x: 970,
+        y: 120,
+        w: 80,
+        h: 68,
+        label: 'Poké Mart',
+      },
+      {
+        type: 'gym',
+        x: 1130,
+        y: 110,
+        w: 110,
+        h: 85,
+        label: 'Saffron Gym (Sabrina)',
+        gymIndex: 5,
+      },
+    ],
+    items: [
+      {
+        id: 'r6_ball1',
+        x: 280,
+        y: 140,
+        name: 'Poké Ball',
+        type: 'ball',
+        amount: 4,
+        collected: false,
+      },
+      {
+        id: 'r6_money1',
+        x: 530,
+        y: 330,
+        name: 'Poké Dollars',
+        type: 'money',
+        amount: 1800,
+        collected: false,
+      },
+    ],
+    npcs: [
+      {
+        id: 'r6_npc1',
+        x: 140,
+        y: 160,
+        avatar: '🔮',
+        name: 'Psychic Mark',
+        dialogue: 'Sabrina possesses real psychic power! Her Alakazam has unbelievable Speed and Special Attack!',
+      },
+    ],
+    targetEncounters: 5,
+    exitX: 1420,
+  },
+
+  // --------------------------------------------------------------------------
+  // ROUTE 7: Route 20 Sea ➔ Cinnabar Island (Gym 7 - Blaine)
+  // --------------------------------------------------------------------------
+  {
+    id: 7,
+    name: 'Route 20',
+    locationLabel: 'Route 20 & Cinnabar Island',
+    destinationLabel: 'Cinnabar Gym (Blaine)',
+    worldWidth: 1500,
+    worldHeight: 520,
+    theme: 'rock',
+    startX: 70,
+    startY: 230,
+    path: [
+      { x: 30, y: 200, w: 760, h: 70 },
+      { x: 750, y: 130, w: 80, h: 240 },
+      { x: 800, y: 130, w: 640, h: 220 },
+    ],
+    grassPatches: [
+      { x: 180, y: 90, w: 180, h: 100 },
+      { x: 230, y: 280, w: 190, h: 120 },
+      { x: 460, y: 90, w: 180, h: 100 },
+      { x: 500, y: 280, w: 190, h: 120 },
+    ],
+    buildings: [
+      {
+        type: 'center',
+        x: 840,
+        y: 120,
+        w: 90,
+        h: 70,
+        label: 'Pokémon Center',
+      },
+      {
+        type: 'mart',
+        x: 970,
+        y: 120,
+        w: 80,
+        h: 68,
+        label: 'Poké Mart',
+      },
+      {
+        type: 'gym',
+        x: 1130,
+        y: 110,
+        w: 110,
+        h: 85,
+        label: 'Cinnabar Gym (Blaine)',
+        gymIndex: 6,
+      },
+    ],
+    items: [
+      {
+        id: 'r7_ball1',
+        x: 280,
+        y: 140,
+        name: 'Poké Ball',
+        type: 'ball',
+        amount: 5,
+        collected: false,
+      },
+      {
+        id: 'r7_money1',
+        x: 530,
+        y: 330,
+        name: 'Poké Dollars',
+        type: 'money',
+        amount: 2000,
+        collected: false,
+      },
+    ],
+    npcs: [
+      {
+        id: 'r7_npc1',
+        x: 140,
+        y: 160,
+        avatar: '🔥',
+        name: 'Scientist Ron',
+        dialogue: 'Blaine is the hot-headed quiz master! Fire moves will melt your team if you do not bring Water or Rock Pokémon!',
+      },
+    ],
+    targetEncounters: 5,
+    exitX: 1420,
+  },
+
+  // --------------------------------------------------------------------------
+  // ROUTE 8: Route 22 ➔ Viridian Gym (Gym 8 - Giovanni)
+  // --------------------------------------------------------------------------
+  {
+    id: 8,
+    name: 'Route 22',
+    locationLabel: 'Route 22 & Viridian City',
+    destinationLabel: 'Viridian Gym (Giovanni)',
+    worldWidth: 1500,
+    worldHeight: 520,
+    theme: 'route',
+    startX: 70,
+    startY: 230,
+    path: [
+      { x: 30, y: 200, w: 760, h: 70 },
+      { x: 750, y: 130, w: 80, h: 240 },
+      { x: 800, y: 130, w: 640, h: 220 },
+    ],
+    grassPatches: [
+      { x: 180, y: 90, w: 180, h: 100 },
+      { x: 230, y: 280, w: 190, h: 120 },
+      { x: 460, y: 90, w: 180, h: 100 },
+      { x: 500, y: 280, w: 190, h: 120 },
+    ],
+    buildings: [
+      {
+        type: 'center',
+        x: 840,
+        y: 120,
+        w: 90,
+        h: 70,
+        label: 'Pokémon Center',
+      },
+      {
+        type: 'mart',
+        x: 970,
+        y: 120,
+        w: 80,
+        h: 68,
+        label: 'Poké Mart',
+      },
+      {
+        type: 'gym',
+        x: 1130,
+        y: 110,
+        w: 110,
+        h: 85,
+        label: 'Viridian Gym (Giovanni)',
+        gymIndex: 7,
+      },
+    ],
+    items: [
+      {
+        id: 'r8_ball1',
+        x: 280,
+        y: 140,
+        name: 'Poké Ball',
+        type: 'ball',
+        amount: 5,
+        collected: false,
+      },
+      {
+        id: 'r8_money1',
+        x: 530,
+        y: 330,
+        name: 'Poké Dollars',
+        type: 'money',
+        amount: 2500,
+        collected: false,
+      },
+    ],
+    npcs: [
+      {
+        id: 'r8_npc1',
+        x: 140,
+        y: 160,
+        avatar: '💼',
+        name: 'League Official',
+        dialogue: 'Viridian Gym is the final hurdle before Indigo Plateau! The mysterious Leader commands powerful Ground-type titans!',
+      },
+    ],
+    targetEncounters: 5,
+    exitX: 1420,
+  },
+];

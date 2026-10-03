@@ -34,6 +34,48 @@
     <!-- Tournament Bracket / Hub Screen -->
     <section id="map" class="scr"></section>
 
+    <!-- Route Exploration Screen -->
+    <section id="route" class="scr">
+      <div id="route-hud">
+        <div class="hud-col-left">
+          <div id="hud-location" class="hud-badge">Route 1</div>
+          <div id="hud-destination" class="hud-sub">Toward: Pewter City</div>
+        </div>
+        <div class="hud-col-center">
+          <div id="hud-encounters" class="hud-enc-meter">
+            <span class="hud-enc-label">Wild Encounters</span>
+            <div class="hud-enc-dots" id="hud-enc-dots">
+              <i class="h-dot"></i><i class="h-dot"></i><i class="h-dot"></i><i class="h-dot"></i><i class="h-dot"></i>
+            </div>
+          </div>
+        </div>
+        <div class="hud-col-right">
+          <div class="hud-pill" id="hud-balls">⚾ <span id="hud-balls-val">5</span></div>
+          <div class="hud-pill" id="hud-money">🪙 ₽<span id="hud-money-val">1,000</span></div>
+          <button id="hud-menu-btn" class="hud-btn" title="Party & Bag">🎒 MENU</button>
+        </div>
+      </div>
+
+      <div id="route-viewport">
+        <canvas id="route-canvas" width="800" height="480"></canvas>
+        <div id="route-prompt" class="route-prompt hidden"></div>
+      </div>
+
+      <!-- Controls & D-Pad for Mobile/Touch and Desktop shortcuts -->
+      <div id="route-controls">
+        <div class="virtual-dpad" id="v-dpad">
+          <button class="dpad-btn dpad-up" data-dir="up">▲</button>
+          <button class="dpad-btn dpad-left" data-dir="left">◀</button>
+          <div class="dpad-center">●</div>
+          <button class="dpad-btn dpad-right" data-dir="right">▶</button>
+          <button class="dpad-btn dpad-down" data-dir="down">▼</button>
+        </div>
+        <div class="action-btn-cluster">
+          <button class="action-btn" id="btn-interact" title="Interact / Talk / Enter">A</button>
+        </div>
+      </div>
+    </section>
+
     <!-- Battlefield Screen -->
     <section id="bat" class="scr">
       <div id="fld">

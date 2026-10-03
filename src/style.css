@@ -341,6 +341,61 @@ h1 {
   letter-spacing: 0.03em;
 }
 
+/* Center all buttons in modals */
+#ov .box {
+  text-align: center;
+}
+
+#ov .box button,
+#ov .box .modal-btn {
+  text-align: center;
+  justify-content: center;
+  align-items: center;
+  display: flex;
+}
+
+#ov .box button span,
+#ov .box button b,
+#ov .box button small {
+  text-align: center;
+  width: 100%;
+}
+
+#ov .box .single-btn-grid,
+#ov .box .grid:has(> button:only-child) {
+  display: flex !important;
+  justify-content: center !important;
+  width: 100%;
+}
+
+#ov .box .single-btn-grid button,
+#ov .box .single-btn,
+#ov .box .grid > button:only-child {
+  max-width: 220px;
+  width: 100%;
+  margin: 0 auto;
+  text-align: center;
+  justify-content: center;
+}
+
+#ov .box .modal-cancel-row {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-top: 10px;
+}
+
+#ov .box .modal-back-btn,
+#ov .box > button[data-i="-1"] {
+  max-width: 220px;
+  width: 100%;
+  margin: 12px auto 0;
+  display: flex;
+  text-align: center;
+  justify-content: center;
+  align-items: center;
+}
+
 /* Championship & Hall of Fame Squad Cards */
 .champ-grid {
   display: grid;
@@ -969,6 +1024,7 @@ h1 {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 10px;
+  align-content: start;
 }
 
 #ctl button {
@@ -2121,17 +2177,90 @@ tr:last-child td {
     flex: 0 0 auto;
   }
 
-  #ctl {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+  #ctl, #ctl.mvs {
+    flex: 0 0 auto !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+    margin: 6px 0 0 !important;
+    align-content: start !important;
+    align-items: start !important;
+    width: 100% !important;
   }
 
-  #ctl button {
-    padding: 8px 10px;
-    font-size: 12px;
-    min-height: 40px;
+  /* 4 Main Action Buttons (Fight, Pokémon, Bag, Run) */
+  #ctl button[data-a] {
+    height: 42px !important;
+    min-height: 42px !important;
+    padding: 4px 10px !important;
+    font-size: 12.5px !important;
+    border-radius: 999px !important;
+    gap: 6px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+  }
+
+  #ctl button[data-a] i {
+    width: 22px !important;
+    height: 22px !important;
+    font-size: 12px !important;
+  }
+
+  /* Move Selection Attack Buttons: Compact, clean capsules */
+  #ctl .mv {
+    height: 48px !important;
+    min-height: 48px !important;
+    max-height: 52px !important;
+    padding: 5px 8px !important;
+    border-radius: 10px !important;
+    border-width: 1.5px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    text-align: left !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+    overflow: hidden !important;
+  }
+
+  #ctl .mv .mn {
+    font-size: 11.5px !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    display: block !important;
+  }
+
+  #ctl .mv small {
+    font-size: 9px !important;
+    line-height: 1.15 !important;
+    margin: 1px 0 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    display: block !important;
+    color: #475569 !important;
+  }
+
+  /* Back Button under attack buttons */
+  #ctl .w {
+    grid-column: 1 / 3 !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+    border-radius: 10px !important;
+    margin-top: 2px !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    text-align: center !important;
+    background: #334155 !important;
+    color: #ffffff !important;
+    border-color: #64748b !important;
   }
 
   /* --------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { POKEMON_SPECIES_MAP, STONE_EVOLUTIONS, getPokemonSpecies, calculateBaseStatTotal, isEvolutionLine, STARTER_IDS } from './data/pokemon';
-import { MOVES_DATA, TYPE_MOVE_MAP, MOVE_ICONS } from './data/moves';
+import { MOVES_DATA, TYPE_MOVE_MAP, MOVE_ICONS, getMoveData } from './data/moves';
 import { TYPE_NAMES, TYPE_CHART, calculateTypeEffectiveness } from './data/types';
 import { sound } from './audio/SoundSynthesizer';
 import { playMoveEffect, shk, puff, fly, el, ctr, flash, rush, ring } from './animations/CombatEffects';
@@ -287,14 +287,20 @@ export const img = (id: number) =>
 export const mh = (m: MonInstance) =>
   `${img(m.id)}<span><b>${POKEMON_SPECIES_MAP[m.id]?.name}</b> Lv.${m.lv}<small>HP ${m.hp}/${st(m).max}</small></span>`;
 
-export const mvh = (v: any, e: number = 1) =>
-  `<span class="mn">${MOVE_ICONS[v.typeShort as keyof typeof MOVE_ICONS] || ''} ${v.name.toUpperCase()}</span><small>${v.type.toUpperCase()} · POWER ${v.power}</small><small>${'●'.repeat(
-    Math.max(1, Math.round(v.accuracy / 25))
-  )} ACC ${v.accuracy}</small>` +
-  (e === 1
-    ? ''
-    : `<small><b class="e${e > 1 ? 's' : e ? 'w' : 'n'}">${e > 1 ? 'SUPER EFFECTIVE' : e ? 'NOT VERY EFFECTIVE' : 'NO EFFECT'
-    }</b></small>`);
+export const mvh = (v: any, e: number = 1) => {
+  const mv = v && v.typeShort ? v : getMoveData(typeof v === 'string' ? v : (v?.name || 'Tackle'));
+  const icon = MOVE_ICONS[mv.typeShort as keyof typeof MOVE_ICONS] || '💥';
+  return (
+    `<span class="mn">${icon} ${mv.name.toUpperCase()}</span><small>${mv.type.toUpperCase()} · POWER ${mv.power}</small><small>${'●'.repeat(
+      Math.max(1, Math.round(mv.accuracy / 25))
+    )} ACC ${mv.accuracy}</small>` +
+    (e === 1
+      ? ''
+      : `<small><b class="e${e > 1 ? 's' : e ? 'w' : 'n'}">${
+          e > 1 ? 'SUPER EFFECTIVE' : e ? 'NOT VERY EFFECTIVE' : 'NO EFFECT'
+        }</b></small>`)
+  );
+};
 
 export const show = (id: string) => {
   document.querySelectorAll('.scr').forEach(e => e.classList.toggle('on', e.id === id));
@@ -306,9 +312,14 @@ export const show = (id: string) => {
 export function pick(title: string, items: { d?: boolean; h: string }[], cancel?: boolean, cls: string = ''): Promise<number> {
   return new Promise(res => {
     const o = $('#ov');
-    o.innerHTML = `<div class="box"><div>${title}</div><div class="grid ${cls}">${items
-      .map((x, i) => `<button data-i="${i}" ${x.d ? 'disabled' : ''}>${x.h}</button>`)
-      .join('')}</div>${cancel ? '<button data-i="-1">BACK</button>' : ''}</div>`;
+    const isSingle = items.length === 1;
+    o.innerHTML = `<div class="box">
+      <div class="modal-title">${title}</div>
+      <div class="grid ${cls} ${isSingle ? 'single-btn-grid' : ''}">${items
+        .map((x, i) => `<button data-i="${i}" class="modal-btn ${isSingle ? 'single-btn' : ''}" ${x.d ? 'disabled' : ''}>${x.h}</button>`)
+        .join('')}</div>
+      ${cancel ? '<div class="modal-cancel-row"><button data-i="-1" class="modal-btn modal-back-btn">BACK</button></div>' : ''}
+    </div>`;
     o.style.display = 'flex';
     o.onclick = e => {
       const b = (e.target as HTMLElement).closest('button');
@@ -2621,7 +2632,8 @@ export async function attack(s: 'p' | 'f', mv: any): Promise<void> {
 export function aiMove(): any {
   const f = F();
   const p = P();
-  const ms = f.moves.map(n => MOVES_DATA[n]).filter(Boolean);
+  const ms = f.moves.map(n => getMoveData(n)).filter(Boolean);
+  if (!ms.length) ms.push(getMoveData('Tackle'));
   if (B.ai === 0 || R() < 0.2) return ms[ri(0, ms.length - 1)];
 
   return ms
@@ -3076,11 +3088,13 @@ export async function menu(): Promise<any> {
         done({ k: 'run' });
       } else if (a === 'f') {
         c.className = 'mvs';
+        const oppMon = F();
+        const defenderTypes = (oppMon && POKEMON_SPECIES_MAP[oppMon.id]?.typesShort) || ['No'];
         c.innerHTML =
           m.moves
             .map((k: string, i: number) => {
-              const mv = MOVES_DATA[k];
-              const eff = calculateTypeEffectiveness(mv.typeShort, POKEMON_SPECIES_MAP[F().id]?.typesShort || ['No']);
+              const mv = getMoveData(k);
+              const eff = calculateTypeEffectiveness(mv.typeShort, defenderTypes);
               return `<button class="mv ${mv.typeShort}" data-a="m" data-i="${i}">${mvh(mv, eff)}</button>`;
             })
             .join('') + '<button class="w" data-a="x">BACK</button>';
@@ -3088,7 +3102,8 @@ export async function menu(): Promise<any> {
         root();
       } else if (a === 'm') {
         lk = 1;
-        done({ k: 'm', mv: MOVES_DATA[m.moves[+b.dataset.i!]] });
+        const chosen = m.moves[+b.dataset.i!];
+        done({ k: 'm', mv: getMoveData(chosen) });
       } else if (a === 'p') {
         lk = 1;
         const j = await pickTeam('POKÉMON', true);

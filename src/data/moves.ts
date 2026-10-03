@@ -22,7 +22,7 @@ export const MOVE_ICONS: Record<TypeShort, string> = {
 
 // Comprehensive Move Names by Type
 export const TYPE_MOVE_MAP: Record<TypeShort, string[]> = {
-  No: ['Tackle', 'Quick Attack', 'Body Slam', 'Hyper Beam', 'Scratch', 'Headbutt', 'Double Slap', 'Pound', 'Skull Bash', 'Growl', 'Tail Whip', 'Leer', 'Screech', 'Swords Dance', 'Recover'],
+  No: ['Tackle', 'Quick Attack', 'Body Slam', 'Hyper Beam', 'Scratch', 'Headbutt', 'Double Slap', 'Pound', 'Skull Bash', 'Growl', 'Tail Whip', 'Leer', 'Screech', 'Swords Dance', 'Recover', 'Bite', 'Sand Attack'],
   Fi: ['Ember', 'Fire Fang', 'Flamethrower', 'Fire Blast', 'Fire Spin', 'Heat Wave', 'Will-O-Wisp'],
   Wa: ['Water Gun', 'Bubble Beam', 'Surf', 'Hydro Pump', 'Bubble', 'Aqua Jet', 'Water Pulse'],
   Gr: ['Vine Whip', 'Razor Leaf', 'Giga Drain', 'Solar Beam', 'Leaf Blade', 'Energy Ball', 'Petal Dance', 'Bullet Seed', 'Sleep Powder', 'Stun Spore', 'Poison Powder'],
@@ -30,8 +30,8 @@ export const TYPE_MOVE_MAP: Record<TypeShort, string[]> = {
   Ic: ['Powder Snow', 'Ice Shard', 'Ice Beam', 'Blizzard', 'Icicle Spear', 'Ice Punch'],
   Fg: ['Karate Chop', 'Low Kick', 'Cross Chop', 'Dynamic Punch', 'Brick Break', 'Close Combat', 'Double Kick', 'Submission', 'Aura Sphere'],
   Po: ['Poison Sting', 'Acid', 'Sludge', 'Sludge Bomb', 'Poison Jab', 'Toxic'],
-  Gd: ['Mud Slap', 'Mud Shot', 'Bulldoze', 'Dig', 'Earthquake', 'Earth Power'],
-  Fl: ['Gust', 'Wing Attack', 'Aerial Ace', 'Sky Attack', 'Air Slash', 'Hurricane', 'Fly'],
+  Gd: ['Mud Slap', 'Mud Shot', 'Bulldoze', 'Dig', 'Earthquake', 'Earth Power', 'Sand Attack'],
+  Fl: ['Gust', 'Peck', 'Wing Attack', 'Aerial Ace', 'Sky Attack', 'Air Slash', 'Hurricane', 'Fly'],
   Ps: ['Confusion', 'Psybeam', 'Psychic', 'Future Sight', 'Psyshock', 'Agility'],
   Bu: ['Bug Bite', 'Pin Missile', 'X-Scissor', 'Megahorn', 'Signal Beam', 'Fury Cutter', 'String Shot'],
   Ro: ['Rock Throw', 'Rock Tomb', 'Rock Slide', 'Stone Edge', 'Rock Blast'],
@@ -187,6 +187,9 @@ const RAW_MOVE_DETAILS: Record<string, RawMoveDef> = {
   Screech: { p: 0, a: 85, u: 12, c: 'Status' },
   'Swords Dance': { p: 0, a: 100, u: 20, c: 'Status' },
   Recover: { p: 0, a: 100, u: 25, c: 'Status' },
+  'Sand Attack': { p: 0, a: 100, u: 1, c: 'Status' },
+  Peck: { p: 35, a: 100, u: 1, c: 'Physical' },
+  Bite: { p: 60, a: 100, u: 10, c: 'Physical' },
 };
 
 // Build MOVES_DATA
@@ -220,6 +223,36 @@ for (const t in TYPE_MOVE_MAP) {
       unlockLevel: raw.u,
     };
   });
+}
+
+/**
+ * Bulletproof Move Lookup: Guarantees a valid MoveData object even if given
+ * unmapped, lowercase, or missing move names, preventing any typeShort crashes.
+ */
+export function getMoveData(name: string): MoveData {
+  if (name && MOVES_DATA[name]) return MOVES_DATA[name];
+  if (name) {
+    const clean = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const key in MOVES_DATA) {
+      if (key.toLowerCase().replace(/[^a-z0-9]/g, '') === clean) {
+        return MOVES_DATA[key];
+      }
+    }
+  }
+  return {
+    id: (name || 'tackle').toLowerCase().replace(/\s+/g, '_'),
+    name: name || 'Tackle',
+    type: 'Normal',
+    typeShort: 'No',
+    power: 40,
+    accuracy: 100,
+    category: 'Physical',
+    priority: 0,
+    animationType: 'SLAM' as MoveAnimationType,
+    sound: 'physical_hit',
+    description: 'A standard physical tackle attack.',
+    unlockLevel: 1,
+  };
 }
 
 export function getAvailableMoves(types: TypeShort[], level: number): MoveData[] {

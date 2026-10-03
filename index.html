@@ -1,391 +1,409 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <title>Pokémon: Kanto Cup</title>
-    <link rel="stylesheet" href="/src/style.css" />
-  </head>
-  <body>
-    <div id="g">
-      <!-- Classic First Pokédex Top Sensor Assembly -->
-      <header id="dex-bar">
-        <div class="dex-lens-wrapper">
-          <div class="dex-lens-bezel">
-            <div class="dex-lens">
-              <div class="lens-glint"></div>
-            </div>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Pokémon: Kanto Cup</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+
+<body>
+  <div id="g">
+    <!-- Classic First Pokédex Top Sensor Assembly -->
+    <header id="dex-bar">
+      <div class="dex-lens-wrapper">
+        <div class="dex-lens-bezel">
+          <div class="dex-lens">
+            <div class="lens-glint"></div>
           </div>
         </div>
-        <div class="dex-led-group">
-          <span class="dex-led led-red"></span>
-          <span class="dex-led led-yellow"></span>
-          <span class="dex-led led-green"></span>
+      </div>
+      <div class="dex-led-group">
+        <span class="dex-led led-red"></span>
+        <span class="dex-led led-yellow"></span>
+        <span class="dex-led led-green"></span>
+      </div>
+      <div class="dex-badge">POKÉDEX · KANTO TOURNAMENT</div>
+    </header>
+
+    <!-- Title Screen -->
+    <section id="title" class="scr on"></section>
+
+    <!-- Tournament Bracket / Hub Screen -->
+    <section id="map" class="scr"></section>
+
+    <!-- Battlefield Screen -->
+    <section id="bat" class="scr">
+      <div id="fld">
+        <div id="world">
+          <svg id="bg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">
+            <defs>
+              <!-- Sky Gradients -->
+              <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#1e3a8a" />
+                <stop offset="35%" stop-color="#3b82f6" />
+                <stop offset="70%" stop-color="#93c5fd" />
+                <stop offset="100%" stop-color="#e0f2fe" />
+              </linearGradient>
+
+              <!-- Stadium Canopy & Steel -->
+              <linearGradient id="canopyGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#0f172a" />
+                <stop offset="50%" stop-color="#1e293b" />
+                <stop offset="100%" stop-color="#334155" />
+              </linearGradient>
+
+              <!-- Grandstand Tier Gradients -->
+              <linearGradient id="standUpper" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#1e293b" />
+                <stop offset="50%" stop-color="#273549" />
+                <stop offset="100%" stop-color="#141c2b" />
+              </linearGradient>
+              <linearGradient id="standLower" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#2a384f" />
+                <stop offset="60%" stop-color="#3b4d6b" />
+                <stop offset="100%" stop-color="#1e293b" />
+              </linearGradient>
+
+              <!-- Stadium Perimeter Wall -->
+              <linearGradient id="wallGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#475569" />
+                <stop offset="30%" stop-color="#64748b" />
+                <stop offset="100%" stop-color="#1e293b" />
+              </linearGradient>
+
+              <!-- Tournament Grass Turf -->
+              <linearGradient id="turfGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#4d8b31" />
+                <stop offset="35%" stop-color="#3f7a27" />
+                <stop offset="70%" stop-color="#2d5e1a" />
+                <stop offset="100%" stop-color="#1b420e" />
+              </linearGradient>
+              <radialGradient id="pitchHighlight" cx="50%" cy="58%" r="48%">
+                <stop offset="0%" stop-color="#68ad44" stop-opacity="0.85" />
+                <stop offset="65%" stop-color="#3f7a27" stop-opacity="0.5" />
+                <stop offset="100%" stop-color="#1b420e" stop-opacity="0" />
+              </radialGradient>
+
+              <!-- Floodlight Glare -->
+              <radialGradient id="lightGlow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
+                <stop offset="40%" stop-color="#fef08a" stop-opacity="0.5" />
+                <stop offset="100%" stop-color="#fef08a" stop-opacity="0" />
+              </radialGradient>
+
+              <!-- Sun Flare Beam from Top Right -->
+              <linearGradient id="sunBeam" x1="1" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#fffbeb" stop-opacity="0.55" />
+                <stop offset="40%" stop-color="#fef3c7" stop-opacity="0.25" />
+                <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+              </linearGradient>
+
+              <!-- Vignette and Depth -->
+              <radialGradient id="arenaVig" cx="50%" cy="50%" r="65%">
+                <stop offset="60%" stop-color="#000" stop-opacity="0" />
+                <stop offset="100%" stop-color="#020617" stop-opacity="0.6" />
+              </radialGradient>
+            </defs>
+
+            <!-- 1. SKY & DISTANT HORIZON -->
+            <rect width="1000" height="340" fill="url(#skyGrad)" />
+            <!-- Horizon Clouds -->
+            <g fill="#ffffff" opacity="0.45" filter="blur(8px)">
+              <ellipse cx="180" cy="110" rx="140" ry="26" />
+              <ellipse cx="320" cy="85" rx="100" ry="20" />
+              <ellipse cx="720" cy="95" rx="170" ry="28" />
+              <ellipse cx="860" cy="120" rx="120" ry="22" />
+            </g>
+
+            <!-- 2. DISTANT ARCHITECTURAL CANOPY ROOF -->
+            <!-- Giant Curved Stadium Arch Truss -->
+            <path d="M-50 210 Q 500 50 1050 210 L 1050 240 Q 500 80 -50 240 Z" fill="url(#canopyGrad)" opacity="0.9" />
+            <path d="M-50 206 Q 500 46 1050 206 L 1050 212 Q 500 52 -50 212 Z" fill="#60a5fa" opacity="0.6" />
+
+            <!-- Vertical Roof Support Cables -->
+            <g stroke="#94a3b8" stroke-width="1.5" opacity="0.35">
+              <line x1="150" y1="180" x2="150" y2="240" />
+              <line x1="250" y1="145" x2="250" y2="230" />
+              <line x1="380" y1="115" x2="380" y2="225" />
+              <line x1="500" y1="102" x2="500" y2="225" />
+              <line x1="620" y1="115" x2="620" y2="225" />
+              <line x1="750" y1="145" x2="750" y2="230" />
+              <line x1="850" y1="180" x2="850" y2="240" />
+            </g>
+
+            <!-- 3. UPPER GRANDSTAND DECK -->
+            <polygon points="0,215 1000,215 1000,280 0,280" fill="url(#standUpper)" />
+            <!-- Seating Row Geometry (perspective stripes, unpopulated) -->
+            <g stroke="#334155" stroke-width="2.5" opacity="0.75">
+              <line x1="0" y1="225" x2="1000" y2="225" />
+              <line x1="0" y1="236" x2="1000" y2="236" />
+              <line x1="0" y1="248" x2="1000" y2="248" />
+              <line x1="0" y1="261" x2="1000" y2="261" />
+              <line x1="0" y1="274" x2="1000" y2="274" />
+            </g>
+            <!-- Aisle Vertical Stairs -->
+            <g fill="#0f172a" opacity="0.5">
+              <polygon points="175,215 195,215 200,280 170,280" />
+              <polygon points="340,215 360,215 365,280 335,280" />
+              <polygon points="640,215 660,215 665,280 635,280" />
+              <polygon points="805,215 825,215 830,280 800,280" />
+            </g>
+
+            <!-- 4. MID-TIER FASCIA & TOURNAMENT BANNERS -->
+            <rect x="0" y="278" width="1000" height="12" fill="#0f172a" />
+            <rect x="0" y="278" width="1000" height="2.5" fill="#38bdf8" opacity="0.8" />
+
+            <!-- Hanging Tournament Pennants/Banners (Red, Blue, Gold, Emerald) -->
+            <g id="tournament-banners">
+              <!-- Banner 1: Red -->
+              <polygon points="120,280 150,280 145,315 135,325 125,315" fill="#dc2626" />
+              <circle cx="135" cy="295" r="4.5" fill="#ffffff" />
+              <!-- Banner 2: Gold/Yellow -->
+              <polygon points="280,280 310,280 305,315 295,325 285,315" fill="#eab308" />
+              <circle cx="295" cy="295" r="4.5" fill="#ffffff" />
+              <!-- Center League Crest Banner -->
+              <polygon points="460,280 540,280 535,328 500,342 465,328" fill="#1e40af" stroke="#60a5fa"
+                stroke-width="1.5" />
+              <circle cx="500" cy="302" r="12" fill="#ffffff" />
+              <path d="M488,302 A12,12 0 0,1 512,302 Z" fill="#ef4444" />
+              <rect x="488" y="300" width="24" height="4" fill="#0f172a" />
+              <circle cx="500" cy="302" r="4.5" fill="#ffffff" stroke="#0f172a" stroke-width="1.5" />
+              <!-- Banner 4: Emerald Green -->
+              <polygon points="690,280 720,280 715,315 705,325 695,315" fill="#16a34a" />
+              <circle cx="705" cy="295" r="4.5" fill="#ffffff" />
+              <!-- Banner 5: Blue -->
+              <polygon points="850,280 880,280 875,315 865,325 855,315" fill="#2563eb" />
+              <circle cx="865" cy="295" r="4.5" fill="#ffffff" />
+            </g>
+
+            <!-- 5. LOWER GRANDSTAND TIER -->
+            <polygon points="0,290 1000,290 1000,355 0,355" fill="url(#standLower)" />
+            <g stroke="#1e293b" stroke-width="2" opacity="0.6">
+              <line x1="0" y1="302" x2="1000" y2="302" />
+              <line x1="0" y1="316" x2="1000" y2="316" />
+              <line x1="0" y1="332" x2="1000" y2="332" />
+              <line x1="0" y1="348" x2="1000" y2="348" />
+            </g>
+
+            <!-- Glass / Steel Safety Handrails -->
+            <rect x="0" y="352" width="1000" height="4" fill="#64748b" />
+            <rect x="0" y="354" width="1000" height="2" fill="#cbd5e1" opacity="0.6" />
+
+            <!-- 6. PERIMETER STADIUM WALL & LED SCREEN -->
+            <rect x="0" y="356" width="1000" height="50" fill="url(#wallGrad)" />
+            <!-- Electronic Ribbon Board -->
+            <rect x="80" y="362" width="840" height="18" rx="4" fill="#090d16" stroke="#334155" stroke-width="1.5" />
+            <text x="500" y="375" fill="#38bdf8" font-size="10.5" font-family="'Courier New', monospace"
+              font-weight="900" letter-spacing="4" text-anchor="middle">★ KANTO POKÉMON LEAGUE CHAMPIONSHIP ARENA
+              ★</text>
+
+            <!-- Player Entrance Tunnels -->
+            <!-- Left Tunnel -->
+            <path d="M 120 406 L 120 376 Q 160 365 200 376 L 200 406 Z" fill="#0b0f19" stroke="#475569"
+              stroke-width="2" />
+            <!-- Center Grand Tunnel -->
+            <path d="M 450 406 L 450 370 Q 500 355 550 370 L 550 406 Z" fill="#070a12" stroke="#64748b"
+              stroke-width="2.5" />
+            <!-- Right Tunnel -->
+            <path d="M 800 406 L 800 376 Q 840 365 880 376 L 880 406 Z" fill="#0b0f19" stroke="#475569"
+              stroke-width="2" />
+
+            <!-- 7. TOWERING STADIUM FLOODLIGHTS -->
+            <!-- Left Pylon -->
+            <polygon points="35,360 48,360 44,140 39,140" fill="#334155" />
+            <polygon points="15,140 68,140 62,110 21,110" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+            <g fill="#fef08a">
+              <circle cx="28" cy="120" r="5" />
+              <circle cx="41" cy="120" r="5" />
+              <circle cx="55" cy="120" r="5" />
+              <circle cx="28" cy="132" r="5" />
+              <circle cx="41" cy="132" r="5" />
+              <circle cx="55" cy="132" r="5" />
+            </g>
+            <ellipse cx="41" cy="125" rx="35" ry="30" fill="url(#lightGlow)" />
+
+            <!-- Right Pylon -->
+            <polygon points="952,360 965,360 961,140 956,140" fill="#334155" />
+            <polygon points="932,140 985,140 979,110 938,110" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+            <g fill="#fef08a">
+              <circle cx="945" cy="120" r="5" />
+              <circle cx="958" cy="120" r="5" />
+              <circle cx="972" cy="120" r="5" />
+              <circle cx="945" cy="132" r="5" />
+              <circle cx="958" cy="132" r="5" />
+              <circle cx="972" cy="132" r="5" />
+            </g>
+            <ellipse cx="958" cy="125" rx="35" ry="30" fill="url(#lightGlow)" />
+
+            <!-- 8. THE REGULATION BATTLE PITCH & FIELD -->
+            <!-- Pitch Foundation / Soil Rim -->
+            <ellipse cx="500" cy="690" rx="520" ry="320" fill="#2d3748" />
+            <ellipse cx="500" cy="682" rx="510" ry="310" fill="#1c2817" />
+
+            <!-- Main Tournament Turf Oval -->
+            <ellipse cx="500" cy="675" rx="490" ry="295" fill="url(#turfGrad)" />
+            <ellipse cx="500" cy="675" rx="490" ry="295" fill="url(#pitchHighlight)" />
+
+            <!-- Perspective Turf Mower Stripes -->
+            <g fill="#ffffff" opacity="0.045">
+              <polygon points="500,380 560,380 730,970 560,970" />
+              <polygon points="630,380 690,380 970,970 850,970" />
+              <polygon points="370,380 430,380 270,970 410,970" />
+              <polygon points="240,380 295,380 10,970 140,970" />
+            </g>
+
+            <!-- Stadium Outer White Track Border -->
+            <ellipse cx="500" cy="675" rx="465" ry="275" fill="none" stroke="#ffffff" stroke-width="4.5"
+              stroke-opacity="0.85" />
+            <ellipse cx="500" cy="675" rx="460" ry="270" fill="none" stroke="#22c55e" stroke-width="1.5"
+              stroke-opacity="0.4" />
+
+            <!-- Center Division Line -->
+            <line x1="35" y1="675" x2="965" y2="675" stroke="#ffffff" stroke-width="4" stroke-opacity="0.75" />
+
+            <!-- Official Center Pokéball Pitch Emblem -->
+            <g id="center-pokeball-emblem">
+              <!-- Outer Ring -->
+              <ellipse cx="500" cy="675" rx="140" ry="85" fill="none" stroke="#ffffff" stroke-width="6"
+                stroke-opacity="0.9" />
+              <!-- Top Half (Red Accent Fill) -->
+              <path d="M 360 675 A 140 85 0 0 1 640 675 Z" fill="#dc2626" fill-opacity="0.45" />
+              <!-- Center Core Ring -->
+              <ellipse cx="500" cy="675" rx="45" ry="28" fill="#1b420e" stroke="#ffffff" stroke-width="6"
+                stroke-opacity="0.95" />
+              <!-- Center Button Button Glint -->
+              <ellipse cx="500" cy="675" rx="20" ry="12" fill="#ffffff" stroke="#0f172a" stroke-width="3" />
+              <ellipse cx="497" cy="672" rx="6" ry="3.5" fill="#f8fafc" />
+            </g>
+
+            <!-- Opponent Battle Pod (Top-Right Zone - mathematically aligned with 3D model feet) -->
+            <g id="foe-battle-zone" transform="translate(728, 519)">
+              <!-- Marked Circular Pod -->
+              <ellipse cx="0" cy="0" rx="90" ry="46" fill="#1e3a8a" fill-opacity="0.35" stroke="#60a5fa"
+                stroke-width="3.5" stroke-dasharray="14 8" />
+              <ellipse cx="0" cy="0" rx="72" ry="36" fill="none" stroke="#ffffff" stroke-width="2"
+                stroke-opacity="0.7" />
+              <!-- Directional Alignment Reticle -->
+              <line x1="-80" y1="0" x2="-60" y2="0" stroke="#93c5fd" stroke-width="3" />
+              <line x1="60" y1="0" x2="80" y2="0" stroke="#93c5fd" stroke-width="3" />
+              <!-- Ground Contact Shadow Base -->
+              <ellipse cx="0" cy="6" rx="60" ry="18" fill="#000000" fill-opacity="0.35" />
+            </g>
+
+            <!-- Player Battle Pod (Bottom-Left Zone - mathematically aligned with 3D model feet) -->
+            <g id="player-battle-zone" transform="translate(249, 752)">
+              <!-- Marked Circular Pod -->
+              <ellipse cx="0" cy="0" rx="120" ry="62" fill="#991b1b" fill-opacity="0.35" stroke="#f87171"
+                stroke-width="4.5" stroke-dasharray="18 10" />
+              <ellipse cx="0" cy="0" rx="96" ry="48" fill="none" stroke="#ffffff" stroke-width="2.5"
+                stroke-opacity="0.8" />
+              <!-- Directional Alignment Reticle -->
+              <line x1="-105" y1="0" x2="-80" y2="0" stroke="#fca5a5" stroke-width="3.5" />
+              <line x1="80" y1="0" x2="105" y2="0" stroke="#fca5a5" stroke-width="3.5" />
+              <!-- Ground Contact Shadow Base -->
+              <ellipse cx="0" cy="8" rx="80" ry="24" fill="#000000" fill-opacity="0.4" />
+            </g>
+
+            <!-- 9. ATMOSPHERIC SUNBEAM & ARENA VIGNETTE -->
+            <polygon points="650,0 1000,0 1000,750 450,1000 200,1000" fill="url(#sunBeam)" pointer-events="none" />
+            <rect width="1000" height="1000" fill="url(#arenaVig)" pointer-events="none" />
+          </svg>
+          <div class="sh" id="fsh"></div>
+          <div class="sh" id="psh"></div>
+          <div class="pk" id="fw"><img class="spr" id="fs" alt="" /></div>
+          <div class="pk" id="pw"><img class="spr" id="ps" alt="" /></div>
         </div>
-        <div class="dex-badge">POKÉDEX · KANTO TOURNAMENT</div>
-      </header>
-
-      <!-- Title Screen -->
-      <section id="title" class="scr on"></section>
-
-      <!-- Tournament Bracket / Hub Screen -->
-      <section id="map" class="scr"></section>
-
-      <!-- Battlefield Screen -->
-      <section id="bat" class="scr">
-        <div id="fld">
-          <div id="world">
-            <svg id="bg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">
-              <defs>
-                <!-- Sky Gradients -->
-                <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#1e3a8a" />
-                  <stop offset="35%" stop-color="#3b82f6" />
-                  <stop offset="70%" stop-color="#93c5fd" />
-                  <stop offset="100%" stop-color="#e0f2fe" />
-                </linearGradient>
-
-                <!-- Stadium Canopy & Steel -->
-                <linearGradient id="canopyGrad" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stop-color="#0f172a" />
-                  <stop offset="50%" stop-color="#1e293b" />
-                  <stop offset="100%" stop-color="#334155" />
-                </linearGradient>
-
-                <!-- Grandstand Tier Gradients -->
-                <linearGradient id="standUpper" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#1e293b" />
-                  <stop offset="50%" stop-color="#273549" />
-                  <stop offset="100%" stop-color="#141c2b" />
-                </linearGradient>
-                <linearGradient id="standLower" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#2a384f" />
-                  <stop offset="60%" stop-color="#3b4d6b" />
-                  <stop offset="100%" stop-color="#1e293b" />
-                </linearGradient>
-
-                <!-- Stadium Perimeter Wall -->
-                <linearGradient id="wallGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#475569" />
-                  <stop offset="30%" stop-color="#64748b" />
-                  <stop offset="100%" stop-color="#1e293b" />
-                </linearGradient>
-
-                <!-- Tournament Grass Turf -->
-                <linearGradient id="turfGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#4d8b31" />
-                  <stop offset="35%" stop-color="#3f7a27" />
-                  <stop offset="70%" stop-color="#2d5e1a" />
-                  <stop offset="100%" stop-color="#1b420e" />
-                </linearGradient>
-                <radialGradient id="pitchHighlight" cx="50%" cy="58%" r="48%">
-                  <stop offset="0%" stop-color="#68ad44" stop-opacity="0.85" />
-                  <stop offset="65%" stop-color="#3f7a27" stop-opacity="0.5" />
-                  <stop offset="100%" stop-color="#1b420e" stop-opacity="0" />
-                </radialGradient>
-
-                <!-- Floodlight Glare -->
-                <radialGradient id="lightGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
-                  <stop offset="40%" stop-color="#fef08a" stop-opacity="0.5" />
-                  <stop offset="100%" stop-color="#fef08a" stop-opacity="0" />
-                </radialGradient>
-
-                <!-- Sun Flare Beam from Top Right -->
-                <linearGradient id="sunBeam" x1="1" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#fffbeb" stop-opacity="0.55" />
-                  <stop offset="40%" stop-color="#fef3c7" stop-opacity="0.25" />
-                  <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
-                </linearGradient>
-
-                <!-- Vignette and Depth -->
-                <radialGradient id="arenaVig" cx="50%" cy="50%" r="65%">
-                  <stop offset="60%" stop-color="#000" stop-opacity="0" />
-                  <stop offset="100%" stop-color="#020617" stop-opacity="0.6" />
-                </radialGradient>
-              </defs>
-
-              <!-- 1. SKY & DISTANT HORIZON -->
-              <rect width="1000" height="340" fill="url(#skyGrad)" />
-              <!-- Horizon Clouds -->
-              <g fill="#ffffff" opacity="0.45" filter="blur(8px)">
-                <ellipse cx="180" cy="110" rx="140" ry="26" />
-                <ellipse cx="320" cy="85" rx="100" ry="20" />
-                <ellipse cx="720" cy="95" rx="170" ry="28" />
-                <ellipse cx="860" cy="120" rx="120" ry="22" />
-              </g>
-
-              <!-- 2. DISTANT ARCHITECTURAL CANOPY ROOF -->
-              <!-- Giant Curved Stadium Arch Truss -->
-              <path d="M-50 210 Q 500 50 1050 210 L 1050 240 Q 500 80 -50 240 Z" fill="url(#canopyGrad)" opacity="0.9" />
-              <path d="M-50 206 Q 500 46 1050 206 L 1050 212 Q 500 52 -50 212 Z" fill="#60a5fa" opacity="0.6" />
-
-              <!-- Vertical Roof Support Cables -->
-              <g stroke="#94a3b8" stroke-width="1.5" opacity="0.35">
-                <line x1="150" y1="180" x2="150" y2="240" />
-                <line x1="250" y1="145" x2="250" y2="230" />
-                <line x1="380" y1="115" x2="380" y2="225" />
-                <line x1="500" y1="102" x2="500" y2="225" />
-                <line x1="620" y1="115" x2="620" y2="225" />
-                <line x1="750" y1="145" x2="750" y2="230" />
-                <line x1="850" y1="180" x2="850" y2="240" />
-              </g>
-
-              <!-- 3. UPPER GRANDSTAND DECK -->
-              <polygon points="0,215 1000,215 1000,280 0,280" fill="url(#standUpper)" />
-              <!-- Seating Row Geometry (perspective stripes, unpopulated) -->
-              <g stroke="#334155" stroke-width="2.5" opacity="0.75">
-                <line x1="0" y1="225" x2="1000" y2="225" />
-                <line x1="0" y1="236" x2="1000" y2="236" />
-                <line x1="0" y1="248" x2="1000" y2="248" />
-                <line x1="0" y1="261" x2="1000" y2="261" />
-                <line x1="0" y1="274" x2="1000" y2="274" />
-              </g>
-              <!-- Aisle Vertical Stairs -->
-              <g fill="#0f172a" opacity="0.5">
-                <polygon points="175,215 195,215 200,280 170,280" />
-                <polygon points="340,215 360,215 365,280 335,280" />
-                <polygon points="640,215 660,215 665,280 635,280" />
-                <polygon points="805,215 825,215 830,280 800,280" />
-              </g>
-
-              <!-- 4. MID-TIER FASCIA & TOURNAMENT BANNERS -->
-              <rect x="0" y="278" width="1000" height="12" fill="#0f172a" />
-              <rect x="0" y="278" width="1000" height="2.5" fill="#38bdf8" opacity="0.8" />
-
-              <!-- Hanging Tournament Pennants/Banners (Red, Blue, Gold, Emerald) -->
-              <g id="tournament-banners">
-                <!-- Banner 1: Red -->
-                <polygon points="120,280 150,280 145,315 135,325 125,315" fill="#dc2626" />
-                <circle cx="135" cy="295" r="4.5" fill="#ffffff" />
-                <!-- Banner 2: Gold/Yellow -->
-                <polygon points="280,280 310,280 305,315 295,325 285,315" fill="#eab308" />
-                <circle cx="295" cy="295" r="4.5" fill="#ffffff" />
-                <!-- Center League Crest Banner -->
-                <polygon points="460,280 540,280 535,328 500,342 465,328" fill="#1e40af" stroke="#60a5fa" stroke-width="1.5" />
-                <circle cx="500" cy="302" r="12" fill="#ffffff" />
-                <path d="M488,302 A12,12 0 0,1 512,302 Z" fill="#ef4444" />
-                <rect x="488" y="300" width="24" height="4" fill="#0f172a" />
-                <circle cx="500" cy="302" r="4.5" fill="#ffffff" stroke="#0f172a" stroke-width="1.5" />
-                <!-- Banner 4: Emerald Green -->
-                <polygon points="690,280 720,280 715,315 705,325 695,315" fill="#16a34a" />
-                <circle cx="705" cy="295" r="4.5" fill="#ffffff" />
-                <!-- Banner 5: Blue -->
-                <polygon points="850,280 880,280 875,315 865,325 855,315" fill="#2563eb" />
-                <circle cx="865" cy="295" r="4.5" fill="#ffffff" />
-              </g>
-
-              <!-- 5. LOWER GRANDSTAND TIER -->
-              <polygon points="0,290 1000,290 1000,355 0,355" fill="url(#standLower)" />
-              <g stroke="#1e293b" stroke-width="2" opacity="0.6">
-                <line x1="0" y1="302" x2="1000" y2="302" />
-                <line x1="0" y1="316" x2="1000" y2="316" />
-                <line x1="0" y1="332" x2="1000" y2="332" />
-                <line x1="0" y1="348" x2="1000" y2="348" />
-              </g>
-
-              <!-- Glass / Steel Safety Handrails -->
-              <rect x="0" y="352" width="1000" height="4" fill="#64748b" />
-              <rect x="0" y="354" width="1000" height="2" fill="#cbd5e1" opacity="0.6" />
-
-              <!-- 6. PERIMETER STADIUM WALL & LED SCREEN -->
-              <rect x="0" y="356" width="1000" height="50" fill="url(#wallGrad)" />
-              <!-- Electronic Ribbon Board -->
-              <rect x="80" y="362" width="840" height="18" rx="4" fill="#090d16" stroke="#334155" stroke-width="1.5" />
-              <text x="500" y="375" fill="#38bdf8" font-size="10.5" font-family="'Courier New', monospace" font-weight="900" letter-spacing="4" text-anchor="middle">★ KANTO POKÉMON LEAGUE CHAMPIONSHIP ARENA ★</text>
-
-              <!-- Player Entrance Tunnels -->
-              <!-- Left Tunnel -->
-              <path d="M 120 406 L 120 376 Q 160 365 200 376 L 200 406 Z" fill="#0b0f19" stroke="#475569" stroke-width="2" />
-              <!-- Center Grand Tunnel -->
-              <path d="M 450 406 L 450 370 Q 500 355 550 370 L 550 406 Z" fill="#070a12" stroke="#64748b" stroke-width="2.5" />
-              <!-- Right Tunnel -->
-              <path d="M 800 406 L 800 376 Q 840 365 880 376 L 880 406 Z" fill="#0b0f19" stroke="#475569" stroke-width="2" />
-
-              <!-- 7. TOWERING STADIUM FLOODLIGHTS -->
-              <!-- Left Pylon -->
-              <polygon points="35,360 48,360 44,140 39,140" fill="#334155" />
-              <polygon points="15,140 68,140 62,110 21,110" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
-              <g fill="#fef08a">
-                <circle cx="28" cy="120" r="5" />
-                <circle cx="41" cy="120" r="5" />
-                <circle cx="55" cy="120" r="5" />
-                <circle cx="28" cy="132" r="5" />
-                <circle cx="41" cy="132" r="5" />
-                <circle cx="55" cy="132" r="5" />
-              </g>
-              <ellipse cx="41" cy="125" rx="35" ry="30" fill="url(#lightGlow)" />
-
-              <!-- Right Pylon -->
-              <polygon points="952,360 965,360 961,140 956,140" fill="#334155" />
-              <polygon points="932,140 985,140 979,110 938,110" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
-              <g fill="#fef08a">
-                <circle cx="945" cy="120" r="5" />
-                <circle cx="958" cy="120" r="5" />
-                <circle cx="972" cy="120" r="5" />
-                <circle cx="945" cy="132" r="5" />
-                <circle cx="958" cy="132" r="5" />
-                <circle cx="972" cy="132" r="5" />
-              </g>
-              <ellipse cx="958" cy="125" rx="35" ry="30" fill="url(#lightGlow)" />
-
-              <!-- 8. THE REGULATION BATTLE PITCH & FIELD -->
-              <!-- Pitch Foundation / Soil Rim -->
-              <ellipse cx="500" cy="690" rx="520" ry="320" fill="#2d3748" />
-              <ellipse cx="500" cy="682" rx="510" ry="310" fill="#1c2817" />
-
-              <!-- Main Tournament Turf Oval -->
-              <ellipse cx="500" cy="675" rx="490" ry="295" fill="url(#turfGrad)" />
-              <ellipse cx="500" cy="675" rx="490" ry="295" fill="url(#pitchHighlight)" />
-
-              <!-- Perspective Turf Mower Stripes -->
-              <g fill="#ffffff" opacity="0.045">
-                <polygon points="500,380 560,380 730,970 560,970" />
-                <polygon points="630,380 690,380 970,970 850,970" />
-                <polygon points="370,380 430,380 270,970 410,970" />
-                <polygon points="240,380 295,380 10,970 140,970" />
-              </g>
-
-              <!-- Stadium Outer White Track Border -->
-              <ellipse cx="500" cy="675" rx="465" ry="275" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-opacity="0.85" />
-              <ellipse cx="500" cy="675" rx="460" ry="270" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-opacity="0.4" />
-
-              <!-- Center Division Line -->
-              <line x1="35" y1="675" x2="965" y2="675" stroke="#ffffff" stroke-width="4" stroke-opacity="0.75" />
-
-              <!-- Official Center Pokéball Pitch Emblem -->
-              <g id="center-pokeball-emblem">
-                <!-- Outer Ring -->
-                <ellipse cx="500" cy="675" rx="140" ry="85" fill="none" stroke="#ffffff" stroke-width="6" stroke-opacity="0.9" />
-                <!-- Top Half (Red Accent Fill) -->
-                <path d="M 360 675 A 140 85 0 0 1 640 675 Z" fill="#dc2626" fill-opacity="0.45" />
-                <!-- Center Core Ring -->
-                <ellipse cx="500" cy="675" rx="45" ry="28" fill="#1b420e" stroke="#ffffff" stroke-width="6" stroke-opacity="0.95" />
-                <!-- Center Button Button Glint -->
-                <ellipse cx="500" cy="675" rx="20" ry="12" fill="#ffffff" stroke="#0f172a" stroke-width="3" />
-                <ellipse cx="497" cy="672" rx="6" ry="3.5" fill="#f8fafc" />
-              </g>
-
-              <!-- Opponent Battle Pod (Top-Right Zone) -->
-              <g id="foe-battle-zone" transform="translate(735, 520)">
-                <!-- Marked Circular Pod -->
-                <ellipse cx="0" cy="0" rx="90" ry="46" fill="#1e3a8a" fill-opacity="0.35" stroke="#60a5fa" stroke-width="3.5" stroke-dasharray="14 8" />
-                <ellipse cx="0" cy="0" rx="72" ry="36" fill="none" stroke="#ffffff" stroke-width="2" stroke-opacity="0.7" />
-                <!-- Directional Alignment Reticle -->
-                <line x1="-80" y1="0" x2="-60" y2="0" stroke="#93c5fd" stroke-width="3" />
-                <line x1="60" y1="0" x2="80" y2="0" stroke="#93c5fd" stroke-width="3" />
-                <!-- Ground Contact Shadow Base -->
-                <ellipse cx="0" cy="6" rx="60" ry="18" fill="#000000" fill-opacity="0.35" />
-              </g>
-
-              <!-- Player Battle Pod (Bottom-Left Zone) -->
-              <g id="player-battle-zone" transform="translate(250, 770)">
-                <!-- Marked Circular Pod -->
-                <ellipse cx="0" cy="0" rx="120" ry="62" fill="#991b1b" fill-opacity="0.35" stroke="#f87171" stroke-width="4.5" stroke-dasharray="18 10" />
-                <ellipse cx="0" cy="0" rx="96" ry="48" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-opacity="0.8" />
-                <!-- Directional Alignment Reticle -->
-                <line x1="-105" y1="0" x2="-80" y2="0" stroke="#fca5a5" stroke-width="3.5" />
-                <line x1="80" y1="0" x2="105" y2="0" stroke="#fca5a5" stroke-width="3.5" />
-                <!-- Ground Contact Shadow Base -->
-                <ellipse cx="0" cy="8" rx="80" ry="24" fill="#000000" fill-opacity="0.4" />
-              </g>
-
-              <!-- 9. ATMOSPHERIC SUNBEAM & ARENA VIGNETTE -->
-              <polygon points="650,0 1000,0 1000,750 450,1000 200,1000" fill="url(#sunBeam)" pointer-events="none" />
-              <rect width="1000" height="1000" fill="url(#arenaVig)" pointer-events="none" />
-            </svg>
-            <div class="sh" id="fsh"></div>
-            <div class="sh" id="psh"></div>
-            <div class="pk" id="fw"><img class="spr" id="fs" alt="" /></div>
-            <div class="pk" id="pw"><img class="spr" id="ps" alt="" /></div>
-          </div>
-          <div class="info f">
-            <div class="nm"><span id="fn"></span><span id="fl"></span></div>
-            <div class="bar"><i id="fb"></i></div>
-            <div id="fh"></div>
-            <div class="ty" id="ft"></div>
-            <div class="dots" id="fd"></div>
-          </div>
-          <div class="info p">
-            <div class="nm"><span id="pn"></span><span id="pl"></span></div>
-            <div class="bar"><i id="pb"></i></div>
-            <div id="ph"></div>
-            <div class="ty" id="pt"></div>
-            <div class="dots" id="pd"></div>
-          </div>
+        <div class="info f">
+          <div class="nm"><span id="fn"></span><span id="fl"></span></div>
+          <div class="bar"><i id="fb"></i></div>
+          <div id="fh"></div>
+          <div class="ty" id="ft"></div>
+          <div class="dots" id="fd"></div>
         </div>
-        <div id="msg"></div>
-        <div id="ctl"></div>
-      </section>
-
-      <!-- Pokédex Hardware Bottom Bar with Speaker & Settings -->
-      <footer id="dex-footer">
-        <div class="dex-speaker-grill">
-          <span></span><span></span><span></span><span></span>
+        <div class="info p">
+          <div class="nm"><span id="pn"></span><span id="pl"></span></div>
+          <div class="bar"><i id="pb"></i></div>
+          <div id="ph"></div>
+          <div class="ty" id="pt"></div>
+          <div class="dots" id="pd"></div>
         </div>
-        <button id="sb" class="dex-sound-btn" title="Sound & Settings">
-          <span id="sb-icon">🔊</span>
-          <span class="sb-text">SOUND / SETTINGS</span>
-        </button>
-      </footer>
+      </div>
+      <div id="msg"></div>
+      <div id="ctl"></div>
+    </section>
 
-      <!-- Modal Dialog Overlay (for game events/selection) -->
-      <div id="ov"></div>
+    <!-- Pokédex Hardware Bottom Bar with Speaker & Settings -->
+    <footer id="dex-footer">
+      <div class="dex-speaker-grill">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <button id="sb" class="dex-sound-btn" title="Sound & Settings">
+        <span id="sb-icon">🔊</span>
+        <span class="sb-text">SOUND / SETTINGS</span>
+      </button>
+    </footer>
 
-      <!-- Dedicated Pokédex Settings Modal Overlay -->
-      <div id="set-ov">
-        <div class="box set-box">
-          <div class="set-hdr">⚙ POKÉDEX SETTINGS</div>
-          <div class="set-body">
-            <div class="set-row">
-              <span class="set-lbl">🔊 Master Sound</span>
-              <label class="dex-switch">
-                <input type="checkbox" id="son" checked />
-                <span class="dex-slider-sw round"></span>
-              </label>
-            </div>
-            <div class="set-row">
-              <span class="set-lbl">Master Volume</span>
-              <input type="range" id="sv" min="0" max="100" value="70" class="dex-range" />
-            </div>
-            <div class="set-row">
-              <span class="set-lbl">🎵 Music Volume</span>
-              <input type="range" id="vm" min="0" max="100" value="60" class="dex-range" />
-            </div>
-            <div class="set-row">
-              <span class="set-lbl">⚔️ SFX Volume</span>
-              <input type="range" id="vs" min="0" max="100" value="80" class="dex-range" />
-            </div>
-            <div class="set-row">
-              <span class="set-lbl">🐾 Pokémon Cries</span>
-              <input type="range" id="vp" min="0" max="100" value="60" class="dex-range" />
-            </div>
-            <hr class="set-div" />
-            <div class="set-row">
-              <span class="set-lbl">🎮 3D Pokémon Models</span>
-              <label class="dex-switch">
-                <input type="checkbox" id="m3d" checked />
-                <span class="dex-slider-sw round"></span>
-              </label>
-            </div>
-            <div class="set-row">
-              <span class="set-lbl">⚡ 3D Quality Preset</span>
-              <select id="m3q" class="dex-dropdown">
-                <option value="AUTO">AUTO (Recommended)</option>
-                <option value="HIGH">HIGH (Retina / Max FX)</option>
-                <option value="MEDIUM">MEDIUM (Balanced)</option>
-                <option value="LOW">LOW (Performance)</option>
-              </select>
-            </div>
-            <div class="set-btns">
-              <button id="btn-credits" class="set-btn-alt">📜 Credits & Attribution</button>
-              <button id="btn-close-settings" class="set-btn-pri">CLOSE</button>
-            </div>
+    <!-- Modal Dialog Overlay (for game events/selection) -->
+    <div id="ov"></div>
+
+    <!-- Dedicated Pokédex Settings Modal Overlay -->
+    <div id="set-ov">
+      <div class="box set-box">
+        <div class="set-hdr">⚙ POKÉDEX SETTINGS</div>
+        <div class="set-body">
+          <div class="set-row">
+            <span class="set-lbl">🔊 Master Sound</span>
+            <label class="dex-switch">
+              <input type="checkbox" id="son" checked />
+              <span class="dex-slider-sw round"></span>
+            </label>
+          </div>
+          <div class="set-row">
+            <span class="set-lbl">Master Volume</span>
+            <input type="range" id="sv" min="0" max="100" value="70" class="dex-range" />
+          </div>
+          <div class="set-row">
+            <span class="set-lbl">🎵 Music Volume</span>
+            <input type="range" id="vm" min="0" max="100" value="60" class="dex-range" />
+          </div>
+          <div class="set-row">
+            <span class="set-lbl">⚔️ SFX Volume</span>
+            <input type="range" id="vs" min="0" max="100" value="80" class="dex-range" />
+          </div>
+          <div class="set-row">
+            <span class="set-lbl">🐾 Pokémon Cries</span>
+            <input type="range" id="vp" min="0" max="100" value="60" class="dex-range" />
+          </div>
+          <hr class="set-div" />
+          <div class="set-row">
+            <span class="set-lbl">🎮 3D Pokémon Models</span>
+            <label class="dex-switch">
+              <input type="checkbox" id="m3d" checked />
+              <span class="dex-slider-sw round"></span>
+            </label>
+          </div>
+          <div class="set-row">
+            <span class="set-lbl">⚡ 3D Quality Preset</span>
+            <select id="m3q" class="dex-dropdown">
+              <option value="AUTO">AUTO (Recommended)</option>
+              <option value="HIGH">HIGH (Retina / Max FX)</option>
+              <option value="MEDIUM">MEDIUM (Balanced)</option>
+              <option value="LOW">LOW (Performance)</option>
+            </select>
+          </div>
+          <div class="set-btns">
+            <button id="btn-credits" class="set-btn-alt">📜 Credits & Attribution</button>
+            <button id="btn-close-settings" class="set-btn-pri">CLOSE</button>
           </div>
         </div>
       </div>
     </div>
+  </div>
 
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
 </html>

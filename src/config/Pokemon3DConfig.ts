@@ -47,28 +47,28 @@ export const Pokemon3DConfig = {
   // Local Draco decoder files served from /public/draco/
   DRACO_DECODER_PATH: '/draco/',
 
-  // Battle positioning in 3D world coordinates
+  // Battle positioning in 3D world coordinates (calibrated to align with stadium battle pods)
   POSITIONS: {
-    // Player on the stadium field (bottom-left quadrant, completely clear of bottom-right info card)
+    // Player on the stadium field (bottom-left pod, perfectly aligned with red marked ring)
     player: {
-      x: -1.35,
+      x: -1.2,
       y: 0,
-      z: 1.05,
+      z: 2.3,
       // Facing toward opponent (top-right along battle diagonal)
       rotationY: 2.356, // 135 deg: perfectly aligns with foe position
     },
-    // Opponent on the stadium field (top-right quadrant, completely clear of top-left info card)
+    // Opponent on the stadium field (top-right pod, perfectly aligned with blue marked ring)
     foe: {
-      x: 1.35,
+      x: 1.68,
       y: 0,
-      z: -1.5,
+      z: -1.05,
       // Facing toward player (bottom-left along battle diagonal)
       rotationY: -0.785, // -45 deg: perfectly aligns with player position
     },
   },
 
   // Base normalization scale: target height in world units (compact & proportional)
-  TARGET_HEIGHT: 1.1,
+  TARGET_HEIGHT: 1.0,
 
   // Custom scale adjustments for specific Pokemon species (to reflect canon sizes naturally without clipping)
   SPECIES_SCALE_MODIFIERS: {

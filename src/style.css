@@ -701,23 +701,25 @@ h1 {
 }
 
 #fsh {
-  top: calc(13% + var(--ow) * 0.85);
+  position: absolute;
+  left: 72.8%;
+  top: 52.5%;
   width: calc(var(--ow) * 0.72);
-  height: calc(var(--ow) * 0.12);
-  left: auto;
-  right: calc(12% + var(--ow) * 0.14);
+  height: calc(var(--ow) * 0.16);
+  transform: translate(-50%, -50%);
 }
 
 #psh {
-  top: auto;
-  bottom: calc(11% - var(--pw) * 0.02);
+  position: absolute;
+  left: 24.9%;
+  top: 81.4%;
   width: calc(var(--pw) * 0.76);
-  height: calc(var(--pw) * 0.13);
-  left: calc(8% + var(--pw) * 0.12);
+  height: calc(var(--pw) * 0.16);
+  transform: translate(-50%, -50%);
 }
 
 @keyframes shd {
-  50% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.7; }
 }
 
 .pk {
@@ -730,19 +732,21 @@ h1 {
 
 #fw {
   width: var(--ow);
-  top: 13%;
-  right: 12%;
-  left: auto;
+  left: 72.8%;
+  top: calc(52.5% - var(--ow) * 0.92);
+  right: auto;
   --ry: -14deg;
+  transform: translateX(-50%);
 }
 
 #pw {
   width: var(--pw);
-  left: 8%;
-  bottom: 11%;
+  left: 24.9%;
+  bottom: calc(100% - 81.4%);
   top: auto;
   right: auto;
   --ry: 14deg;
+  transform: translateX(-50%);
   animation-delay: -1s;
 }
 
@@ -762,8 +766,8 @@ h1 {
 }
 
 @keyframes br {
-  0%, 100% { transform: perspective(800px) rotateY(var(--ry)) rotate(-0.8deg); }
-  50% { transform: perspective(800px) rotateY(var(--ry)) rotate(0.8deg) translateY(-1%) scale(1.012, 1.03); }
+  0%, 100% { transform: translateX(-50%) perspective(800px) rotateY(var(--ry)) rotate(-0.8deg); }
+  50% { transform: translateX(-50%) perspective(800px) rotateY(var(--ry)) translateY(-3%) rotate(0.8deg); }
 }
 
 @keyframes fl2 {
@@ -1069,10 +1073,10 @@ h1 {
   color: var(--dex-red-deep) !important;
 }
 
-/* Quick Actions Bar after match in Hub */
+/* Quick Actions Bar after match in Hub (Individual Pokémon Actions) */
 .quick-actions-bar {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
   margin: 14px 0 10px;
 }
@@ -1119,17 +1123,51 @@ h1 {
   color: #ffffff !important;
 }
 
-.qpm-maxheal {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 60%, #1d4ed8 100%) !important;
-  color: #ffffff !important;
-  border-color: #dbeafe !important;
+/* Individual Pokémon Action Buttons within Team Table */
+.team-ind-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  align-items: center;
 }
 
-.qpm-maxheal:hover:not(:disabled) {
-  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 60%, #2563eb 100%) !important;
-  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.6) !important;
-  transform: translateY(-2px) scale(1.02);
+.ind-btn {
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  padding: 4px 10px !important;
+  border-radius: 8px !important;
+  min-height: 28px !important;
+  cursor: pointer;
+  border: 1.5px solid rgba(255, 255, 255, 0.4) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+  transition: all 0.12s ease-out;
+}
+
+.ind-btn:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.ind-train {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
   color: #ffffff !important;
+}
+
+.ind-train:hover:not(:disabled) {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
+  transform: translateY(-1px);
+}
+
+.ind-heal {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: #ffffff !important;
+}
+
+.ind-heal:hover:not(:disabled) {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%) !important;
+  transform: translateY(-1px);
 }
 
 #ctl .mv small {

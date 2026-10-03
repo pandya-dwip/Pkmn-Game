@@ -484,12 +484,195 @@ export async function mapScr(fresh?: boolean): Promise<void> {
 }
 
 // Screen 3: Hub Screen (Preparation, Team, Bag, Training)
-export const trow = (m: MonInstance) =>
-  `<tr><td><div class="row">${mh(m)}</div></td><td>${POKEMON_SPECIES_MAP[m.id]?.typesShort
+export const trow = (m: MonInstance, idx?: number) => {
+  const maxHp = st(m).max;
+  const isFainted = m.hp <= 0;
+  const isFull = m.hp >= maxHp;
+  const hasSessions = (G.tk || 0) > 0;
+  const idxAttr = idx !== undefined ? `data-idx="${idx}"` : '';
+
+  return `<tr><td><div class="row">${mh(m)}</div></td><td>${POKEMON_SPECIES_MAP[m.id]?.typesShort
     .map(tb)
     .join('')}<small>EXP <span class="eb"><i style="width:${Math.min(100, (m.exp / need(m)) * 100)}%"></i></span> ${
     m.exp
-  }/${need(m)}</small></td></tr>`;
+  }/${need(m)}</small>${
+    idx !== undefined
+      ? `<div class="team-ind-actions">
+           <button class="ind-btn ind-train" ${idxAttr} ${!hasSessions ? 'disabled' : ''} title="Train this Pokémon individually">💪 TRAIN</button>
+           <button class="ind-btn ind-heal" ${idxAttr} ${isFull ? 'disabled' : ''} title="Heal this Pokémon individually">🩹 HEAL</button>
+         </div>`
+      : ''
+  }</td></tr>`;
+};
+
+export async function trainSingleMon(idx: number): Promise<void> {
+  if ((G.tk || 0) < 1) {
+    await note(['No training sessions remaining for this round!']);
+    return;
+  }
+  const m = G.team[idx];
+  if (!m) return;
+  const spec = POKEMON_SPECIES_MAP[m.id];
+  const n = spec ? spec.name.toUpperCase() : 'POKÉMON';
+
+  G.tk = (G.tk || 1) - 1;
+  const e = Math.round(
+    [25, 35, 45, 55, 65][Math.min(4, G.r - 1)] * [1, 1, 1.2, 1.2, 1.4][Math.min(4, (G.tmax || 5) - (G.tk || 0))]
+  );
+  const h = Math.min(st(m).max - m.hp, Math.ceil(st(m).max * 0.15));
+  m.hp += h;
+  m.exp += e;
+
+  HUB = ['💪 TRAINING COMPLETE!', `${n} gained +${e} EXP!`];
+  await lvls(m);
+  if (h > 0) HUB.push(`${n} recovered +${h} HP (${m.hp}/${st(m).max} HP).`);
+  sound.beep(880, 0.35, 'triangle', 0.15);
+  const l = HUB;
+  HUB = null;
+  save();
+  await note(l);
+  hubScr();
+}
+
+export async function healSingleMon(idx: number): Promise<void> {
+  const m = G.team[idx];
+  if (!m) return;
+  const spec = POKEMON_SPECIES_MAP[m.id];
+  const n = spec ? spec.name.toUpperCase() : 'POKÉMON';
+  const maxHp = st(m).max;
+
+  if (m.hp >= maxHp) {
+    await note([`${n} is already at full HP (${maxHp}/${maxHp})!`]);
+    return;
+  }
+
+  // Check available items in bag
+  const items: { k: string; label: string; count: number; desc: string; apply: () => void }[] = [];
+
+  if (m.hp <= 0 && (G.rv || 0) > 0) {
+    items.push({
+      k: 'r',
+      label: `💊 Revive (×${G.rv})`,
+      count: G.rv || 0,
+      desc: 'Revives fainted Pokémon to 50% HP',
+      apply: () => {
+        G.rv = Math.max(0, (G.rv || 1) - 1);
+        m.hp = Math.ceil(maxHp * 0.5);
+      },
+    });
+  }
+
+  if ((G.b || 0) > 0 && m.hp > 0) {
+    items.push({
+      k: 'b',
+      label: `🍓 Oran Berry (×${G.b})`,
+      count: G.b || 0,
+      desc: `Restores +30% HP (+${Math.ceil(maxHp * 0.3)} HP)`,
+      apply: () => {
+        G.b = Math.max(0, (G.b || 1) - 1);
+        m.hp = Math.min(maxHp, m.hp + Math.ceil(maxHp * 0.3));
+      },
+    });
+  }
+
+  if ((G.b50 || 0) > 0 && m.hp > 0) {
+    items.push({
+      k: 'b50',
+      label: `🫐 Sitrus Berry (×${G.b50})`,
+      count: G.b50 || 0,
+      desc: `Restores +50% HP (+${Math.ceil(maxHp * 0.5)} HP)`,
+      apply: () => {
+        G.b50 = Math.max(0, (G.b50 || 1) - 1);
+        m.hp = Math.min(maxHp, m.hp + Math.ceil(maxHp * 0.5));
+      },
+    });
+  }
+
+  if ((G.b75 || 0) > 0 && m.hp > 0) {
+    items.push({
+      k: 'b75',
+      label: `🍇 Enigma Berry (×${G.b75})`,
+      count: G.b75 || 0,
+      desc: `Restores +75% HP (+${Math.ceil(maxHp * 0.75)} HP)`,
+      apply: () => {
+        G.b75 = Math.max(0, (G.b75 || 1) - 1);
+        m.hp = Math.min(maxHp, m.hp + Math.ceil(maxHp * 0.75));
+      },
+    });
+  }
+
+  if ((G.fh || 0) > 0) {
+    items.push({
+      k: 'fh',
+      label: `✨ Full Heal Berry (×${G.fh})`,
+      count: G.fh || 0,
+      desc: 'Completely restores HP to 100% full',
+      apply: () => {
+        G.fh = Math.max(0, (G.fh || 1) - 1);
+        m.hp = maxHp;
+      },
+    });
+  }
+
+  if (items.length === 0) {
+    if (m.hp <= 0) {
+      await note([`${n} has fainted!`, 'You need a 💊 Revive to restore a fainted Pokémon.']);
+      return;
+    }
+    await note(['No healing berries remaining in your bag!', 'Win battles to earn more berries and items.']);
+    return;
+  }
+
+  const choice = await pick(
+    `HEAL ${n}<br>Current HP: ${m.hp}/${maxHp}<br>Choose healing item:`,
+    items.map(it => ({
+      h: `<b>${it.label}</b><br><small>${it.desc}</small>`,
+    })),
+    true,
+    'l'
+  );
+
+  if (choice < 0) return;
+
+  const itemUsed = items[choice];
+  itemUsed.apply();
+
+  sound.beep(659, 0.15, 'sine');
+  sound.beep(880, 0.25, 'sine', 0.1, 0.12);
+  save();
+
+  await note([
+    `🩹 HEAL COMPLETE!`,
+    `Used ${itemUsed.label.split('(')[0].trim()} on ${n}.`,
+    `${n} HP: <b>${m.hp}/${maxHp}</b>`,
+  ]);
+  hubScr();
+}
+
+export async function healScr(): Promise<void> {
+  const i = await pick(
+    'SELECT POKÉMON TO HEAL',
+    G.team.map(m => {
+      const maxHp = st(m).max;
+      const isFainted = m.hp <= 0;
+      const isFull = m.hp >= maxHp;
+      return {
+        d: isFull,
+        h: `${mh(m)}<small>${
+          isFainted
+            ? '<b style="color:#ef4444">FAINTED</b>'
+            : isFull
+            ? '<span style="color:#22c55e">FULL HP</span>'
+            : `${m.hp}/${maxHp} HP`
+        }</small>`,
+      };
+    }),
+    true,
+    'l'
+  );
+  if (i < 0) return hubScr();
+  await healSingleMon(i);
+}
 
 export function hubScr(): void {
   sound.music('menu');
@@ -498,11 +681,10 @@ export function hubScr(): void {
     G.r === 4 ? 'SEMIFINAL PREPARATION' : G.r === 5 ? 'FINAL PREPARATION' : 'MATCH COMPLETE'
   }</h1><p style="text-align:center">★ YOU ADVANCED ★<br><br>REWARDS<br>+ ${G.last?.e || 0} EXP<br>+ ${
     G.last?.it || 'None'
-  }<br>+ Pokémon Choice</p><table>${G.team.map(trow).join('')}</table>
+  }<br>+ Pokémon Choice</p><table>${G.team.map((m, idx) => trow(m, idx)).join('')}</table>
   <div class="quick-actions-bar">
-    <button id="qh-train" class="qpm-btn qpm-train" title="Instantly train whole team using 1 session">💪 QUICK TRAIN</button>
-    <button id="qh-heal" class="qpm-btn qpm-heal" title="Heal and revive team using available bag berries">🩹 QUICK HEAL</button>
-    <button id="qh-maxheal" class="qpm-btn qpm-maxheal" title="Fully restore entire team to 100% HP">✨ MAX HEAL</button>
+    <button id="qh-train" class="qpm-btn qpm-train" title="Select an individual Pokémon to train (1 session)">💪 TRAIN POKÉMON</button>
+    <button id="qh-heal" class="qpm-btn qpm-heal" title="Select an individual Pokémon to heal using bag berries">🩹 HEAL POKÉMON</button>
   </div>
   <p>TRAINING SESSIONS<br>${'★'.repeat(G.tk || 0)}${'☆'.repeat((G.tmax || 5) - (G.tk || 0))}<br>${G.tk || 0} / ${
     G.tmax || 5
@@ -510,133 +692,30 @@ export function hubScr(): void {
     (G.ev || 0) > 0 && G.r >= 4 ? `<button id="h5">✨ SPECIAL EVOLUTION ×${G.ev}</button>` : ''
   }</div><p style="text-align:center">NEXT MATCH: TBD</p>`;
 
-  // Quick Action: Train
-  $('#qh-train').onclick = async () => {
-    if ((G.tk || 0) < 1) {
-      return note(['No training sessions remaining for this round!']);
-    }
-    G.tk = (G.tk || 1) - 1;
-    const e = Math.round(
-      [25, 35, 45, 55, 65][Math.min(4, G.r - 1)] * [1, 1, 1.2, 1.2, 1.4][Math.min(4, (G.tmax || 5) - (G.tk || 0))]
-    );
-    HUB = ['💪 QUICK TEAM TRAINING COMPLETE!'];
-    for (const m of G.team) {
-      const h = Math.min(st(m).max - m.hp, Math.ceil(st(m).max * 0.15));
-      const n = POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase();
-      m.hp += h;
-      m.exp += e;
-      HUB.push(`${n} gained +${e} EXP (${h > 0 ? `+${h} HP` : 'Full HP'})`);
-      await lvls(m);
-    }
-    sound.beep(880, 0.35, 'triangle', 0.15);
-    const l = HUB;
-    HUB = null;
-    save();
-    await note(l);
-    hubScr();
-  };
+  // Individual Actions
+  $('#qh-train').onclick = trainScr;
+  $('#qh-heal').onclick = healScr;
 
-  // Quick Action: Heal
-  $('#qh-heal').onclick = async () => {
-    const damaged = G.team.filter(m => m.hp < st(m).max || m.hp <= 0);
-    if (!damaged.length) {
-      return note(['All Pokémon on your team are already at full HP!']);
-    }
+  // Individual Pokémon Row Action Buttons
+  document.querySelectorAll<HTMLButtonElement>('.ind-train').forEach(btn => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.idx || '0', 10);
+      trainSingleMon(idx);
+    };
+  });
 
-    let revCount = 0;
-    let b75Count = 0;
-    let b50Count = 0;
-    let b30Count = 0;
-    let fhCount = 0;
-
-    // 1. Revive any fainted Pokémon first
-    for (const m of G.team) {
-      if (m.hp <= 0 && (G.rv || 0) > 0) {
-        G.rv = Math.max(0, (G.rv || 1) - 1);
-        m.hp = Math.ceil(st(m).max * 0.5);
-        revCount++;
-      }
-    }
-
-    // 2. Heal damaged Pokémon using available berries
-    for (const m of G.team) {
-      while (m.hp < st(m).max) {
-        const missingPct = (st(m).max - m.hp) / st(m).max;
-        if (missingPct > 0.6 && (G.b75 || 0) > 0) {
-          G.b75 = Math.max(0, (G.b75 || 1) - 1);
-          m.hp = Math.min(st(m).max, m.hp + Math.ceil(st(m).max * 0.75));
-          b75Count++;
-        } else if (missingPct > 0.35 && (G.b50 || 0) > 0) {
-          G.b50 = Math.max(0, (G.b50 || 1) - 1);
-          m.hp = Math.min(st(m).max, m.hp + Math.ceil(st(m).max * 0.5));
-          b50Count++;
-        } else if ((G.b || 0) > 0) {
-          G.b = Math.max(0, (G.b || 1) - 1);
-          m.hp = Math.min(st(m).max, m.hp + Math.ceil(st(m).max * 0.3));
-          b30Count++;
-        } else if ((G.b50 || 0) > 0) {
-          G.b50 = Math.max(0, (G.b50 || 1) - 1);
-          m.hp = Math.min(st(m).max, m.hp + Math.ceil(st(m).max * 0.5));
-          b50Count++;
-        } else if ((G.b75 || 0) > 0) {
-          G.b75 = Math.max(0, (G.b75 || 1) - 1);
-          m.hp = Math.min(st(m).max, m.hp + Math.ceil(st(m).max * 0.75));
-          b75Count++;
-        } else if ((G.fh || 0) > 0) {
-          G.fh = Math.max(0, (G.fh || 1) - 1);
-          m.hp = st(m).max;
-          fhCount++;
-        } else {
-          break; // No more berries in bag
-        }
-      }
-    }
-
-    const usedParts: string[] = [];
-    if (revCount) usedParts.push(`💊 ${revCount} Revive(s)`);
-    if (fhCount) usedParts.push(`✨ ${fhCount} Full Heal Berry`);
-    if (b75Count) usedParts.push(`🍇 ${b75Count} Enigma (75%)`);
-    if (b50Count) usedParts.push(`🫐 ${b50Count} Sitrus (50%)`);
-    if (b30Count) usedParts.push(`🍓 ${b30Count} Oran (30%)`);
-
-    sound.beep(659, 0.15, 'sine');
-    sound.beep(880, 0.25, 'sine', 0.1, 0.12);
-    save();
-
-    if (usedParts.length) {
-      await note(['🩹 QUICK HEAL COMPLETE', 'Used: ' + usedParts.join(', '), 'Your team has been restored!']);
-    } else {
-      await note(['No berries or revives remaining in your bag!', 'Win battles to earn more berries and revives.']);
-    }
-    hubScr();
-  };
-
-  // Quick Action: Max Heal
-  $('#qh-maxheal').onclick = async () => {
-    let healed = false;
-    for (const m of G.team) {
-      if (m.hp < st(m).max) {
-        m.hp = st(m).max;
-        healed = true;
-      }
-    }
-    if (!healed) {
-      return note(['All Pokémon on your team are already at full 100% HP!']);
-    }
-
-    // Play Pokémon Center healing fanfare
-    [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => sound.beep(freq, 0.22, 'triangle', 0.12, idx * 0.1));
-    save();
-    await note([
-      '✨ MAX HEAL COMPLETE! ✨',
-      'All Pokémon on your team have been completely restored to 100% full HP and all fainted Pokémon are revived!',
-    ]);
-    hubScr();
-  };
+  document.querySelectorAll<HTMLButtonElement>('.ind-heal').forEach(btn => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.idx || '0', 10);
+      healSingleMon(idx);
+    };
+  });
 
   $('#h1').onclick = trainScr;
   $('#h2').onclick = async () => {
-    await pick(`YOUR TEAM<table>${G.team.map(trow).join('')}</table>`, [{ h: 'BACK' }]);
+    await pick(`YOUR TEAM<table>${G.team.map((m, idx) => trow(m, idx)).join('')}</table>`, [{ h: 'BACK' }]);
   };
   $('#h3').onclick = async () => {
     const r = await bagUI(G.team, 0);

@@ -7,6 +7,8 @@
 export interface EconomyConfig {
   shop: {
     pokeball: number;
+    greatBall: number;
+    ultraBall: number;
     healthBerry: number;
     sitrusBerry: number;
     fullHealBerry: number;
@@ -30,7 +32,9 @@ export interface EconomyConfig {
 
 export const ECONOMY: EconomyConfig = {
   shop: {
-    pokeball: 200,        // Standard Poké Ball for catching wild Pokémon
+    pokeball: 200,        // Standard Poké Ball (Catch Rate 1.0x)
+    greatBall: 600,       // Great Ball (Catch Rate 1.5x)
+    ultraBall: 1200,      // Ultra Ball (Catch Rate 2.0x)
     healthBerry: 150,     // Oran Berry (restores 30% HP)
     sitrusBerry: 300,     // Sitrus Berry (restores 50% HP)
     fullHealBerry: 600,   // Full Heal Berry (restores 100% HP)

@@ -109,14 +109,18 @@ export function generateEncounterMon(gymIndex: number, isRare: boolean = false):
  * Calculates capture success percentage
  * Factor in: catchRateBase, current HP / max HP ratio, Poké Ball bonus
  */
-export function calculateCatchSuccess(mon: { id: number; hp: number; maxHp?: number; catchRateBase?: number }): { success: boolean; shakeCount: number } {
+export function calculateCatchSuccess(
+  mon: { id: number; hp: number; maxHp?: number; catchRateBase?: number },
+  ballMultiplier: number = 1.0
+): { success: boolean; shakeCount: number } {
   const spec = POKEMON_SPECIES_MAP[mon.id];
   const bst = spec ? calculateBaseStatTotal(spec) : 300;
   const catchRateBase = mon.catchRateBase ?? Math.max(30, Math.min(255, Math.floor(350 - bst * 0.5)));
   const maxHp = mon.maxHp || (mon.hp ? Math.max(mon.hp, 20) : 20);
-  const hpRatio = Math.max(0.1, mon.hp / maxHp);
-  // Base catch probability: 0 to 1
-  const modifiedRate = (catchRateBase / 255) * (1.6 - hpRatio * 0.8);
+  const hpRatio = Math.max(0.05, mon.hp / maxHp);
+  // Base catch probability: 0 to 1, amplified by ball multiplier (Poké: 1.0x, Great: 1.5x, Ultra: 2.0x)
+  const modifiedRate = (catchRateBase / 255) * (1.6 - hpRatio * 0.8) * ballMultiplier;
+  // Never 100% guaranteed (cap at 95%) to preserve suspense
   const finalProb = Math.min(0.95, Math.max(0.15, modifiedRate));
 
   const roll = Math.random();

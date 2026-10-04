@@ -26,16 +26,16 @@ export const TYPE_MOVE_MAP: Record<TypeShort, string[]> = {
   Fi: ['Ember', 'Fire Fang', 'Flamethrower', 'Fire Blast', 'Fire Spin', 'Heat Wave', 'Will-O-Wisp'],
   Wa: ['Water Gun', 'Bubble Beam', 'Surf', 'Hydro Pump', 'Bubble', 'Aqua Jet', 'Water Pulse'],
   Gr: ['Vine Whip', 'Razor Leaf', 'Giga Drain', 'Solar Beam', 'Leaf Blade', 'Energy Ball', 'Petal Dance', 'Bullet Seed', 'Sleep Powder', 'Stun Spore', 'Poison Powder'],
-  El: ['Thunder Shock', 'Spark', 'Thunderbolt', 'Thunder', 'Electro Ball', 'Discharge'],
+  El: ['Thunder Shock', 'Spark', 'Thunder Wave', 'Thunderbolt', 'Thunder', 'Electro Ball', 'Discharge'],
   Ic: ['Powder Snow', 'Ice Shard', 'Ice Beam', 'Blizzard', 'Icicle Spear', 'Ice Punch'],
   Fg: ['Karate Chop', 'Low Kick', 'Cross Chop', 'Dynamic Punch', 'Brick Break', 'Close Combat', 'Double Kick', 'Submission', 'Aura Sphere'],
   Po: ['Poison Sting', 'Acid', 'Sludge', 'Sludge Bomb', 'Poison Jab', 'Toxic'],
   Gd: ['Mud Slap', 'Mud Shot', 'Bulldoze', 'Dig', 'Earthquake', 'Earth Power', 'Sand Attack'],
   Fl: ['Gust', 'Peck', 'Wing Attack', 'Aerial Ace', 'Sky Attack', 'Air Slash', 'Hurricane', 'Fly'],
-  Ps: ['Confusion', 'Psybeam', 'Psychic', 'Future Sight', 'Psyshock', 'Agility'],
+  Ps: ['Confusion', 'Psybeam', 'Psychic', 'Hypnosis', 'Future Sight', 'Psyshock', 'Agility'],
   Bu: ['Bug Bite', 'Pin Missile', 'X-Scissor', 'Megahorn', 'Signal Beam', 'Fury Cutter', 'String Shot'],
   Ro: ['Rock Throw', 'Rock Tomb', 'Rock Slide', 'Stone Edge', 'Rock Blast'],
-  Gh: ['Lick', 'Shadow Sneak', 'Shadow Ball', 'Hex', 'Night Shade', 'Shadow Punch'],
+  Gh: ['Lick', 'Shadow Sneak', 'Shadow Ball', 'Hex', 'Night Shade', 'Confuse Ray', 'Shadow Punch'],
   Dr: ['Dragon Rage', 'Dragon Claw', 'Dragon Pulse', 'Dragon Breath', 'Outrage'],
 };
 
@@ -70,6 +70,7 @@ const RAW_MOVE_DETAILS: Record<string, RawMoveDef> = {
   // Electric
   'Thunder Shock': { p: 40, a: 100, u: 1, c: 'Special' },
   Spark: { p: 65, a: 100, u: 12, c: 'Physical' },
+  'Thunder Wave': { p: 0, a: 100, u: 14, c: 'Status' },
   Thunderbolt: { p: 90, a: 100, u: 26, c: 'Special' },
   Thunder: { p: 110, a: 70, u: 38, c: 'Special' },
   'Electro Ball': { p: 60, a: 100, u: 16, c: 'Special' },
@@ -137,6 +138,7 @@ const RAW_MOVE_DETAILS: Record<string, RawMoveDef> = {
   Psybeam: { p: 65, a: 100, u: 14, c: 'Special' },
   Psyshock: { p: 80, a: 100, u: 24, c: 'Special' },
   Psychic: { p: 90, a: 100, u: 30, c: 'Special' },
+  Hypnosis: { p: 0, a: 60, u: 8, c: 'Status' },
   'Future Sight': { p: 120, a: 100, u: 40, c: 'Special' },
   Agility: { p: 0, a: 100, u: 15, c: 'Status' },
 
@@ -162,6 +164,7 @@ const RAW_MOVE_DETAILS: Record<string, RawMoveDef> = {
   'Shadow Punch': { p: 60, a: 100, u: 16, c: 'Physical' },
   Hex: { p: 65, a: 100, u: 22, c: 'Special' },
   'Night Shade': { p: 70, a: 100, u: 26, c: 'Special' },
+  'Confuse Ray': { p: 0, a: 100, u: 16, c: 'Status' },
   'Shadow Ball': { p: 80, a: 100, u: 32, c: 'Special' },
 
   // Dragon
@@ -273,3 +276,15 @@ export function getAvailableMoves(types: TypeShort[], level: number): MoveData[]
     .filter((move): move is MoveData => move !== undefined && move.unlockLevel <= level)
     .sort((a, b) => b.power - a.power);
 }
+
+/**
+ * Cleanly format move power: displays '—' for status moves or zero-power moves,
+ * and numeric value for damage attacks.
+ */
+export function formatMovePower(power: number | null | undefined, category?: string): string {
+  if (category === 'Status' || power === null || power === undefined || power <= 0) {
+    return '—';
+  }
+  return String(power);
+}
+

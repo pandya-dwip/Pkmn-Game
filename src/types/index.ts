@@ -152,6 +152,9 @@ export interface Inventory {
   fullHealBerries: number;    // 100% Full Heal Berry
   revives: number;
   stones: Record<string, number>;
+  balls?: number;             // Standard Poké Ball (1.0x)
+  greatBalls?: number;        // Great Ball (1.5x)
+  ultraBalls?: number;        // Ultra Ball (2.0x)
 }
 
 export interface GameSettings {

@@ -1,5 +1,6 @@
 import { POKEMON_SPECIES_MAP, STONE_EVOLUTIONS, getPokemonSpecies, calculateBaseStatTotal, isEvolutionLine, STARTER_IDS } from './data/pokemon';
-import { MOVES_DATA, TYPE_MOVE_MAP, MOVE_ICONS, getMoveData } from './data/moves';
+import { MOVES_DATA, TYPE_MOVE_MAP, MOVE_ICONS, getMoveData, formatMovePower } from './data/moves';
+import { MoveData } from './types';
 import { TYPE_NAMES, TYPE_CHART, calculateTypeEffectiveness } from './data/types';
 import { sound } from './audio/SoundSynthesizer';
 import { playMoveEffect, shk, puff, fly, el, ctr, flash, rush, ring } from './animations/CombatEffects';
@@ -66,6 +67,42 @@ export type GamePhase =
   | 'HALL_OF_FAME'
   | 'DEFEATED';
 
+export const BALL_CONFIG = {
+  ball: {
+    id: 'ball',
+    name: 'Poké Ball',
+    icon: '⚾',
+    multiplier: 1.0,
+    price: 200,
+    catchDesc: 'Standard (1.0×)',
+    desc: 'Standard capsule for capturing wild Pokémon.',
+    topGrad: ['#ff4d4d', '#dc2626', '#881337'],
+    accent: '#dc2626',
+  },
+  greatBall: {
+    id: 'greatBall',
+    name: 'Great Ball',
+    icon: '🔵',
+    multiplier: 1.5,
+    price: 600,
+    catchDesc: 'Better (1.5×)',
+    desc: 'High-performance capsule with higher success rate than a Poké Ball.',
+    topGrad: ['#38bdf8', '#0284c7', '#0369a1'],
+    accent: '#0284c7',
+  },
+  ultraBall: {
+    id: 'ultraBall',
+    name: 'Ultra Ball',
+    icon: '🟡',
+    multiplier: 2.0,
+    price: 1200,
+    catchDesc: 'Best (2.0×)',
+    desc: 'Ultra-performance capsule with excellent catch rate for tough Pokémon.',
+    topGrad: ['#facc15', '#eab308', '#854d0e'],
+    accent: '#eab308',
+  },
+} as const;
+
 export interface GameSaveState {
   trainerName: string;
   starterId: number;
@@ -74,6 +111,8 @@ export interface GameSaveState {
   badges: string[];            // Names of earned badges: e.g. ['Boulder Badge', 'Cascade Badge', ...]
   money: number;               // Poké Dollars
   balls: number;               // Poké Balls
+  greatBalls?: number;         // Great Balls (1.5× catch rate)
+  ultraBalls?: number;         // Ultra Balls (2.0× catch rate)
   b: number;                   // Oran Berry (30% HP)
   b50: number;                 // Sitrus Berry (50% HP)
   b75: number;                 // Enigma Berry (75% HP)
@@ -92,11 +131,40 @@ export interface GameSaveState {
   eliteFour?: {
     defeated: string[];
     activeMember?: string | null;
+    powerUpsRemaining?: number; // 3 direct level-ups
   };
   defeated?: boolean;
   savedRoutePos?: { routeId: number; x: number; y: number } | null;
   currentRouteId?: number;
   wildBattlesCount?: number;
+}
+
+export function getTrainingXpMultiplier(state?: GameSaveState | null): number {
+  if (!state) return 1.0;
+  // Qualified for Championship (8 badges or in tournament / endgame): 2× XP boost
+  if (
+    state.gymIndex >= 8 ||
+    state.phase === 'CHAMPIONSHIP_BRACKET' ||
+    state.phase === 'CHAMPIONSHIP_BATTLE' ||
+    state.phase === 'CHAMPIONSHIP_VICTORY' ||
+    state.phase === 'ELITE_FOUR_HUB' ||
+    state.phase === 'ELITE_FOUR_BATTLE' ||
+    state.phase === 'HALL_OF_FAME' ||
+    state.tournament != null
+  ) {
+    return 2.0;
+  }
+  return 1.0;
+}
+
+export function returnToCurrentHub(): void {
+  if (G.phase === 'CHAMPIONSHIP_BRACKET' || (G.tournament && G.phase !== 'JOURNEY_HUB')) {
+    championshipScr();
+  } else if (G.phase === 'ELITE_FOUR_HUB') {
+    eliteFourHub();
+  } else {
+    journeyHubScr();
+  }
 }
 
 export let G: GameSaveState;
@@ -244,6 +312,8 @@ export const load = (): GameSaveState | null => {
       g.badges = g.badges || [];
       g.money = g.money ?? 1000;
       g.balls = g.balls ?? 5;
+      g.greatBalls = g.greatBalls ?? 0;
+      g.ultraBalls = g.ultraBalls ?? 0;
       g.b = g.b ?? 3;
       g.b50 = g.b50 ?? 1;
       g.b75 = g.b75 ?? 0;
@@ -256,6 +326,9 @@ export const load = (): GameSaveState | null => {
       g.tk = g.tk ?? 5;
       g.tmax = g.tmax ?? 5;
       g.eliteFour = g.eliteFour || { defeated: [], activeMember: null };
+      if (g.eliteFour) {
+        g.eliteFour.powerUpsRemaining = g.eliteFour.powerUpsRemaining ?? 3;
+      }
       g.team.forEach(m => {
         m.uid = m.uid || nu();
       });
@@ -309,7 +382,7 @@ export const mvh = (v: any, e: number = 1) => {
     </div>
     <div class="mv-row-sub">
       <span class="t ${mv.typeShort}">${mv.type.toUpperCase()}</span>
-      <span class="mv-meta">PWR ${mv.power} · ACC ${mv.accuracy}</span>
+      <span class="mv-meta">PWR ${formatMovePower(mv.power, mv.category)} · ACC ${mv.accuracy}%</span>
     </div>
   `;
 };
@@ -387,7 +460,9 @@ export const renderResourcesBar = (): string => {
     <div class="resources-bar">
       <div class="wallet-badge">💰 ₽${(G?.money || 0).toLocaleString()}</div>
       <div class="inventory-pills">
-        <span title="Poké Balls">⚾ ×${G?.balls || 0}</span>
+        <span title="Poké Balls (1.0× Catch)">⚾ ×${G?.balls || 0}</span>
+        <span title="Great Balls (1.5× Catch)">🔵 ×${G?.greatBalls || 0}</span>
+        <span title="Ultra Balls (2.0× Catch)">🟡 ×${G?.ultraBalls || 0}</span>
         <span title="Oran Berries (30% HP)">🍓 ×${G?.b || 0}</span>
         <span title="Sitrus Berries (50% HP)">🫐 ×${G?.b50 || 0}</span>
         <span title="Full Heal Berries (100% HP)">✨ ×${G?.fh || 0}</span>
@@ -664,6 +739,31 @@ export function saveCurrentRoutePosition(): void {
   }
 }
 
+export async function visitPokemonCenter(): Promise<void> {
+  const choice = await pick(
+    '🏥 POKÉMON CENTER<br>Nurse Joy: "Welcome to the Pokémon Center!<br>Would you like me to heal your Pokémon to full health?"',
+    [
+      { h: '✨ YES, HEAL PARTY (100% HP)' },
+      { h: 'NO, THANK YOU' },
+    ],
+    false
+  );
+  if (choice === 0) {
+    G.team.forEach(m => {
+      m.hp = st(m).max;
+    });
+    save();
+    sound.beep(659, 0.2, 'sine');
+    sound.beep(880, 0.35, 'sine', 0.1, 0.15);
+    await note([
+      '<h3>🏥 NURSE JOY</h3>',
+      'Restoring your Pokémon team...',
+      '✨ ✨ ✨',
+      'Your Pokémon are fully healed to 100% HP! We hope to see you again!',
+    ]);
+  }
+}
+
 export function enterRouteExploration(routeId?: number, resumeX?: number, resumeY?: number): void {
   // Determine active route: explicit param > G.savedRoutePos.routeId > G.currentRouteId > G.gymIndex
   const rId =
@@ -731,28 +831,7 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
 
   routeExplorationEngine.onEnterCenter = async () => {
     routeExplorationEngine.isPaused = true;
-    const choice = await pick(
-      '🏥 POKÉMON CENTER<br>Nurse Joy: "Welcome to the Pokémon Center!<br>Would you like me to heal your Pokémon to full health?"',
-      [
-        { h: '✨ YES, HEAL PARTY (100% HP)' },
-        { h: 'NO, THANK YOU' },
-      ],
-      false
-    );
-    if (choice === 0) {
-      G.team.forEach(m => {
-        m.hp = st(m).max;
-      });
-      save();
-      sound.beep(659, 0.2, 'sine');
-      sound.beep(880, 0.35, 'sine', 0.1, 0.15);
-      await note([
-        '<h3>🏥 NURSE JOY</h3>',
-        'Restoring your Pokémon team...',
-        '✨ ✨ ✨',
-        'Your Pokémon are fully healed to 100% HP! We hope to see you again!',
-      ]);
-    }
+    await visitPokemonCenter();
     routeExplorationEngine.isPaused = false;
   };
 
@@ -933,6 +1012,12 @@ export function journeyHubScr(): void {
     `;
   } else if (gymIdx === 8) {
     // All 8 Badges Obtained -> Championship!
+    const roundIdx = G.tournament?.currentRoundIndex ?? 0;
+    const roundName = ROUND_NAMES_16[roundIdx] || 'CHAMPIONSHIP';
+    const oppId = G.tournament?.activeIds?.[1];
+    const oppName = (oppId && G.tournament?.trainers?.[oppId]?.name) || 'Championship Contender';
+    const isStarted = !!G.tournament && (G.tournament.currentRoundIndex > 0 || (G.tournament.history && G.tournament.history.length > 0));
+
     heroCardHTML = `
       <div class="journey-main-card" style="border-color:#facc15">
         <div class="journey-card-header">
@@ -941,10 +1026,12 @@ export function journeyHubScr(): void {
         </div>
         <div class="journey-card-title">👑 KANTO CHAMPIONSHIP TOURNAMENT</div>
         <div class="journey-card-desc">
-          You have earned all eight Kanto Gym Badges and qualified for the Championship! 15 elite trainers await you.
+          ${isStarted
+            ? `Tournament in progress! <b>${roundName}</b> is ready.<br>Next Opponent: <b>${oppName}</b>. Heal, shop, train, and return to the arena when ready!`
+            : `You have earned all eight Kanto Gym Badges and qualified for the Championship! 15 elite trainers await you.`}
         </div>
         <button id="btn-enter-championship" style="width:100%;text-align:center;background:linear-gradient(180deg,#eab308,#ca8a04);color:#0f172a;border-color:#a16207;font-size:15px;font-weight:900">
-          🏆 ENTER 16-PLAYER CHAMPIONSHIP ➔
+          🏆 ${isStarted ? `RETURN TO TOURNAMENT (${roundName.toUpperCase()}) ➔` : 'ENTER 16-PLAYER CHAMPIONSHIP ➔'}
         </button>
       </div>
     `;
@@ -975,15 +1062,18 @@ export function journeyHubScr(): void {
 
     ${heroCardHTML}
 
-    <div class="quick-actions-bar" style="display:flex;gap:8px;margin-bottom:12px">
-      <button id="qh-train" class="qpm-btn qpm-train" style="flex:1" title="Select a Pokémon to train (1 session)">
-        💪 TRAIN (${G.tk || 0}/${G.tmax || 5})
+    <div class="quick-actions-bar" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button id="qh-center" class="qpm-btn" style="flex:1;min-width:140px;background:linear-gradient(180deg,#ec4899,#db2777);color:#fff;border-color:#be185d" title="Nurse Joy: Free Full Heal for entire team">
+        🏥 POKÉMON CENTER
       </button>
-      <button id="qh-heal" class="qpm-btn qpm-heal" style="flex:1" title="Heal a Pokémon using bag berries">
-        🩹 HEAL POKÉMON
+      <button id="qh-train" class="qpm-btn qpm-train" style="flex:1;min-width:140px" title="Select a Pokémon to train (1 session)">
+        💪 TRAIN (${G.tk || 0}/${G.tmax || 5})${getTrainingXpMultiplier(G) > 1.0 ? ' <span class="boost-badge">2× XP</span>' : ''}
       </button>
-      <button id="qh-shop" class="qpm-btn" style="flex:1;background:linear-gradient(180deg,#0284c7,#0369a1);color:#fff;border-color:#075985" title="Buy supplies">
+      <button id="qh-shop" class="qpm-btn" style="flex:1;min-width:140px;background:linear-gradient(180deg,#0284c7,#0369a1);color:#fff;border-color:#075985" title="Buy supplies">
         🛒 POKÉ MART
+      </button>
+      <button id="qh-heal" class="qpm-btn qpm-heal" style="flex:1;min-width:140px" title="Heal a Pokémon using bag berries">
+        🩹 HEAL POKÉMON
       </button>
     </div>
 
@@ -1016,6 +1106,14 @@ export function journeyHubScr(): void {
 
   if ($('#btn-enter-elitefour')) {
     $('#btn-enter-elitefour').onclick = () => eliteFourHub();
+  }
+
+  const qhCenter = $('#qh-center');
+  if (qhCenter) {
+    qhCenter.onclick = async () => {
+      await visitPokemonCenter();
+      journeyHubScr();
+    };
   }
 
   $('#qh-train').onclick = () => trainScr();
@@ -1078,11 +1176,37 @@ export function shopScr(): void {
           <span class="shop-item-icon">⚾</span>
           <div>
             <div class="shop-item-title">Poké Ball</div>
-            <div class="shop-item-desc">Essential capsule for capturing wild Pokémon.</div>
+            <div class="shop-item-desc">Standard capsule for wild Pokémon (Catch Rate: 1.0×).</div>
           </div>
         </div>
         <button class="shop-item-buy" data-item="ball" ${G.money < ECONOMY.shop.pokeball ? 'disabled' : ''}>
           BUY (₽${ECONOMY.shop.pokeball})
+        </button>
+      </div>
+
+      <div class="shop-item-card">
+        <div class="shop-item-left">
+          <span class="shop-item-icon">🔵</span>
+          <div>
+            <div class="shop-item-title">Great Ball</div>
+            <div class="shop-item-desc">High-performance capsule with higher success (Catch Rate: 1.5×).</div>
+          </div>
+        </div>
+        <button class="shop-item-buy" data-item="greatBall" ${G.money < ECONOMY.shop.greatBall ? 'disabled' : ''}>
+          BUY (₽${ECONOMY.shop.greatBall})
+        </button>
+      </div>
+
+      <div class="shop-item-card">
+        <div class="shop-item-left">
+          <span class="shop-item-icon">🟡</span>
+          <div>
+            <div class="shop-item-title">Ultra Ball</div>
+            <div class="shop-item-desc">Ultra-performance capsule with maximum effectiveness (Catch Rate: 2.0×).</div>
+          </div>
+        </div>
+        <button class="shop-item-buy" data-item="ultraBall" ${G.money < ECONOMY.shop.ultraBall ? 'disabled' : ''}>
+          BUY (₽${ECONOMY.shop.ultraBall})
         </button>
       </div>
 
@@ -1164,6 +1288,14 @@ export function shopScr(): void {
         G.money -= ECONOMY.shop.pokeball;
         G.balls = (G.balls || 0) + 1;
         sound.beep(880, 0.1, 'sine');
+      } else if (it === 'greatBall' && G.money >= ECONOMY.shop.greatBall) {
+        G.money -= ECONOMY.shop.greatBall;
+        G.greatBalls = (G.greatBalls || 0) + 1;
+        sound.beep(920, 0.12, 'sine');
+      } else if (it === 'ultraBall' && G.money >= ECONOMY.shop.ultraBall) {
+        G.money -= ECONOMY.shop.ultraBall;
+        G.ultraBalls = (G.ultraBalls || 0) + 1;
+        sound.beep(980, 0.14, 'sine');
       } else if (it === 'b' && G.money >= ECONOMY.shop.healthBerry) {
         G.money -= ECONOMY.shop.healthBerry;
         G.b = (G.b || 0) + 1;
@@ -1192,95 +1324,265 @@ export function shopScr(): void {
     };
   });
 
-  $('#shop-back').onclick = () => enterRouteExploration(G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? G.gymIndex);
+  $('#shop-back').onclick = () => {
+    if (G.gymIndex >= 8 || G.phase === 'CHAMPIONSHIP_BRACKET' || G.phase === 'ELITE_FOUR_HUB') {
+      returnToCurrentHub();
+    } else {
+      enterRouteExploration(G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? G.gymIndex);
+    }
+  };
 }
 
 // ============================================================================
-// SCREEN 9: TEAM & PC BOX STORAGE
+// SCREEN 9: TEAM & PC BOX STORAGE (RESPONSIVE GRID & BOX PAGINATION)
 // ============================================================================
-export async function teamScr(): Promise<void> {
-  const choices = G.team.map((m, idx) => ({
-    h: `<b>PARTY ${idx + 1}:</b> ${mh(m)}`,
-  }));
+export async function teamScr(activeBoxPage: number = 0): Promise<void> {
+  sound.music('menu');
+  show('map');
 
-  const pcChoices = G.pcBox.map((m, idx) => ({
-    h: `<b>PC BOX ${idx + 1}:</b> ${mh(m)}`,
-  }));
+  const BOX_SIZE = 18;
+  const totalBoxes = Math.max(1, Math.ceil(G.pcBox.length / BOX_SIZE));
+  const safeBoxPage = Math.max(0, Math.min(activeBoxPage, totalBoxes - 1));
 
-  const allItems = [
-    ...choices,
-    ...(G.pcBox.length ? [{ d: true, h: '<b>── PC BOX STORAGE ──</b>' }] : []),
-    ...pcChoices,
-  ];
-
-  const pickIdx = await pick(
-    `PARTY MANAGEMENT<br>Active: ${G.team.length}/6 · PC Box: ${G.pcBox.length}`,
-    allItems,
-    true,
-    'l'
-  );
-
-  if (pickIdx < 0) return journeyHubScr();
-
-  if (pickIdx < G.team.length) {
-    // Selected an active party member
-    const m = G.team[pickIdx];
-    const actions = [
-      { h: '💪 TRAIN INDIVIDUALLY' },
-      { h: '🩹 HEAL' },
-      ...(G.team.length > 1 ? [{ h: '⭐ SET AS LEAD POKÉMON' }] : []),
-      ...(G.pcBox.length ? [{ h: '📦 DEPOSIT TO PC BOX' }] : []),
-    ];
-
-    const actIdx = await pick(`${mh(m)}<br>Select action:`, actions, true);
-    if (actIdx === 0) trainSingleMon(pickIdx);
-    else if (actIdx === 1) healSingleMon(pickIdx);
-    else if (actIdx === 2 && G.team.length > 1) {
-      G.team.splice(pickIdx, 1);
-      G.team.unshift(m);
-      save();
-      teamScr();
-    } else if (actIdx === 3 && G.pcBox.length) {
-      if (G.team.length <= 1) {
-        alert('You must keep at least 1 Pokémon in your active party!');
-        return teamScr();
-      }
-      G.team.splice(pickIdx, 1);
-      G.pcBox.push(m);
-      save();
-      teamScr();
-    } else {
-      teamScr();
+  // 1. Render Active Party (Slots 1 to 6)
+  const partyCardsHTML = Array.from({ length: MAX_ACTIVE_TEAM }, (_, idx) => {
+    const m = G.team[idx];
+    if (!m) {
+      return `
+        <div class="mon-card-empty">
+          <span style="font-size:20px;margin-bottom:4px">➕</span>
+          <span>EMPTY SLOT #${idx + 1}</span>
+          <small style="margin-top:4px">Select a PC Pokémon to add</small>
+        </div>
+      `;
     }
-  } else {
-    // Selected a PC Box member
-    const pcIdx = pickIdx - G.team.length - (G.pcBox.length ? 1 : 0);
-    const m = G.pcBox[pcIdx];
-    if (!m) return teamScr();
 
-    if (G.team.length < MAX_ACTIVE_TEAM) {
-      G.pcBox.splice(pcIdx, 1);
-      G.team.push(m);
-      save();
-      await note([`${POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase()} moved from PC Box into your active party!`]);
-      teamScr();
-    } else {
-      const swapIdx = await pick(
-        `PARTY IS FULL (6/6)<br>Select a party member to swap with ${POKEMON_SPECIES_MAP[m.id]?.name}:`,
-        G.team.map(tm => ({ h: mh(tm) })),
-        true,
-        'l'
-      );
-      if (swapIdx >= 0) {
-        const outMon = G.team[swapIdx];
-        G.team[swapIdx] = m;
-        G.pcBox[pcIdx] = outMon;
-        save();
-        await note([`Swapped ${POKEMON_SPECIES_MAP[outMon.id]?.name} into PC Box and took ${POKEMON_SPECIES_MAP[m.id]?.name} into party!`]);
-      }
-      teamScr();
-    }
+    const spec = POKEMON_SPECIES_MAP[m.id];
+    const name = spec ? spec.name : 'Pokémon';
+    const maxHp = st(m).max;
+    const hpPct = Math.max(0, Math.min(100, Math.round((m.hp / maxHp) * 100)));
+    const isLead = idx === 0;
+    const isFainted = m.hp <= 0;
+
+    return `
+      <div class="mon-card-compact ${isLead ? 'lead' : ''} ${isFainted ? 'fainted' : ''}" data-party-idx="${idx}">
+        <span class="mon-card-slot-badge">#${idx + 1}</span>
+        ${isLead ? '<span class="mon-card-lead-star" title="Lead Pokémon">⭐</span>' : ''}
+        <img class="mon-card-img" src="${U(m.id)}" alt="${name}" onerror="fb(this)">
+        <div class="mon-card-name" title="${name}">${name}</div>
+        <div class="mon-card-lv">Lv. ${m.lv}</div>
+        <div class="mon-card-types">${spec.typesShort.map(tb).join('')}</div>
+        <div class="mon-card-hp-info">
+          <div class="mon-card-hp-text">
+            <span>HP</span>
+            <span style="color:${isFainted ? '#ef4444' : '#f8fafc'}">${m.hp}/${maxHp}${isFainted ? ' (FAINT)' : ''}</span>
+          </div>
+          <div class="mon-card-hp-bar">
+            <div class="mon-card-hp-fill" style="width:${hpPct}%;background:${isFainted ? '#ef4444' : hpPct > 50 ? '#22c55e' : hpPct > 20 ? '#eab308' : '#ef4444'}"></div>
+          </div>
+        </div>
+        <button class="mon-card-action-btn btn-party-manage" data-idx="${idx}">
+          MANAGE ⚙️
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  // 2. Render PC Box Pagination Tabs
+  let pcTabsHTML = '';
+  if (totalBoxes > 1) {
+    pcTabsHTML = `
+      <div class="pc-tabs-bar">
+        ${Array.from({ length: totalBoxes }, (_, bIdx) => {
+      const startNum = bIdx * BOX_SIZE + 1;
+      const endNum = Math.min((bIdx + 1) * BOX_SIZE, G.pcBox.length);
+      const isActive = bIdx === safeBoxPage;
+      return `
+            <button class="pc-tab-btn ${isActive ? 'active' : ''}" data-page="${bIdx}">
+              BOX ${bIdx + 1} (${startNum}-${endNum})
+            </button>
+          `;
+    }).join('')}
+      </div>
+    `;
   }
+
+  // 3. Render PC Box Members for safeBoxPage
+  const currentBoxMons = G.pcBox.slice(safeBoxPage * BOX_SIZE, (safeBoxPage + 1) * BOX_SIZE);
+  let pcGridHTML = '';
+
+  if (G.pcBox.length === 0) {
+    pcGridHTML = `
+      <div style="grid-column: 1 / -1; padding: 24px; text-align: center; color: #94a3b8; background: #1e293b; border-radius: 12px; border: 1px dashed #334155">
+        📦 No Pokémon currently stored in PC Box.<br>
+        When your active party of 6 is full, wild Pokémon caught or recruited will be safely stored here!
+      </div>
+    `;
+  } else {
+    pcGridHTML = currentBoxMons.map((m, relativeIdx) => {
+      const globalIdx = safeBoxPage * BOX_SIZE + relativeIdx;
+      const spec = POKEMON_SPECIES_MAP[m.id];
+      const name = spec ? spec.name : 'Pokémon';
+      const maxHp = st(m).max;
+      const isFainted = m.hp <= 0;
+
+      return `
+        <div class="mon-card-compact ${isFainted ? 'fainted' : ''}" data-pc-idx="${globalIdx}">
+          <img class="mon-card-img" src="${U(m.id)}" alt="${name}" onerror="fb(this)">
+          <div class="mon-card-name" title="${name}">${name}</div>
+          <div class="mon-card-lv">Lv. ${m.lv}</div>
+          <div class="mon-card-types">${spec.typesShort.map(tb).join('')}</div>
+          <div class="mon-card-hp-info">
+            <div class="mon-card-hp-text">
+              <span>HP</span>
+              <span style="color:${isFainted ? '#ef4444' : '#94a3b8'}">${m.hp}/${maxHp}</span>
+            </div>
+          </div>
+          <button class="mon-card-action-btn btn-pc-withdraw" data-pcidx="${globalIdx}" style="${G.team.length < MAX_ACTIVE_TEAM ? 'background:#16a34a;border-color:#22c55e' : 'background:#2563eb;border-color:#3b82f6'}">
+            ${G.team.length < MAX_ACTIVE_TEAM ? 'WITHDRAW ➔' : 'SWAP 🔄'}
+          </button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  $('#map').innerHTML = `
+    <div class="team-pc-container">
+      <h1>👥 TEAM & PC BOX</h1>
+      <p style="text-align:center">Active Party: <b>${G.team.length} / 6</b> · Stored in PC: <b>${G.pcBox.length}</b></p>
+      ${renderBadgesBar(G.badges)}
+      ${renderResourcesBar()}
+
+      <!-- ACTIVE PARTY SECTION -->
+      <div class="section-title-bar">
+        <span class="section-title-text">⭐ ACTIVE PARTY</span>
+        <span class="section-title-count">${G.team.length} / 6 SLOTS</span>
+      </div>
+
+      <div class="party-grid">
+        ${partyCardsHTML}
+      </div>
+
+      <!-- PC BOX STORAGE SECTION -->
+      <div class="section-title-bar" style="border-left-color:#38bdf8;margin-top:14px">
+        <span class="section-title-text">📦 PC BOX STORAGE</span>
+        <span class="section-title-count">${G.pcBox.length} TOTAL STORED</span>
+      </div>
+
+      ${pcTabsHTML}
+
+      <div class="pc-box-grid">
+        ${pcGridHTML}
+      </div>
+
+      <div class="col" style="margin-top:16px">
+        <button id="btn-team-close" style="width:100%;text-align:center;font-size:14px;font-weight:900">
+          🔙 RETURN
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Attach Event Handlers:
+
+  // Return Button
+  $('#btn-team-close').onclick = () => returnToCurrentHub();
+
+  // Tab Switchers
+  document.querySelectorAll<HTMLButtonElement>('.pc-tab-btn').forEach(btn => {
+    btn.onclick = () => {
+      const page = parseInt(btn.dataset.page || '0', 10);
+      teamScr(page);
+    };
+  });
+
+  // Active Party Member Management
+  document.querySelectorAll<HTMLButtonElement>('.btn-party-manage').forEach(btn => {
+    btn.onclick = async e => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.idx || '0', 10);
+      const m = G.team[idx];
+      if (!m) return;
+      const spec = POKEMON_SPECIES_MAP[m.id];
+      const name = spec ? spec.name.toUpperCase() : 'POKÉMON';
+
+      const actions = [
+        { h: '💪 TRAIN INDIVIDUALLY' },
+        { h: '🩹 HEAL WITH MEDICINE' },
+        ...(idx > 0 ? [{ h: '⭐ SET AS LEAD POKÉMON' }] : []),
+        ...(G.team.length > 1 ? [{ h: '📦 DEPOSIT TO PC BOX' }] : []),
+      ];
+
+      const actIdx = await pick(
+        `<b>${name} (Lv. ${m.lv})</b><br>HP: ${m.hp}/${st(m).max}<br>Select action:`,
+        actions,
+        true
+      );
+
+      if (actIdx === 0) {
+        trainSingleMon(idx);
+      } else if (actIdx === 1) {
+        healSingleMon(idx);
+      } else if (actIdx === 2 && idx > 0) {
+        G.team.splice(idx, 1);
+        G.team.unshift(m);
+        save();
+        sound.beep(880, 0.15, 'sine');
+        teamScr(safeBoxPage);
+      } else if (actIdx === 3 && G.team.length > 1) {
+        G.team.splice(idx, 1);
+        G.pcBox.push(m);
+        save();
+        sound.beep(620, 0.15, 'sine');
+        teamScr(safeBoxPage);
+      }
+    };
+  });
+
+  // PC Box Member Withdraw / Swap
+  document.querySelectorAll<HTMLButtonElement>('.btn-pc-withdraw').forEach(btn => {
+    btn.onclick = async e => {
+      e.stopPropagation();
+      const pcIdx = parseInt(btn.dataset.pcidx || '0', 10);
+      const m = G.pcBox[pcIdx];
+      if (!m) return;
+      const spec = POKEMON_SPECIES_MAP[m.id];
+      const name = spec ? spec.name.toUpperCase() : 'POKÉMON';
+
+      if (G.team.length < MAX_ACTIVE_TEAM) {
+        // Withdraw directly
+        G.pcBox.splice(pcIdx, 1);
+        G.team.push(m);
+        save();
+        sound.beep(880, 0.2, 'triangle');
+        await note([`<b>${name} (Lv. ${m.lv})</b> moved from PC Box into your active party!`]);
+        teamScr(safeBoxPage);
+      } else {
+        // Party is full -> Choose party member to swap
+        const swapChoices = G.team.map((tm, tIdx) => ({
+          h: `<b>PARTY #${tIdx + 1}:</b> ${mh(tm)}`,
+        }));
+
+        const swapIdx = await pick(
+          `PARTY IS FULL (6/6)<br>Select a party member to swap with <b>${name} (Lv. ${m.lv})</b>:`,
+          swapChoices,
+          true,
+          'l'
+        );
+
+        if (swapIdx >= 0) {
+          const outMon = G.team[swapIdx];
+          const outName = POKEMON_SPECIES_MAP[outMon.id]?.name.toUpperCase() || 'POKÉMON';
+          G.team[swapIdx] = m;
+          G.pcBox[pcIdx] = outMon;
+          save();
+          sound.beep(880, 0.25, 'triangle');
+          await note([`Swapped <b>${outName} (Lv. ${outMon.lv})</b> into PC Box and took <b>${name} (Lv. ${m.lv})</b> into your active party!`]);
+          teamScr(safeBoxPage);
+        }
+      }
+    };
+  });
 }
 
 // ============================================================================
@@ -1610,6 +1912,9 @@ export function championshipScr(): void {
   sound.music('menu');
   show('map');
 
+  G.phase = 'CHAMPIONSHIP_BRACKET';
+  save();
+
   if (!G.tournament) {
     G.tournament = createChampionship16(G.trainerName);
     G.tournamentRound = 0;
@@ -1626,8 +1931,7 @@ export function championshipScr(): void {
     ${renderBadgesBar(G.badges)}
     ${renderResourcesBar()}
 
-    ${championshipBracketHTML(G.tournament)}
-
+    <!-- Next Opponent Card -->
     <div class="journey-main-card" style="border-color:#facc15">
       <div class="journey-card-header">
         <span class="journey-step-badge" style="background:#eab308;color:#0f172a">${roundName} MATCH</span>
@@ -1639,31 +1943,85 @@ export function championshipScr(): void {
         "${opp.dialogue?.intro || "I've come too far to lose now!"}"
       </div>
       <button id="btn-champ-fight" style="width:100%;text-align:center;background:linear-gradient(180deg,#eab308,#ca8a04);color:#0f172a;border-color:#a16207;font-size:15px;font-weight:900">
-        ⚔ ENTER BATTLE VS ${opp.name.toUpperCase()}
+        ⚔ START BATTLE VS ${opp.name.toUpperCase()}
       </button>
     </div>
 
-    <div class="quick-actions-bar" style="display:flex;gap:8px;margin-bottom:12px">
-      <button id="qh-train-c" class="qpm-btn qpm-train" style="flex:1">
-        💪 TRAIN (${G.tk || 0}/${G.tmax || 5})
-      </button>
-      <button id="qh-heal-c" class="qpm-btn qpm-heal" style="flex:1">
-        🩹 HEAL
-      </button>
-      <button id="qh-shop-c" class="qpm-btn" style="flex:1;background:linear-gradient(180deg,#0284c7,#0369a1);color:#fff;border-color:#075985">
-        🛒 POKÉ MART
-      </button>
+    <!-- Preparation Bar: ALL BUTTONS IMMEDIATELY VISIBLE -->
+    <div class="champ-prep-actions">
+      <div class="champ-prep-grid">
+        <button id="btn-champ-train" class="champ-prep-btn" title="Train a Pokémon with 2x boosted XP">
+          💪 TRAIN (${G.tk || 0}/${G.tmax || 5})<span class="boost-badge">2× XP</span>
+        </button>
+        <button id="btn-champ-bag" class="champ-prep-btn" title="Open bag to use berries, stones, or revives">
+          🎒 BAG / MEDICINE
+        </button>
+        <button id="btn-champ-team" class="champ-prep-btn" title="Manage party and PC box Pokémon">
+          👥 TEAM & PC BOX
+        </button>
+        <button id="btn-champ-bracket" class="champ-prep-btn" title="Scroll down to view tournament bracket">
+          📊 VIEW BRACKET
+        </button>
+        <button id="btn-champ-city" class="champ-prep-btn" style="grid-column: 1 / -1; background: linear-gradient(180deg,#0284c7,#0369a1); border-color: #075985; color: #fff" title="Take a break in the city to heal, shop, or manage team">
+          🏙 RETURN TO CITY (Pokémon Center / Poké Mart)
+        </button>
+      </div>
     </div>
 
+    <!-- Active Party Preview Table -->
+    <div class="section-title-bar" style="margin-top:12px">
+      <span class="section-title-text">⚔️ ACTIVE BATTLE SQUAD</span>
+      <span class="section-title-count">${G.team.length}/6 READY</span>
+    </div>
     <table>
       ${G.team.map((m, idx) => trow(m, idx)).join('')}
     </table>
+
+    <!-- Bracket Section -->
+    <div id="champ-bracket-section" style="margin-top:16px">
+      <div class="section-title-bar" style="border-left-color:#facc15">
+        <span class="section-title-text">📊 16-PLAYER TOURNAMENT BRACKET</span>
+        <span class="section-title-count">${roundName}</span>
+      </div>
+      ${championshipBracketHTML(G.tournament)}
+    </div>
   `;
 
+  // Start Battle
   $('#btn-champ-fight').onclick = () => battleChampionship(roundIdx);
-  $('#qh-train-c').onclick = () => trainScr();
-  $('#qh-heal-c').onclick = () => healScr();
-  $('#qh-shop-c').onclick = () => shopScr();
+
+  // Train (with 2x XP)
+  $('#btn-champ-train').onclick = () => trainScr();
+
+  // Bag & Medicine
+  $('#btn-champ-bag').onclick = async () => {
+    const r = await bagUI(G.team, 0);
+    if (!r) return championshipScr();
+    HUB = [];
+    if (r.i && r.i.length === 2) await stone(G.team[r.j], r.i);
+    else await useItem(r, G.team);
+    const l = HUB;
+    HUB = null;
+    save();
+    if (l && l.length) await note(l);
+    championshipScr();
+  };
+
+  // Team & PC Box
+  $('#btn-champ-team').onclick = () => teamScr();
+
+  // View Bracket (smooth scroll)
+  $('#btn-champ-bracket').onclick = () => {
+    const sec = document.getElementById('champ-bracket-section');
+    if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Return to City
+  $('#btn-champ-city').onclick = () => {
+    G.phase = 'JOURNEY_HUB';
+    save();
+    journeyHubScr();
+  };
 
   // Individual Pokémon Row Action Buttons
   document.querySelectorAll<HTMLButtonElement>('.ind-train').forEach(btn => {
@@ -1929,13 +2287,74 @@ export const ELITE_FOUR_MEMBERS: Record<string, EliteFourMember> = {
   },
 };
 
+export async function directLevelUp(m: MonInstance): Promise<void> {
+  const name = POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase() || 'POKÉMON';
+  const oldMax = st(m).max;
+  m.lv++;
+  m.exp = 0;
+  const newMax = st(m).max;
+  m.hp += Math.max(1, newMax - oldMax);
+  ui();
+  sound.beep(880, 0.35, 'triangle', 0.2);
+  await say(`⚡ POWER-UP ACTIVATED!<br><b>${name}</b> gained a direct level-up to <b>Level ${m.lv}</b>!`, 300);
+  await evo(m);
+  await learn(m);
+  save();
+}
+
+export async function eliteFourPowerUpModal(): Promise<void> {
+  if (!G.eliteFour) G.eliteFour = { defeated: [], activeMember: null, powerUpsRemaining: 3 };
+  G.eliteFour.powerUpsRemaining = G.eliteFour.powerUpsRemaining ?? 3;
+
+  const remaining = G.eliteFour.powerUpsRemaining;
+
+  const choices = G.team.map((m) => {
+    const spec = POKEMON_SPECIES_MAP[m.id];
+    const name = spec ? spec.name : 'Pokémon';
+    return {
+      d: remaining <= 0,
+      h: `<b>${name}</b> (Lv.${m.lv} ➔ Lv.${m.lv + 1}) · HP ${m.hp}/${st(m).max}<br><small>${spec?.typesShort.map(tb).join('') || ''}</small>`,
+    };
+  });
+
+  const pickIdx = await pick(
+    `⚡ <b>ELITE FOUR POWER-UP BLESSING</b><br>
+     Remaining Level-Ups: <b>${remaining} / 3</b><br>
+     Select a Pokémon to bestow an immediate +1 level:`,
+    choices,
+    true,
+    'l'
+  );
+
+  if (pickIdx >= 0 && remaining > 0) {
+    G.eliteFour.powerUpsRemaining--;
+    const chosenMon = G.team[pickIdx];
+    await directLevelUp(chosenMon);
+    if ((G.eliteFour.powerUpsRemaining || 0) > 0) {
+      eliteFourPowerUpModal();
+    } else {
+      await note([
+        `⚡ <b>ALL ELITE FOUR POWER-UPS USED!</b>`,
+        `All 3 preparation level-ups have been applied to your team.`,
+        `Your squad is fully primed for the Elite Four battles!`,
+      ]);
+      eliteFourHub();
+    }
+  } else {
+    eliteFourHub();
+  }
+}
+
 export async function eliteFourHub(): Promise<void> {
   sound.music('menu');
   show('map');
 
+  G.phase = 'ELITE_FOUR_HUB';
   if (!G.eliteFour) {
-    G.eliteFour = { defeated: [], activeMember: null };
+    G.eliteFour = { defeated: [], activeMember: null, powerUpsRemaining: 3 };
   }
+  G.eliteFour.powerUpsRemaining = G.eliteFour.powerUpsRemaining ?? 3;
+  save();
 
   const defCount = G.eliteFour.defeated.length;
   if (defCount >= 4) {
@@ -1945,10 +2364,41 @@ export async function eliteFourHub(): Promise<void> {
   const memberKeys = ['lorelei', 'bruno', 'agatha', 'lance'];
 
   $('#map').innerHTML = `
-    <h1>THE ELITE FOUR</h1>
-    <p style="text-align:center">Champion Endgame Challenge · Defeated: <b>${defCount} / 4</b></p>
+    <h1>THE ELITE FOUR 🏛️</h1>
+    <p style="text-align:center">Indigo Plateau · Defeated: <b>${defCount} / 4 Members</b></p>
     ${renderBadgesBar(G.badges)}
     ${renderResourcesBar()}
+
+    <!-- Elite Four 3x Level-Up Power-Up Banner -->
+    <div class="e4-powerup-banner">
+      <div>
+        <div style="font-weight:900;font-size:15px;color:#facc15">⚡ ELITE FOUR POWER-UP BLESSING</div>
+        <div style="font-size:12.5px;color:#cbd5e1;margin-top:2px">
+          Champion Preparation: <b>${G.eliteFour.powerUpsRemaining || 0} of 3 Uses Remaining</b> (+1 Level Each)
+        </div>
+      </div>
+      <button id="btn-e4-powerup" class="powerup-btn" ${(G.eliteFour.powerUpsRemaining || 0) <= 0 ? 'disabled' : ''}>
+        ${(G.eliteFour.powerUpsRemaining || 0) > 0 ? `⚡ USE POWER-UP (${G.eliteFour.powerUpsRemaining} LEFT)` : '✓ ALL 3 USED'}
+      </button>
+    </div>
+
+    <!-- Quick Actions Bar for Elite Four Preparation -->
+    <div class="champ-prep-actions" style="margin-bottom:12px">
+      <div class="champ-prep-grid">
+        <button id="btn-e4-bag" class="champ-prep-btn" title="Open bag to use berries, revives, or stones">
+          🎒 BAG / MEDICINE
+        </button>
+        <button id="btn-e4-team" class="champ-prep-btn" title="Manage active party and PC storage">
+          👥 TEAM & PC BOX
+        </button>
+        <button id="btn-e4-shop" class="champ-prep-btn" title="Visit Indigo Plateau Poké Mart branch">
+          🛒 POKÉ MART
+        </button>
+        <button id="btn-e4-heal" class="champ-prep-btn" title="Heal party Pokémon with berries">
+          🩹 HEAL POKÉMON
+        </button>
+      </div>
+    </div>
 
     <div class="e4-grid">
       ${memberKeys
@@ -1969,10 +2419,46 @@ export async function eliteFourHub(): Promise<void> {
       .join('')}
     </div>
 
+    <div class="section-title-bar" style="margin-top:14px">
+      <span class="section-title-text">⚔️ ACTIVE BATTLE SQUAD</span>
+      <span class="section-title-count">${G.team.length}/6 READY</span>
+    </div>
+    <table>
+      ${G.team.map((m, idx) => trow(m, idx)).join('')}
+    </table>
+
     <div class="col" style="margin-top:14px;gap:8px">
-      <button id="btn-e4-hub-return">RETURN TO CITY</button>
+      <button id="btn-e4-hub-return">🏙 RETURN TO CITY</button>
     </div>
   `;
+
+  // Power Up Modal
+  const powerUpBtn = $('#btn-e4-powerup') as HTMLButtonElement;
+  if (powerUpBtn) {
+    powerUpBtn.onclick = () => {
+      if ((G.eliteFour?.powerUpsRemaining || 0) > 0) {
+        eliteFourPowerUpModal();
+      }
+    };
+  }
+
+  // Quick prep controls
+  $('#btn-e4-bag').onclick = async () => {
+    const r = await bagUI(G.team, 0);
+    if (!r) return eliteFourHub();
+    HUB = [];
+    if (r.i && r.i.length === 2) await stone(G.team[r.j], r.i);
+    else await useItem(r, G.team);
+    const l = HUB;
+    HUB = null;
+    save();
+    if (l && l.length) await note(l);
+    eliteFourHub();
+  };
+
+  $('#btn-e4-team').onclick = () => teamScr();
+  $('#btn-e4-shop').onclick = () => shopScr();
+  $('#btn-e4-heal').onclick = () => healScr();
 
   document.querySelectorAll<HTMLElement>('.e4-card').forEach(card => {
     card.onclick = async () => {
@@ -1990,7 +2476,28 @@ export async function eliteFourHub(): Promise<void> {
     };
   });
 
-  $('#btn-e4-hub-return').onclick = () => journeyHubScr();
+  // Individual Pokémon Row Action Buttons
+  document.querySelectorAll<HTMLButtonElement>('.ind-train').forEach(btn => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.idx || '0', 10);
+      trainSingleMon(idx);
+    };
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.ind-heal').forEach(btn => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.idx || '0', 10);
+      healSingleMon(idx);
+    };
+  });
+
+  $('#btn-e4-hub-return').onclick = () => {
+    G.phase = 'JOURNEY_HUB';
+    save();
+    journeyHubScr();
+  };
 }
 
 export async function battleEliteFour(memberId: string): Promise<void> {
@@ -2068,7 +2575,28 @@ export async function battleEliteFour(memberId: string): Promise<void> {
   pokemon3DManager.stop();
 
   if (res === 'lose') {
-    return showDefeat(true, member.name);
+    sound.music('menu');
+    sound.beep(160, 0.4, 'sawtooth');
+
+    // Fully restore team HP (Nurse Joy Indigo Plateau treatment)
+    G.team.forEach(m => {
+      m.hp = st(m).max;
+    });
+    save();
+
+    const defCount = G.eliteFour?.defeated?.length || 0;
+    await note([
+      `<h1>⚔️ DEFEATED BY ${member.avatar} ${member.name.toUpperCase()}</h1>`,
+      `<b>${member.title}</b>`,
+      `<p style="margin:8px 0;font-style:italic">"Train harder and challenge me again when you are truly prepared!"</p>`,
+      `Your team whited out and rushed to the <b>Indigo Plateau Pokémon Center</b>.<br>Nurse Joy has fully restored all your Pokémon to 100% full health!`,
+      `<br><b>PROGRESSION CHECKPOINT SAVED:</b>`,
+      `✓ <b>${defCount} of 4</b> Elite Four Members remain completed!`,
+      ...(defCount > 0 ? [`Defeated: <b>${G.eliteFour!.defeated.map(k => ELITE_FOUR_MEMBERS[k]?.name || k).join(', ')}</b>`] : []),
+      `<br>You can challenge <b>${member.name}</b> again immediately or prepare your team!`,
+    ]);
+
+    return eliteFourHub();
   }
 
   // Defeated Elite Four Member!
@@ -2258,41 +2786,55 @@ export async function showWildDefeat(wildMon: EncounterMon, returnCoords?: { rou
 }
 
 // ============================================================================
-// SCREEN 13: TOURNAMENT ELIMINATION (PERMANENT RUN RESET ON TOURNAMENT LOSS)
+// SCREEN 13: TOURNAMENT & ELITE FOUR DEFEAT (PROGRESSION & CHECKPOINTS PRESERVED)
 // ============================================================================
 export async function showDefeat(isEliteFour: boolean = false, foeName: string = ''): Promise<void> {
   pokemon3DManager.stop();
-  try {
-    localStorage.removeItem(KEY);
-  } catch { }
 
-  if (G) {
-    G.defeated = true;
-  }
+  // Restore team HP so the player can recover and prepare
+  G.team.forEach(m => {
+    m.hp = st(m).max;
+  });
+  save();
 
   sound.music('menu');
   sound.beep(140, 0.6, 'sawtooth');
 
+  const titleText = isEliteFour ? 'ELITE FOUR DEFEAT' : 'TOURNAMENT MATCH DEFEAT';
+  const subText = isEliteFour
+    ? `Defeated by Elite Four member: <b>${foeName || 'Opponent'}</b>`
+    : `Defeated by Championship opponent: <b>${foeName || 'Tournament Opponent'}</b>`;
+
   const choice = await pick(
     `<div class="defeat-screen">
-      <div class="defeat-skull">🏆</div>
-      <div class="defeat-title">${isEliteFour ? 'ELITE FOUR ELIMINATION' : 'TOURNAMENT ELIMINATION'}</div>
-      <div class="defeat-subtitle">You have been eliminated from the Kanto Tournament!</div>
+      <div class="defeat-skull">⚔️</div>
+      <div class="defeat-title">${titleText}</div>
+      <div class="defeat-subtitle">All your Pokémon fainted in battle!</div>
       <div class="defeat-stats">
-        Eliminated by: <b>${foeName || 'Tournament Opponent'}</b><br>
-        In the official Pokémon League Championship, tournament losses are final.
+        ${subText}<br>
+        Your team was rushed to the Pokémon Center and fully restored to 100% health.<br>
+        <b>Your tournament progression and completed matches are preserved!</b>
       </div>
     </div>`,
     [
-      { h: '<b>START NEW JOURNEY</b>' },
-      { h: 'MAIN MENU' },
+      { h: '<b>🔄 RETRY MATCH</b>' },
+      { h: '🏙 RETURN TO CITY / PREPARATION' },
+      { h: '🏠 MAIN MENU' },
     ],
     false,
     'defeat-actions'
   );
 
   if (choice === 0) {
-    await introScr();
+    if (isEliteFour && G.eliteFour?.activeMember) {
+      await battleEliteFour(G.eliteFour.activeMember);
+    } else if (G.tournament) {
+      await battleChampionship(G.tournament.currentRoundIndex);
+    } else {
+      returnToCurrentHub();
+    }
+  } else if (choice === 1) {
+    returnToCurrentHub();
   } else {
     titleScr();
   }
@@ -2331,12 +2873,17 @@ export async function trainSingleMon(idx: number): Promise<void> {
 
   G.tk = (G.tk || 1) - 1;
   const baseExp = 30 + G.gymIndex * 15;
-  const e = Math.round(baseExp * (1.1 + R() * 0.3));
+  const mult = getTrainingXpMultiplier(G);
+  const e = Math.round(baseExp * (1.1 + R() * 0.3) * mult);
   const h = Math.min(st(m).max - m.hp, Math.ceil(st(m).max * 0.15));
   m.hp += h;
   m.exp += e;
 
-  HUB = ['💪 TRAINING COMPLETE!', `${n} gained +${e} EXP!`];
+  const notes = ['💪 TRAINING COMPLETE!', `${n} gained +${e} EXP!`];
+  if (mult > 1.0) {
+    notes.push('🏆 <b>Championship Training Bonus</b>: 2× XP Boost applied!');
+  }
+  HUB = notes;
   await lvls(m);
   if (h > 0) HUB.push(`${n} recovered +${h} HP (${m.hp}/${st(m).max} HP).`);
   sound.beep(880, 0.35, 'triangle', 0.15);
@@ -2344,7 +2891,7 @@ export async function trainSingleMon(idx: number): Promise<void> {
   HUB = null;
   save();
   await note(l);
-  journeyHubScr();
+  returnToCurrentHub();
 }
 
 export async function healSingleMon(idx: number): Promise<void> {
@@ -2445,7 +2992,7 @@ export async function healSingleMon(idx: number): Promise<void> {
     `Used ${itemUsed.label.split('(')[0].trim()} on ${n}.`,
     `${n} HP: <b>${m.hp}/${maxHp}</b>`,
   ]);
-  journeyHubScr();
+  returnToCurrentHub();
 }
 
 export async function healScr(): Promise<void> {
@@ -2468,14 +3015,15 @@ export async function healScr(): Promise<void> {
     true,
     'l'
   );
-  if (i < 0) return journeyHubScr();
+  if (i < 0) return returnToCurrentHub();
   await healSingleMon(i);
 }
 
 export async function trainScr(): Promise<void> {
+  const mult = getTrainingXpMultiplier(G);
   const i = await pick(
-    `TRAINING SESSIONS<br>${'★'.repeat(G.tk || 0)}${'☆'.repeat((G.tmax || 5) - (G.tk || 0))}<br>${G.tk || 0} / ${G.tmax || 5
-    } remaining<br>Select a Pokémon to train (+XP, +15% HP):`,
+    `TRAINING SESSIONS ${mult > 1.0 ? '<span class="boost-badge">2× XP BOOST</span>' : ''}<br>${'★'.repeat(G.tk || 0)}${'☆'.repeat((G.tmax || 5) - (G.tk || 0))}<br>${G.tk || 0} / ${G.tmax || 5
+    } remaining<br>Select a Pokémon to train (${mult > 1.0 ? '+2× EXP' : '+EXP'}, +15% HP):`,
     G.team.map(m => ({
       d: (G.tk || 0) < 1,
       h: `${mh(m)}<small>EXP ${m.exp}/${need(m)}</small>`,
@@ -2483,7 +3031,7 @@ export async function trainScr(): Promise<void> {
     true,
     'l'
   );
-  if (i < 0) return journeyHubScr();
+  if (i < 0) return returnToCurrentHub();
   await trainSingleMon(i);
 }
 
@@ -2533,21 +3081,124 @@ export async function evo(m: MonInstance): Promise<void> {
   await say(`It evolved into ${POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase()}!`);
 }
 
+export function showMoveLearnComparisonModal(m: MonInstance, newMove: MoveData): Promise<number> {
+  return new Promise(res => {
+    const o = $('#ov');
+    const spec = POKEMON_SPECIES_MAP[m.id];
+    const monName = spec ? spec.name.toUpperCase() : 'POKÉMON';
+    const newPwr = formatMovePower(newMove.power, newMove.category);
+    const newAcc = newMove.accuracy ? `${newMove.accuracy}%` : '—';
+    const catClass =
+      newMove.category === 'Physical'
+        ? 'category-physical'
+        : newMove.category === 'Special'
+        ? 'category-special'
+        : 'category-status';
+
+    const currentMovesHTML = m.moves
+      .map((mvName, idx) => {
+        const cMove = getMoveData(mvName);
+        const cPwr = formatMovePower(cMove.power, cMove.category);
+        const cAcc = cMove.accuracy ? `${cMove.accuracy}%` : '—';
+        const cCatClass =
+          cMove.category === 'Physical'
+            ? 'category-physical'
+            : cMove.category === 'Special'
+            ? 'category-special'
+            : 'category-status';
+        const cIcon = MOVE_ICONS[cMove.typeShort as keyof typeof MOVE_ICONS] || '💥';
+
+        return `
+        <div class="move-compare-card">
+          <div class="move-compare-top">
+            <span class="move-compare-name">${idx + 1}. ${cIcon} ${cMove.name.toUpperCase()}</span>
+            <span class="t ${cMove.typeShort}">${cMove.type.toUpperCase()}</span>
+          </div>
+          <div class="move-compare-stats">
+            <span class="move-stat-badge ${cCatClass}">${cMove.category.toUpperCase()}</span>
+            <span class="move-stat-badge">PWR: <b>${cPwr}</b></span>
+            <span class="move-stat-badge">ACC: <b>${cAcc}</b></span>
+          </div>
+          <button class="btn-replace-move" data-replace-idx="${idx}">
+            REPLACE WITH ${newMove.name.toUpperCase()} ➔
+          </button>
+        </div>
+      `;
+      })
+      .join('');
+
+    o.innerHTML = `
+      <div class="move-learn-box">
+        <div class="move-learn-header">
+          <div class="move-learn-title">✨ NEW MOVE LEARNED!</div>
+          <div class="move-learn-subtitle"><b>${monName} (Lv. ${m.lv})</b> wants to learn a new technique!</div>
+        </div>
+
+        <!-- NEW MOVE BANNER -->
+        <div class="new-move-banner">
+          <div class="new-move-top">
+            <span class="new-move-name">${MOVE_ICONS[newMove.typeShort as keyof typeof MOVE_ICONS] || '💥'} ${newMove.name.toUpperCase()}</span>
+            <span class="t ${newMove.typeShort}">${newMove.type.toUpperCase()}</span>
+          </div>
+          <div class="move-compare-stats">
+            <span class="move-stat-badge ${catClass}">${newMove.category.toUpperCase()}</span>
+            <span class="move-stat-badge highlight">PWR: <b>${newPwr}</b></span>
+            <span class="move-stat-badge">ACC: <b>${newAcc}</b></span>
+          </div>
+          <div class="new-move-desc">${newMove.description || ''}</div>
+        </div>
+
+        <div class="move-replace-prompt">
+          ${monName} already knows 4 moves.<br>Choose a move to replace:
+        </div>
+
+        <div class="current-moves-grid">
+          ${currentMovesHTML}
+        </div>
+
+        <button class="btn-cancel-learn" id="btn-cancel-move-learn">
+          🛡️ DO NOT LEARN (Keep Current 4 Moves)
+        </button>
+      </div>
+    `;
+
+    o.style.display = 'flex';
+
+    o.onclick = e => {
+      const target = e.target as HTMLElement;
+      const replaceBtn = target.closest<HTMLButtonElement>('.btn-replace-move');
+      if (replaceBtn && replaceBtn.dataset.replaceIdx !== undefined) {
+        const replaceIdx = parseInt(replaceBtn.dataset.replaceIdx, 10);
+        o.style.display = 'none';
+        res(replaceIdx);
+        return;
+      }
+
+      const cancelBtn = target.closest<HTMLButtonElement>('#btn-cancel-move-learn');
+      if (cancelBtn) {
+        o.style.display = 'none';
+        res(-1);
+        return;
+      }
+    };
+  });
+}
+
 export async function learn(m: MonInstance): Promise<void> {
   for (const mv of pool(m).filter(x => x.unlockLevel === m.lv && !m.moves.includes(x.name))) {
-    const n = POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase();
+    const n = POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase() || 'POKÉMON';
+    const moveData = getMoveData(mv.name);
+
     if (m.moves.length < 4) {
       m.moves.push(mv.name);
+      sound.beep(880, 0.25, 'triangle');
       await say(`${n} learned ${mv.name.toUpperCase()}!`);
     } else {
-      const i = await pick(
-        `${n} wants to learn ${mv.name.toUpperCase()}.<br>It already knows 4 moves. Replace which?`,
-        m.moves.map(k => ({ h: mvh(MOVES_DATA[k]) })),
-        true
-      );
-      if (i >= 0) {
-        const old = m.moves[i];
-        m.moves[i] = mv.name;
+      const replaceIdx = await showMoveLearnComparisonModal(m, moveData);
+      if (replaceIdx >= 0 && replaceIdx < m.moves.length) {
+        const old = m.moves[replaceIdx];
+        m.moves[replaceIdx] = mv.name;
+        sound.beep(880, 0.3, 'sine');
         await say(`${n} forgot ${old.toUpperCase()} and learned ${mv.name.toUpperCase()}!`);
       } else {
         await say(`${n} did not learn ${mv.name.toUpperCase()}.`);
@@ -2925,7 +3576,9 @@ export async function sw(s: 'p' | 'f', j: number): Promise<void> {
 }
 
 export const ITEMS: Record<string, { ic: string; n: string; d: string; pct: number; t: (m: MonInstance) => boolean; k: keyof GameSaveState }> = {
-  ball: { ic: '⚾', n: 'Poké Ball', d: 'Throw to catch a wild Pokémon.', pct: 0, t: () => !!(B && B.isWild), k: 'balls' },
+  ball: { ic: '⚾', n: 'Poké Ball', d: 'Catch Rate: Standard (1.0×)', pct: 0, t: () => !!(B && B.isWild), k: 'balls' },
+  greatBall: { ic: '🔵', n: 'Great Ball', d: 'Catch Rate: Better (1.5×)', pct: 0, t: () => !!(B && B.isWild), k: 'greatBalls' },
+  ultraBall: { ic: '🟡', n: 'Ultra Ball', d: 'Catch Rate: Best (2.0×)', pct: 0, t: () => !!(B && B.isWild), k: 'ultraBalls' },
   b: { ic: '🍓', n: 'Oran Berry (30%)', d: 'Restores 30% of max HP.', pct: 0.3, t: m => m.hp > 0 && m.hp < st(m).max, k: 'b' },
   s: { ic: '🫐', n: 'Sitrus Berry (50%)', d: 'Restores 50% of max HP.', pct: 0.5, t: m => m.hp > 0 && m.hp < st(m).max, k: 'b50' },
   h: { ic: '🍇', n: 'Enigma Berry (75%)', d: 'Restores 75% of max HP.', pct: 0.75, t: m => m.hp > 0 && m.hp < st(m).max, k: 'b75' },
@@ -2941,31 +3594,31 @@ export const STN: Record<string, [string, string]> = {
   Mo: ['🌙', 'Moon Stone'],
 };
 
-export const qty = (k: string) =>
-  k === 'ball'
-    ? ((G.balls as number) || 0)
-    : k.length === 1
-      ? ((G[ITEMS[k].k] as number) || 0)
-      : G.st[k] || 0;
+export const qty = (k: string) => {
+  if (k === 'ball') return (G.balls as number) || 0;
+  if (k === 'greatBall') return (G.greatBalls as number) || 0;
+  if (k === 'ultraBall') return (G.ultraBalls as number) || 0;
+  if (ITEMS[k]) return (G[ITEMS[k].k] as number) || 0;
+  return G.st[k] || 0;
+};
 
-export const elig = (k: string, m: MonInstance) =>
-  k === 'ball'
-    ? !!(B && B.isWild)
-    : k.length === 1
-      ? ITEMS[k].t(m)
-      : (STONE_EVOLUTIONS[m.id] || []).some(e => e.stoneType === k);
+export const elig = (k: string, m: MonInstance) => {
+  if (k === 'ball' || k === 'greatBall' || k === 'ultraBall') return !!(B && B.isWild);
+  if (ITEMS[k]) return ITEMS[k].t(m);
+  return (STONE_EVOLUTIONS[m.id] || []).some(e => e.stoneType === k);
+};
 
 export async function bagUI(tm: MonInstance[], bt?: number): Promise<any> {
   for (; ;) {
     const it = (Object.keys(ITEMS) as (keyof typeof ITEMS)[])
       .filter(key => {
-        if (key === 'ball') return !!(B && B.isWild);
+        if (key === 'ball' || key === 'greatBall' || key === 'ultraBall') return !!(B && B.isWild);
         return true;
       })
       .map(key => ({
         ...ITEMS[key],
         k: key,
-        c: (G[ITEMS[key].k] as number) || 0,
+        c: ((G[ITEMS[key].k] as number) || 0),
       }));
     const st = Object.keys(STN).map(k => ({
       k,
@@ -2992,8 +3645,8 @@ export async function bagUI(tm: MonInstance[], bt?: number): Promise<any> {
     if (i < 0) return null;
 
     const chosen = all[i];
-    if (chosen.k === 'ball') {
-      return { k: 'ball' };
+    if (chosen.k === 'ball' || chosen.k === 'greatBall' || chosen.k === 'ultraBall') {
+      return { k: chosen.k };
     }
 
     const j = await pick(
@@ -3120,12 +3773,16 @@ export async function turn(pa: any): Promise<string | null> {
     }
   }
 
-  // 2. POKÉ BALL THROW & CAPTURE SEQUENCE
-  if (pa.k === 'ball') {
+  // 2. POKÉ BALL / GREAT BALL / ULTRA BALL THROW & CAPTURE SEQUENCE
+  if (pa.k === 'ball' || pa.k === 'greatBall' || pa.k === 'ultraBall') {
     if (B && B.isWild) {
-      G.balls = Math.max(0, (G.balls || 1) - 1);
+      const ballKey = pa.k as 'ball' | 'greatBall' | 'ultraBall';
+      const ballCfg = BALL_CONFIG[ballKey];
+      if (ballKey === 'ball') G.balls = Math.max(0, (G.balls || 1) - 1);
+      else if (ballKey === 'greatBall') G.greatBalls = Math.max(0, (G.greatBalls || 1) - 1);
+      else if (ballKey === 'ultraBall') G.ultraBalls = Math.max(0, (G.ultraBalls || 1) - 1);
       save();
-      await say(`${G.trainerName.toUpperCase()} threw a POKÉ BALL!`, 200);
+      await say(`${G.trainerName.toUpperCase()} threw a ${ballCfg.name.toUpperCase()}!`, 200);
 
       // Poké Ball flight animation across battlefield
       const pw = $('#pw');
@@ -3133,7 +3790,7 @@ export async function turn(pa: any): Promise<string | null> {
       const pRect = pw ? ctr(pw) : { x: 250, y: 750 };
       const fRect = fw ? ctr(fw) : { x: 730, y: 520 };
 
-      // Create high-detail realistic SVG Poké Ball projectile
+      // Create high-detail realistic SVG Ball projectile
       const ballContainer = document.createElement('div');
       ballContainer.className = 'pokeball-projectile';
       ballContainer.style.left = pRect.x + 'px';
@@ -3143,10 +3800,10 @@ export async function turn(pa: any): Promise<string | null> {
         <div class="pkb-rotator">
           <svg class="pkb-svg" viewBox="0 0 100 100" width="46" height="46">
             <defs>
-              <radialGradient id="pkb-red-grad" cx="35%" cy="30%" r="65%">
-                <stop offset="0%" stop-color="#ff4d4d"/>
-                <stop offset="60%" stop-color="#dc2626"/>
-                <stop offset="100%" stop-color="#881337"/>
+              <radialGradient id="pkb-top-grad" cx="35%" cy="30%" r="65%">
+                <stop offset="0%" stop-color="${ballCfg.topGrad[0]}"/>
+                <stop offset="60%" stop-color="${ballCfg.topGrad[1]}"/>
+                <stop offset="100%" stop-color="${ballCfg.topGrad[2]}"/>
               </radialGradient>
               <radialGradient id="pkb-white-grad" cx="35%" cy="30%" r="65%">
                 <stop offset="0%" stop-color="#ffffff"/>
@@ -3160,7 +3817,9 @@ export async function turn(pa: any): Promise<string | null> {
               </linearGradient>
             </defs>
             <circle cx="50" cy="50" r="48" fill="#0f172a" />
-            <path d="M 4 50 A 46 46 0 0 1 96 50 Z" fill="url(#pkb-red-grad)" />
+            <path d="M 4 50 A 46 46 0 0 1 96 50 Z" fill="url(#pkb-top-grad)" />
+            ${ballKey === 'greatBall' ? '<rect x="18" y="16" width="14" height="6" fill="#ef4444" rx="2" transform="rotate(-25 25 19)"/><rect x="68" y="16" width="14" height="6" fill="#ef4444" rx="2" transform="rotate(25 75 19)"/>' : ''}
+            ${ballKey === 'ultraBall' ? '<path d="M 22 10 L 32 46 L 24 46 Z" fill="#facc15"/><path d="M 78 10 L 68 46 L 76 46 Z" fill="#facc15"/>' : ''}
             <ellipse cx="36" cy="24" rx="14" ry="7" fill="rgba(255,255,255,0.4)" transform="rotate(-15 36 24)" />
             <path d="M 4 50 A 46 46 0 0 0 96 50 Z" fill="url(#pkb-white-grad)" />
             <rect x="3" y="46" width="94" height="8" fill="#0f172a" />
@@ -3260,8 +3919,8 @@ export async function turn(pa: any): Promise<string | null> {
         { duration: 180, easing: 'ease-out', fill: 'forwards' }
       ).finished;
 
-      // 4. Suspenseful Wobble Sequence
-      const catchResult = calculateCatchSuccess(F());
+      // 4. Suspenseful Wobble Sequence with Ball-Specific Multiplier
+      const catchResult = calculateCatchSuccess(F(), ballCfg.multiplier);
       const success = catchResult.success;
       const shakeCount = catchResult.shakeCount;
       const maxShakes = success ? 3 : Math.max(1, shakeCount);

@@ -5092,8 +5092,17 @@ tr:last-child td {
   color: #0f172a !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
+  box-sizing: border-box !important;
   scrollbar-width: thin !important;
   scrollbar-color: rgba(220, 38, 38, 0.4) transparent !important;
+}
+
+@media (max-width: 600px) {
+  #pokedex.scr {
+    margin: 4px 6px !important;
+    border-radius: 16px !important;
+    border-width: 2.5px !important;
+  }
 }
 
 #pokedex::-webkit-scrollbar,
@@ -5122,9 +5131,12 @@ tr:last-child td {
   display: flex !important;
   flex-direction: column !important;
   gap: 14px !important;
-  max-width: 600px !important;
+  max-width: 720px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
   margin: 0 auto !important;
   color: #0f172a !important;
+  overflow-x: hidden !important;
 }
 
 .dex-top-bar {
@@ -5249,22 +5261,20 @@ tr:last-child td {
 
 .dex-recent-row {
   display: flex !important;
-  gap: 10px !important;
-  overflow-x: auto !important;
-  padding-bottom: 4px !important;
-  scrollbar-width: none !important;
-}
-
-.dex-recent-row::-webkit-scrollbar {
-  display: none !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  overflow-x: visible !important;
+  padding-bottom: 2px !important;
 }
 
 .dex-recent-card {
-  flex: 0 0 92px !important;
+  flex: 1 1 calc(25% - 8px) !important;
+  max-width: 96px !important;
+  min-width: 68px !important;
   background: #ffffff !important;
   border: 2px solid #e2e8f0 !important;
   border-radius: 14px !important;
-  padding: 8px 6px !important;
+  padding: 8px 4px !important;
   text-align: center !important;
   cursor: pointer !important;
   transition: all var(--motion-fast) !important;
@@ -5279,24 +5289,24 @@ tr:last-child td {
 }
 
 .dex-recent-card img {
-  width: 54px !important;
-  height: 54px !important;
+  width: 50px !important;
+  height: 50px !important;
   object-fit: contain !important;
   margin: 0 auto !important;
 }
 
 .recent-card-name {
-  font-size: 11.5px !important;
+  font-size: 11px !important;
   font-weight: 800 !important;
   color: #0f172a !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  margin-top: 4px !important;
+  margin-top: 3px !important;
 }
 
 .recent-card-tag {
-  font-size: 9.5px !important;
+  font-size: 9px !important;
   font-weight: 900 !important;
   color: #16a34a !important;
   letter-spacing: 0.5px !important;
@@ -5306,6 +5316,8 @@ tr:last-child td {
   position: relative !important;
   display: flex !important;
   align-items: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .dex-search-icon {
@@ -5317,6 +5329,7 @@ tr:last-child td {
 
 .dex-search-field {
   width: 100% !important;
+  box-sizing: border-box !important;
   background: #ffffff !important;
   border: 2px solid #cbd5e1 !important;
   color: #0f172a !important;
@@ -5350,23 +5363,20 @@ tr:last-child td {
 
 .dex-filter-chips {
   display: flex !important;
-  gap: 8px !important;
-  overflow-x: auto !important;
-  padding-bottom: 4px !important;
-  scrollbar-width: none !important;
-}
-
-.dex-filter-chips::-webkit-scrollbar {
-  display: none !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  overflow-x: visible !important;
+  padding-bottom: 2px !important;
+  justify-content: flex-start !important;
 }
 
 .dex-chip {
   background: #f8fafc !important;
   border: 1.5px solid #cbd5e1 !important;
   color: #475569 !important;
-  padding: 6px 14px !important;
+  padding: 5px 12px !important;
   border-radius: 999px !important;
-  font-size: 11.5px !important;
+  font-size: 11px !important;
   font-weight: 800 !important;
   cursor: pointer !important;
   white-space: nowrap !important;
@@ -5386,18 +5396,20 @@ tr:last-child td {
   box-shadow: 0 2px 8px rgba(220, 38, 38, 0.35) !important;
 }
 
-/* Two Pokémon in one row */
+/* Pokédex Grid Responsive Rules */
 .dex-grid {
   display: grid !important;
-  grid-template-columns: 1fr 1fr !important;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important;
   gap: 12px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .dex-grid-card {
   background: #ffffff !important;
   border: 2px solid #e2e8f0 !important;
   border-radius: 16px !important;
-  padding: 12px 8px !important;
+  padding: 12px 10px !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -5406,6 +5418,7 @@ tr:last-child td {
   transition: all var(--motion-fast) !important;
   position: relative !important;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05) !important;
+  box-sizing: border-box !important;
 }
 
 .dex-grid-card:hover {
@@ -5428,18 +5441,25 @@ tr:last-child td {
   width: 74px !important;
   height: 74px !important;
   object-fit: contain !important;
-  margin: 10px 0 6px !important;
+  margin: 8px 0 4px !important;
 }
 
 .grid-card-art img.silhouette {
   filter: brightness(0) opacity(0.3) !important;
 }
 
+.dex-card-info {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 2px !important;
+}
+
 .grid-card-title {
   font-size: 13.5px !important;
   font-weight: 900 !important;
   color: #0f172a !important;
-  margin-bottom: 4px !important;
+  margin-bottom: 2px !important;
 }
 
 .dex-grid-card.unseen .grid-card-title {
@@ -5487,6 +5507,87 @@ tr:last-child td {
   background: #f1f5f9 !important;
   color: #94a3b8 !important;
   border: 1px solid #e2e8f0 !important;
+}
+
+/* Mobile Screen Layout: One Pokémon per row, sleek horizontal card */
+@media (max-width: 600px) {
+  .dex-modern-view {
+    padding: 12px 10px 24px !important;
+    gap: 12px !important;
+  }
+
+  .dex-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .dex-grid-card {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    padding: 10px 12px !important;
+    gap: 12px !important;
+    text-align: left !important;
+    border-radius: 14px !important;
+  }
+
+  .grid-card-id {
+    position: static !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    color: #64748b !important;
+    min-width: 38px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .grid-card-art {
+    width: 54px !important;
+    height: 54px !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #f8fafc !important;
+    border-radius: 12px !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+
+  .grid-card-art img {
+    width: 46px !important;
+    height: 46px !important;
+    margin: 0 !important;
+  }
+
+  .dex-card-info {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    gap: 3px !important;
+  }
+
+  .grid-card-title {
+    font-size: 14px !important;
+    font-weight: 900 !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .grid-card-types {
+    display: flex !important;
+    gap: 4px !important;
+    justify-content: flex-start !important;
+    margin: 0 !important;
+  }
+
+  .grid-card-status {
+    flex-shrink: 0 !important;
+    margin-left: auto !important;
+  }
 }
 
 /* Pokédex Detail View */

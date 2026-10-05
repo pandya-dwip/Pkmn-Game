@@ -160,9 +160,11 @@ export class ModernPokedexView {
           <div class="grid-card-art">
             <img class="${!isSeen ? 'silhouette' : ''}" src="${artwork}" alt="${spec.name}" onerror="this.src='${fallback}'"/>
           </div>
-          <div class="grid-card-title">${isSeen ? spec.name : '???'}</div>
-          <div class="grid-card-types">
-            ${isSeen ? spec.typesShort.map(t => `<span class="t-badge t-${t.toLowerCase()}">${TYPE_NAMES[t as keyof typeof TYPE_NAMES] || t}</span>`).join('') : '<span class="t-badge-unknown">???</span>'}
+          <div class="dex-card-info">
+            <div class="grid-card-title">${isSeen ? spec.name : '???'}</div>
+            <div class="grid-card-types">
+              ${isSeen ? spec.typesShort.map(t => `<span class="t-badge t-${t.toLowerCase()}">${TYPE_NAMES[t as keyof typeof TYPE_NAMES] || t}</span>`).join('') : '<span class="t-badge-unknown">???</span>'}
+            </div>
           </div>
           <div class="grid-card-status">
             ${isCaught ? '<span class="status-pill caught">CAUGHT</span>' : isSeen ? '<span class="status-pill seen">SEEN</span>' : '<span class="status-pill none">UNKNOWN</span>'}

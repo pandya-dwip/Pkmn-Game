@@ -54,6 +54,27 @@ export interface GrassPatch {
   zone?: string;
 }
 
+export interface RouteFence {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface RouteStone {
+  x: number;
+  y: number;
+  radius: number;
+  variant?: 'granite' | 'mossy' | 'slate';
+}
+
+export interface RouteTree {
+  x: number;
+  y: number;
+  scale?: number;
+  type?: 'oak' | 'pine';
+}
+
 export interface RouteDefinition {
   id: number;
   name: string;
@@ -71,6 +92,9 @@ export interface RouteDefinition {
   npcs: RouteNPC[];
   targetEncounters: number;
   exitX: number;
+  fences?: RouteFence[];
+  stones?: RouteStone[];
+  trees?: RouteTree[];
 }
 
 export class RouteExplorationEngine {
@@ -421,52 +445,44 @@ export class RouteExplorationEngine {
       this.player.cooldownTimer -= dt;
     }
 
-    // Move player with collision checks - speed scales with thumb stick magnitude
-    const targetX = this.player.x + dx * this.player.speed * dt;
-    const targetY = this.player.y + dy * this.player.speed * dt;
+    // Move player with axis-aligned sliding collision checks
+    const moveX = dx * this.player.speed * dt;
+    const moveY = dy * this.player.speed * dt;
 
-    // Boundaries
-    const clampedX = Math.max(20, Math.min(this.currentRoute.worldWidth - 20, targetX));
-    const clampedY = Math.max(60, Math.min(this.currentRoute.worldHeight - 40, targetY));
-
-    // Collision with Buildings
-    let blocked = false;
-    for (const b of this.currentRoute.buildings) {
-      // Solid walls, doorway at bottom center
-      if (
-        clampedX >= b.x - 12 &&
-        clampedX <= b.x + b.w + 12 &&
-        clampedY >= b.y - 12 &&
-        clampedY <= b.y + b.h
-      ) {
-        // Doorway check
-        const doorCenterX = b.x + b.w / 2;
-        const atDoor = Math.abs(clampedX - doorCenterX) < 18 && clampedY >= b.y + b.h - 10;
-        if (!atDoor) {
-          blocked = true;
-          break;
-        }
+    if (Math.abs(moveX) > 0.001) {
+      const nextX = this.player.x + moveX;
+      if (!this.isBlocked(nextX, this.player.y, this.currentRoute)) {
+        this.player.x = nextX;
       }
     }
 
-    if (!blocked) {
-      this.player.x = clampedX;
-      this.player.y = clampedY;
+    if (Math.abs(moveY) > 0.001) {
+      const nextY = this.player.y + moveY;
+      if (!this.isBlocked(this.player.x, nextY, this.currentRoute)) {
+        this.player.y = nextY;
+      }
     }
 
-    // Check Tall Grass & Specific Encounter Zone
-    let inGrassNow = false;
+    // Check Tall Grass & Wild Encounters (All Off-Road Terrain is Grass)
+    const onRoad = this.isPointOnRoad(this.player.x, this.player.y, this.currentRoute);
+    const inBuilding = this.isInsideBuilding(this.player.x, this.player.y, this.currentRoute);
+    const inGrassNow = !onRoad && !inBuilding && this.currentRoute.theme !== 'city';
+
     let currentGrassZone: string | undefined = undefined;
-    for (const patch of this.currentRoute.grassPatches) {
-      if (
-        this.player.x >= patch.x &&
-        this.player.x <= patch.x + patch.w &&
-        this.player.y >= patch.y &&
-        this.player.y <= patch.y + patch.h
-      ) {
-        inGrassNow = true;
-        currentGrassZone = patch.zone;
-        break;
+    if (inGrassNow) {
+      for (const patch of this.currentRoute.grassPatches) {
+        if (
+          this.player.x >= patch.x - 4 &&
+          this.player.x <= patch.x + patch.w + 4 &&
+          this.player.y >= patch.y - 4 &&
+          this.player.y <= patch.y + patch.h + 4
+        ) {
+          currentGrassZone = patch.zone;
+          break;
+        }
+      }
+      if (!currentGrassZone) {
+        currentGrassZone = this.currentRoute.theme === 'forest' ? 'forest' : 'field';
       }
     }
 
@@ -477,12 +493,12 @@ export class RouteExplorationEngine {
         this.spawnGrassParticle(this.player.x, this.player.y + 12);
       }
       if (this.player.cooldownTimer <= 0) {
-        this.player.grassSteps += dt * 2.6; // Balanced exploration pacing
+        this.player.grassSteps += dt * 2.2; // Exploration pacing
         if (this.player.grassSteps >= 4.0) {
           this.player.grassSteps = 0;
-          // Roll for wild encounter with fair exploration probability
+          // Roll for wild encounter
           const encounterRoll = Math.random();
-          if (encounterRoll < 0.45) {
+          if (encounterRoll < 0.40) {
             this.triggerWildBattle(currentGrassZone);
             return;
           }
@@ -648,36 +664,48 @@ export class RouteExplorationEngine {
     // 2. Paths & Cobblestone Avenues
     this.renderPaths(ctx, route);
 
-    // 3. Tall Grass with Wind Sway Animation & Wildflowers
+    // 3. Tall Grass with Wind Sway Animation & Wildflowers (Lush everywhere outside roads!)
     this.renderTallGrass(ctx, route);
 
-    // 4. Buildings (Pokémon Center, Poké Mart, Gym, Route Gate)
+    // 4. Natural Stones & Boulders
+    this.renderStones(ctx, route);
+
+    // 5. Wooden Post-and-Rail Fences
+    this.renderFences(ctx, route);
+
+    // 6. Buildings (Pokémon Center, Poké Mart, Gym, Route Gate)
     for (const b of route.buildings) {
       this.renderBuilding(ctx, b);
     }
 
-    // 5. Ground Items (3D Poké Balls with Sparkle)
+    // 7. Ground Items (3D Poké Balls with Sparkle)
     for (const it of route.items) {
       if (!it.collected) {
         this.renderGroundItem(ctx, it);
       }
     }
 
-    // 6. NPCs with Animated Interaction Prompts
+    // 8. Trees BEHIND Player
+    this.renderTreesLayer(ctx, route, 'behind');
+
+    // 9. NPCs with Animated Interaction Prompts
     for (const npc of route.npcs) {
       this.renderNPC(ctx, npc);
     }
 
-    // 7. Grass Particles
+    // 10. Grass Particles
     this.renderGrassParticles(ctx);
 
-    // 8. Player Character (Detailed Red/Ash with Animated Walking Cycle)
+    // 11. Player Character (Detailed Red/Ash with Animated Walking Cycle)
     this.renderPlayer(ctx);
 
-    // 9. Overhead Canopy, Route Signs & Fences
+    // 12. Trees IN FRONT OF Player
+    this.renderTreesLayer(ctx, route, 'front');
+
+    // 13. Overhead Exit Signpost & Scenery
     this.renderOverheadScenery(ctx, route);
 
-    // 10. Ambient Atmospheric Particles (Leaves & Pollen in the Breeze)
+    // 14. Ambient Atmospheric Particles (Leaves & Pollen in the Breeze)
     this.renderAtmosphere(ctx, route);
 
     ctx.restore();
@@ -693,32 +721,32 @@ export class RouteExplorationEngine {
     const baseCol = isForest
       ? '#173d2a'
       : isCity
-      ? '#255d3c'
-      : isRock
-      ? '#3b5238'
-      : isWater
-      ? '#1c4e3e'
-      : '#22552b';
+        ? '#255d3c'
+        : isRock
+          ? '#3b5238'
+          : isWater
+            ? '#1c4e3e'
+            : '#22552b';
 
     const fleckCol = isForest
       ? '#1d4832'
       : isCity
-      ? '#2c6944'
-      : isRock
-      ? '#445c40'
-      : isWater
-      ? '#235e4b'
-      : '#296133';
+        ? '#2c6944'
+        : isRock
+          ? '#445c40'
+          : isWater
+            ? '#235e4b'
+            : '#296133';
 
     const shadeCol = isForest
       ? '#123322'
       : isCity
-      ? '#1e4d31'
-      : isRock
-      ? '#32462f'
-      : isWater
-      ? '#164032'
-      : '#1c4623';
+        ? '#1e4d31'
+        : isRock
+          ? '#32462f'
+          : isWater
+            ? '#164032'
+            : '#1c4623';
 
     // 1. Rich Base Ground Lawn Fill
     ctx.fillStyle = baseCol;
@@ -980,132 +1008,143 @@ export class RouteExplorationEngine {
   private renderTallGrass(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     const px = this.player.x;
     const py = this.player.y;
+    const camW = this.canvas ? this.canvas.width : 800;
+    const camH = this.canvas ? this.canvas.height : 480;
 
+    // 1. Designated Encounter Zone Base Under-Beds
     for (const g of route.grassPatches) {
       ctx.save();
-
-      // 1. Soft Ambient Depth Shadow under Grass Patch
       ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
       ctx.beginPath();
       ctx.roundRect(g.x + 2, g.y + 4, g.w, g.h, 12);
       ctx.fill();
 
-      // 2. Rich Dark Moss Bed Base
       ctx.fillStyle = '#143825';
       ctx.beginPath();
       ctx.roundRect(g.x, g.y, g.w, g.h, 10);
       ctx.fill();
 
-      // 3. Dense Emerald Undergrowth Bed
       ctx.fillStyle = '#1b4a32';
       ctx.beginPath();
       ctx.roundRect(g.x + 3, g.y + 3, g.w - 6, g.h - 6, 8);
       ctx.fill();
-
-      // 4. Dense Multi-Layered Swaying Blade Tufts
-      const tuftStep = 16;
-      for (let tx = g.x + 5; tx < g.x + g.w - 5; tx += tuftStep) {
-        for (let ty = g.y + 5; ty < g.y + g.h - 5; ty += tuftStep) {
-          // Dynamic 2-Phase Wind Waves
-          const broadWind = Math.sin(this.time * 2.8 + tx * 0.05 + ty * 0.04) * 4.2;
-          const rustle = Math.sin(this.time * 6.5 + tx * 0.2 + ty * 0.1) * 1.2;
-          let windSway = broadWind + rustle;
-
-          // Reactive Player Blade Parting:
-          // Blades physically part away when Red walks through the tuft
-          const distToPlayer = Math.hypot(tx - px, ty - py);
-          if (distToPlayer < 36) {
-            const pushFactor = (1 - distToPlayer / 36) * 7.5;
-            const pushDir = tx >= px ? 1 : -1;
-            windSway += pushFactor * pushDir;
-          }
-
-          // Blade 1: Deep Shadow Blade (Dark base depth)
-          ctx.fillStyle = '#0f291c';
-          ctx.beginPath();
-          ctx.moveTo(tx - 4, ty + 13);
-          ctx.lineTo(tx + windSway * 0.7 - 2, ty + 2);
-          ctx.lineTo(tx + 2, ty + 13);
-          ctx.closePath();
-          ctx.fill();
-
-          // Blade 2: Left Curved Jade Blade
-          ctx.fillStyle = '#2d6a4f';
-          ctx.beginPath();
-          ctx.moveTo(tx - 5, ty + 13);
-          ctx.quadraticCurveTo(tx - 3 + windSway * 0.5, ty + 7, tx - 3 + windSway, ty + 1);
-          ctx.lineTo(tx - 1, ty + 13);
-          ctx.closePath();
-          ctx.fill();
-
-          // Blade 3: Center Dominant Emerald Blade with Sunlit Tip
-          ctx.fillStyle = '#40916c';
-          ctx.beginPath();
-          ctx.moveTo(tx - 2, ty + 13);
-          ctx.quadraticCurveTo(tx + windSway * 0.5, ty + 6, tx + windSway + 1, ty - 2);
-          ctx.lineTo(tx + 2, ty + 13);
-          ctx.closePath();
-          ctx.fill();
-
-          // Sunlit Lime Tip on Center Blade
-          ctx.fillStyle = '#74c69d';
-          ctx.beginPath();
-          ctx.moveTo(tx + windSway - 1, ty + 3);
-          ctx.lineTo(tx + windSway + 1, ty - 2);
-          ctx.lineTo(tx + windSway + 3, ty + 3);
-          ctx.closePath();
-          ctx.fill();
-
-          // Blade 4: Right Curved Lime Blade
-          ctx.fillStyle = '#52b788';
-          ctx.beginPath();
-          ctx.moveTo(tx + 1, ty + 13);
-          ctx.quadraticCurveTo(tx + 3 + windSway * 0.6, ty + 7, tx + 4 + windSway, ty + 2);
-          ctx.lineTo(tx + 5, ty + 13);
-          ctx.closePath();
-          ctx.fill();
-
-          // 5. Embedded Colorful Wildflowers (Poppies, Buttercups, Bluebells, Lavender, Daisies)
-          const flowerHash = Math.abs(Math.sin(tx * 13.9 + ty * 31.7));
-          if (flowerHash > 0.81) {
-            const flowerColors = [
-              { petal: '#facc15', eye: '#c2410c' }, // Golden Buttercup
-              { petal: '#ef4444', eye: '#450a0a' }, // Crimson Poppy
-              { petal: '#38bdf8', eye: '#ffffff' }, // Forget-Me-Not Blue
-              { petal: '#ffffff', eye: '#f59e0b' }, // White Daisy
-              { petal: '#c084fc', eye: '#581c87' }, // Purple Lavender
-            ];
-            const fIdx = Math.floor(flowerHash * 100) % flowerColors.length;
-            const fPair = flowerColors[fIdx];
-
-            const fx = tx + 3 + windSway * 0.65;
-            const fy = ty + 3;
-
-            // Flexible Flower Stem
-            ctx.strokeStyle = '#2d6a4f';
-            ctx.lineWidth = 1.2;
-            ctx.beginPath();
-            ctx.moveTo(tx + 2, ty + 12);
-            ctx.quadraticCurveTo(tx + 2 + windSway * 0.3, ty + 8, fx, fy + 3);
-            ctx.stroke();
-
-            // Petals
-            ctx.fillStyle = fPair.petal;
-            ctx.beginPath();
-            ctx.arc(fx, fy, 2.8, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Center Eye
-            ctx.fillStyle = fPair.eye;
-            ctx.beginPath();
-            ctx.arc(fx, fy, 1.1, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-      }
-
       ctx.restore();
     }
+
+    // 2. Dense Living Grass Across the ENTIRE Off-Road Terrain (Visible camera viewport)
+    const tuftStep = 22;
+    const startX = Math.floor(Math.max(10, this.camX - 25) / tuftStep) * tuftStep;
+    const endX = Math.ceil(Math.min(route.worldWidth - 10, this.camX + camW + 25) / tuftStep) * tuftStep;
+    const startY = Math.floor(Math.max(50, this.camY - 25) / tuftStep) * tuftStep;
+    const endY = Math.ceil(Math.min(route.worldHeight - 30, this.camY + camH + 25) / tuftStep) * tuftStep;
+
+    ctx.save();
+
+    for (let tx = startX; tx < endX; tx += tuftStep) {
+      for (let ty = startY; ty < endY; ty += tuftStep) {
+        // Skip roads / paths
+        if (this.isPointOnRoad(tx, ty, route)) continue;
+        // Skip buildings
+        if (this.isInsideBuilding(tx, ty, route)) continue;
+
+        // Dynamic 2-Phase Wind Waves
+        const broadWind = Math.sin(this.time * 2.8 + tx * 0.05 + ty * 0.04) * 4.0;
+        const rustle = Math.sin(this.time * 6.5 + tx * 0.2 + ty * 0.1) * 1.2;
+        let windSway = broadWind + rustle;
+
+        // Reactive Player Blade Parting:
+        const distToPlayer = Math.hypot(tx - px, ty - py);
+        if (distToPlayer < 36) {
+          const pushFactor = (1 - distToPlayer / 36) * 7.5;
+          const pushDir = tx >= px ? 1 : -1;
+          windSway += pushFactor * pushDir;
+        }
+
+        // Blade 1: Deep Shadow Blade
+        ctx.fillStyle = '#0f291c';
+        ctx.beginPath();
+        ctx.moveTo(tx - 4, ty + 13);
+        ctx.lineTo(tx + windSway * 0.7 - 2, ty + 2);
+        ctx.lineTo(tx + 2, ty + 13);
+        ctx.closePath();
+        ctx.fill();
+
+        // Blade 2: Left Curved Jade Blade
+        ctx.fillStyle = '#2d6a4f';
+        ctx.beginPath();
+        ctx.moveTo(tx - 5, ty + 13);
+        ctx.quadraticCurveTo(tx - 3 + windSway * 0.5, ty + 7, tx - 3 + windSway, ty + 1);
+        ctx.lineTo(tx - 1, ty + 13);
+        ctx.closePath();
+        ctx.fill();
+
+        // Blade 3: Center Dominant Emerald Blade with Sunlit Tip
+        ctx.fillStyle = '#40916c';
+        ctx.beginPath();
+        ctx.moveTo(tx - 2, ty + 13);
+        ctx.quadraticCurveTo(tx + windSway * 0.5, ty + 6, tx + windSway + 1, ty - 2);
+        ctx.lineTo(tx + 2, ty + 13);
+        ctx.closePath();
+        ctx.fill();
+
+        // Sunlit Lime Tip on Center Blade
+        ctx.fillStyle = '#74c69d';
+        ctx.beginPath();
+        ctx.moveTo(tx + windSway - 1, ty + 3);
+        ctx.lineTo(tx + windSway + 1, ty - 2);
+        ctx.lineTo(tx + windSway + 3, ty + 3);
+        ctx.closePath();
+        ctx.fill();
+
+        // Blade 4: Right Curved Lime Blade
+        ctx.fillStyle = '#52b788';
+        ctx.beginPath();
+        ctx.moveTo(tx + 1, ty + 13);
+        ctx.quadraticCurveTo(tx + 3 + windSway * 0.6, ty + 7, tx + 4 + windSway, ty + 2);
+        ctx.lineTo(tx + 5, ty + 13);
+        ctx.closePath();
+        ctx.fill();
+
+        // Embedded Colorful Wildflowers (Buttercups, Poppies, Bluebells, Daisies, Lavender)
+        const flowerHash = Math.abs(Math.sin(tx * 13.9 + ty * 31.7));
+        if (flowerHash > 0.82) {
+          const flowerColors = [
+            { petal: '#facc15', eye: '#c2410c' }, // Golden Buttercup
+            { petal: '#ef4444', eye: '#450a0a' }, // Crimson Poppy
+            { petal: '#38bdf8', eye: '#ffffff' }, // Forget-Me-Not Blue
+            { petal: '#ffffff', eye: '#f59e0b' }, // White Daisy
+            { petal: '#c084fc', eye: '#581c87' }, // Purple Lavender
+          ];
+          const fIdx = Math.floor(flowerHash * 100) % flowerColors.length;
+          const fPair = flowerColors[fIdx];
+
+          const fx = tx + 3 + windSway * 0.65;
+          const fy = ty + 3;
+
+          // Flexible Flower Stem
+          ctx.strokeStyle = '#2d6a4f';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(tx + 2, ty + 12);
+          ctx.quadraticCurveTo(tx + 2 + windSway * 0.3, ty + 8, fx, fy + 3);
+          ctx.stroke();
+
+          // Petals
+          ctx.fillStyle = fPair.petal;
+          ctx.beginPath();
+          ctx.arc(fx, fy, 2.6, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Center Eye
+          ctx.fillStyle = fPair.eye;
+          ctx.beginPath();
+          ctx.arc(fx, fy, 1.0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    ctx.restore();
   }
 
   private renderBuilding(ctx: CanvasRenderingContext2D, b: RouteBuilding): void {
@@ -1725,10 +1764,10 @@ export class RouteExplorationEngine {
     const tagBg = isGym
       ? 'rgba(113, 63, 18, 0.94)'
       : isMart
-      ? 'rgba(30, 58, 138, 0.94)'
-      : isCenter
-      ? 'rgba(153, 27, 27, 0.94)'
-      : 'rgba(15, 23, 42, 0.9)';
+        ? 'rgba(30, 58, 138, 0.94)'
+        : isCenter
+          ? 'rgba(153, 27, 27, 0.94)'
+          : 'rgba(15, 23, 42, 0.9)';
 
     const tagBorder = isGym ? '#facc15' : isMart ? '#60a5fa' : isCenter ? '#fca5a5' : '#94a3b8';
     const tagIcon = isGym ? '🏆' : isMart ? '🛒' : isCenter ? '🏥' : '🚪';
@@ -2029,48 +2068,494 @@ export class RouteExplorationEngine {
     ctx.restore();
   }
 
-  private renderOverheadScenery(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
-    ctx.save();
-
-    // 1. Perimeter Boundary Forest Line (Dense lush tree canopy)
-    for (let x = 12; x < route.worldWidth; x += 38) {
-      // Top Boundary Forest
-      this.drawTree(ctx, x, 22);
-      // Bottom Boundary Forest
-      this.drawTree(ctx, x, route.worldHeight - 14);
-    }
-
-    // 2. Wooden Post-and-Rail Fences bordering paths
+  public isPointOnRoad(x: number, y: number, route: RouteDefinition): boolean {
+    const footY = y + 8;
     for (const p of route.path) {
-      if (route.theme !== 'city') {
+      if (x >= p.x - 2 && x <= p.x + p.w + 2 && footY >= p.y - 2 && footY <= p.y + p.h + 2) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public isInsideBuilding(x: number, y: number, route: RouteDefinition): boolean {
+    for (const b of route.buildings) {
+      if (x >= b.x - 8 && x <= b.x + b.w + 8 && y >= b.y - 8 && y <= b.y + b.h + 8) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public getRouteFences(route: RouteDefinition): RouteFence[] {
+    if (route.fences && route.fences.length > 0) {
+      return route.fences;
+    }
+    const fences: RouteFence[] = [];
+    if (route.theme !== 'city') {
+      for (const p of route.path) {
         const fenceY = p.y - 12;
         if (fenceY > 50) {
-          ctx.strokeStyle = '#58240c';
-          ctx.lineWidth = 2.5;
+          fences.push({
+            x: p.x,
+            y: fenceY,
+            w: Math.min(180, p.w),
+            h: 16,
+          });
+        }
+      }
+    }
+    return fences;
+  }
 
-          // Horizontal Rails
-          ctx.beginPath();
-          ctx.moveTo(p.x, fenceY + 4);
-          ctx.lineTo(p.x + Math.min(180, p.w), fenceY + 4);
-          ctx.moveTo(p.x, fenceY + 10);
-          ctx.lineTo(p.x + Math.min(180, p.w), fenceY + 10);
-          ctx.stroke();
+  public getRouteStones(route: RouteDefinition): RouteStone[] {
+    if (route.stones && route.stones.length > 0) {
+      return route.stones;
+    }
+    const stones: RouteStone[] = [];
+    for (let x = 160; x < route.worldWidth - 100; x += 320) {
+      const sHash = Math.abs(Math.sin(x * 19.7 + route.id * 31.3));
+      const sy = 140 + (sHash * 60);
+      stones.push({
+        x: x + (sHash * 40),
+        y: sy,
+        radius: 13 + Math.floor(sHash * 5),
+        variant: sHash > 0.5 ? 'mossy' : 'granite',
+      });
+      const sHash2 = Math.abs(Math.cos(x * 23.1 + route.id * 17.9));
+      const sy2 = route.worldHeight - 160 - (sHash2 * 60);
+      stones.push({
+        x: x + 80 + (sHash2 * 40),
+        y: sy2,
+        radius: 14 + Math.floor(sHash2 * 4),
+        variant: sHash2 > 0.4 ? 'granite' : 'slate',
+      });
+    }
+    return stones;
+  }
 
-          // Vertical Posts with soft shadows
-          for (let fx = p.x; fx < p.x + Math.min(180, p.w); fx += 30) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-            ctx.fillRect(fx - 2, fenceY + 16, 4, 3);
+  public getRouteTrees(route: RouteDefinition): RouteTree[] {
+    if (route.trees && route.trees.length > 0) {
+      return route.trees;
+    }
+    const trees: RouteTree[] = [];
+    // Top boundary dense tree line
+    for (let x = 30; x < route.worldWidth - 20; x += 44) {
+      const tHash = Math.abs(Math.sin(x * 31.7 + route.id));
+      const ty = 60 + ((tHash - 0.5) * 16);
+      trees.push({
+        x,
+        y: ty,
+        scale: 0.95 + tHash * 0.15,
+        type: route.theme === 'forest' ? 'pine' : 'oak',
+      });
+    }
+    // Bottom boundary dense tree line
+    for (let x = 30; x < route.worldWidth - 20; x += 44) {
+      const tHash = Math.abs(Math.cos(x * 29.3 + route.id));
+      const ty = route.worldHeight - 50 + ((tHash - 0.5) * 16);
+      trees.push({
+        x,
+        y: ty,
+        scale: 0.95 + tHash * 0.15,
+        type: route.theme === 'forest' ? 'pine' : 'oak',
+      });
+    }
+    // Scattered meadow shade trees
+    for (let x = 180; x < route.worldWidth - 400; x += 280) {
+      const tHash = Math.abs(Math.sin(x * 47.1));
+      const ty = 170 + tHash * 40;
+      if (!this.isPointOnRoad(x, ty, route)) {
+        trees.push({
+          x,
+          y: ty,
+          scale: 1.1 + tHash * 0.2,
+          type: route.theme === 'forest' ? 'pine' : 'oak',
+        });
+      }
+      const ty2 = route.worldHeight - 240 - tHash * 40;
+      if (!this.isPointOnRoad(x + 100, ty2, route)) {
+        trees.push({
+          x: x + 100,
+          y: ty2,
+          scale: 1.05 + tHash * 0.2,
+          type: route.theme === 'forest' ? 'pine' : 'oak',
+        });
+      }
+    }
+    return trees;
+  }
 
-            ctx.fillStyle = '#78350f';
-            ctx.fillRect(fx - 2, fenceY, 4, 16);
-            ctx.fillStyle = '#9a3412';
-            ctx.fillRect(fx - 2, fenceY, 1, 16); // Sunlit post edge
-          }
+  public isBlocked(x: number, y: number, route: RouteDefinition): boolean {
+    // 1. World Boundaries
+    if (x < 24 || x > route.worldWidth - 24 || y < 65 || y > route.worldHeight - 35) {
+      return true;
+    }
+
+    // 2. Buildings (with doorway entrance exception)
+    for (const b of route.buildings) {
+      if (
+        x >= b.x - 12 &&
+        x <= b.x + b.w + 12 &&
+        y >= b.y - 12 &&
+        y <= b.y + b.h
+      ) {
+        const doorCenterX = b.x + b.w / 2;
+        const atDoor = Math.abs(x - doorCenterX) < 18 && y >= b.y + b.h - 10;
+        if (!atDoor) {
+          return true;
         }
       }
     }
 
-    // 3. Exit Signpost
+    // 3. Fences (Solid Post-and-Rail)
+    const fences = this.getRouteFences(route);
+    const footY = y + 8;
+    for (const f of fences) {
+      if (
+        x + 8 >= f.x - 2 &&
+        x - 8 <= f.x + f.w + 2 &&
+        footY + 6 >= f.y - 2 &&
+        footY - 6 <= f.y + f.h + 2
+      ) {
+        return true;
+      }
+    }
+
+    // 4. Stones & Boulders
+    const stones = this.getRouteStones(route);
+    for (const s of stones) {
+      const dist = Math.hypot(x - s.x, footY - s.y);
+      if (dist < s.radius + 8) {
+        return true;
+      }
+    }
+
+    // 5. Tree Trunks
+    const trees = this.getRouteTrees(route);
+    for (const t of trees) {
+      const trunkX = t.x;
+      const trunkY = t.y + 12;
+      const trunkR = (10 * (t.scale || 1.0)) + 6;
+      const dist = Math.hypot(x - trunkX, footY - trunkY);
+      if (dist < trunkR) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private renderStones(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    const stones = this.getRouteStones(route);
+    for (const s of stones) {
+      this.drawStone(ctx, s);
+    }
+  }
+
+  private drawStone(ctx: CanvasRenderingContext2D, s: RouteStone): void {
+    ctx.save();
+    const x = s.x;
+    const y = s.y;
+    const r = s.radius;
+    const isMossy = s.variant === 'mossy';
+
+    // 1. Soft Ground Contact Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.beginPath();
+    ctx.ellipse(x + 2, y + r * 0.65, r * 1.15, r * 0.5, 0.1, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. Irregular Faceted Boulder Shape
+    const pts = [
+      { dx: -r * 0.95, dy: -r * 0.2 },
+      { dx: -r * 0.7, dy: -r * 0.8 },
+      { dx: -r * 0.1, dy: -r * 0.95 },
+      { dx: r * 0.65, dy: -r * 0.7 },
+      { dx: r * 0.95, dy: -r * 0.1 },
+      { dx: r * 0.8, dy: r * 0.6 },
+      { dx: 0, dy: r * 0.8 },
+      { dx: -r * 0.75, dy: r * 0.55 },
+    ];
+
+    // Boulder Main Body
+    const stoneGrad = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
+    stoneGrad.addColorStop(0, '#94a3b8');
+    stoneGrad.addColorStop(0.45, '#64748b');
+    stoneGrad.addColorStop(0.85, '#475569');
+    stoneGrad.addColorStop(1, '#334155');
+    ctx.fillStyle = stoneGrad;
+
+    ctx.beginPath();
+    ctx.moveTo(x + pts[0].dx, y + pts[0].dy);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(x + pts[i].dx, y + pts[i].dy);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // 3. Facet Chisel Highlight (Upper Face)
+    ctx.fillStyle = 'rgba(241, 245, 249, 0.4)';
+    ctx.beginPath();
+    ctx.moveTo(x + pts[1].dx, y + pts[1].dy);
+    ctx.lineTo(x + pts[2].dx, y + pts[2].dy);
+    ctx.lineTo(x + pts[3].dx, y + pts[3].dy);
+    ctx.lineTo(x, y - r * 0.2);
+    ctx.closePath();
+    ctx.fill();
+
+    // 4. Surface Fissure Fracture Line
+    ctx.strokeStyle = 'rgba(30, 41, 59, 0.65)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x - r * 0.3, y - r * 0.5);
+    ctx.lineTo(x - r * 0.05, y);
+    ctx.lineTo(x + r * 0.35, y + r * 0.4);
+    ctx.stroke();
+
+    // 5. Living Green Moss Patch on shady lower side
+    if (isMossy) {
+      ctx.fillStyle = '#15803d';
+      ctx.beginPath();
+      ctx.ellipse(x - r * 0.35, y + r * 0.3, r * 0.45, r * 0.28, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#22c55e';
+      ctx.beginPath();
+      ctx.ellipse(x - r * 0.35, y + r * 0.25, r * 0.3, r * 0.16, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Specular Rim Highlight
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x + pts[1].dx, y + pts[1].dy);
+    ctx.lineTo(x + pts[2].dx, y + pts[2].dy);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  private renderFences(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    const fences = this.getRouteFences(route);
+    if (fences.length === 0) return;
+
+    ctx.save();
+
+    for (const f of fences) {
+      // 1. Soft Drop Shadow cast beneath fence rails & posts
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+      ctx.fillRect(f.x, f.y + 14, f.w, 4);
+
+      // 2. Double Horizontal Wooden Rails
+      // Top Rail
+      ctx.fillStyle = '#58240c';
+      ctx.fillRect(f.x, f.y + 3, f.w, 4.5);
+      // Top Rail sunlit upper bevel
+      ctx.fillStyle = '#9a3412';
+      ctx.fillRect(f.x, f.y + 3, f.w, 1.2);
+
+      // Bottom Rail
+      ctx.fillStyle = '#58240c';
+      ctx.fillRect(f.x, f.y + 10, f.w, 4);
+      // Bottom Rail sunlit upper bevel
+      ctx.fillStyle = '#9a3412';
+      ctx.fillRect(f.x, f.y + 10, f.w, 1.2);
+
+      // 3. Cylindrical Vertical Posts
+      const postStep = 28;
+      for (let px = f.x; px <= f.x + f.w; px += postStep) {
+        // Ground contact shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+        ctx.beginPath();
+        ctx.ellipse(px, f.y + 18, 4, 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Post body gradient
+        const postGrad = ctx.createLinearGradient(px - 3, f.y, px + 3, f.y);
+        postGrad.addColorStop(0, '#9a3412');
+        postGrad.addColorStop(0.4, '#78350f');
+        postGrad.addColorStop(0.85, '#58240c');
+        postGrad.addColorStop(1, '#3a1805');
+        ctx.fillStyle = postGrad;
+        ctx.fillRect(px - 3, f.y - 2, 6, 19);
+
+        // Chamfered Post Top Cap
+        ctx.fillStyle = '#b45309';
+        ctx.beginPath();
+        ctx.ellipse(px, f.y - 2, 3, 1.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Iron Bracket Rivets at rail intersections
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(px - 0.75, f.y + 4.5, 1.5, 1.5);
+        ctx.fillRect(px - 0.75, f.y + 11.5, 1.5, 1.5);
+      }
+    }
+
+    ctx.restore();
+  }
+
+  private renderTreesLayer(ctx: CanvasRenderingContext2D, route: RouteDefinition, layer: 'behind' | 'front'): void {
+    const trees = this.getRouteTrees(route);
+    const playerFootY = this.player.y + 8;
+
+    for (const t of trees) {
+      const trunkY = t.y + 12;
+      const isBehind = trunkY <= playerFootY;
+      if ((layer === 'behind' && isBehind) || (layer === 'front' && !isBehind)) {
+        this.drawTree(ctx, t.x, t.y, t.scale || 1.0, t.type || (route.theme === 'forest' ? 'pine' : 'oak'));
+      }
+    }
+  }
+
+  private drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number = 1.0, type: 'oak' | 'pine' = 'oak'): void {
+    ctx.save();
+
+    // Natural variation per tree so they aren't all identical clones
+    const treeHash = Math.abs(Math.sin(x * 47.9 + y * 73.1));
+    const hOff = (treeHash - 0.5) * 6;
+    const rScale = scale * (0.92 + treeHash * 0.16);
+
+    // 1. Soft Elliptical Ground Drop Shadow (Skewed south-east)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
+    ctx.beginPath();
+    ctx.ellipse(x + 4 * rScale, y + 18 * rScale + hOff, 24 * rScale, 10 * rScale, 0.12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. Realistic Gnarled Trunk with Root Flare & Bark Texture
+    ctx.fillStyle = '#271206';
+    ctx.beginPath();
+    ctx.moveTo(x - 9 * rScale, y + 18 * rScale + hOff);
+    ctx.lineTo(x + 9 * rScale, y + 18 * rScale + hOff);
+    ctx.lineTo(x + 5 * rScale, y + 8 * rScale + hOff);
+    ctx.lineTo(x - 5 * rScale, y + 8 * rScale + hOff);
+    ctx.closePath();
+    ctx.fill();
+
+    // Trunk Body
+    const trunkGrad = ctx.createLinearGradient(x - 6 * rScale, y + 4, x + 6 * rScale, y + 4);
+    trunkGrad.addColorStop(0, '#78350f');
+    trunkGrad.addColorStop(0.35, '#58240c');
+    trunkGrad.addColorStop(0.85, '#3a1805');
+    trunkGrad.addColorStop(1, '#271206');
+    ctx.fillStyle = trunkGrad;
+    ctx.fillRect(x - 5.5 * rScale, y + 3 * rScale + hOff, 11 * rScale, 15 * rScale);
+
+    // Bark Grain Grooves
+    ctx.strokeStyle = '#1c0a02';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x - 1 * rScale, y + 5 * rScale + hOff);
+    ctx.lineTo(x - 1 * rScale, y + 17 * rScale + hOff);
+    ctx.moveTo(x + 2.5 * rScale, y + 6 * rScale + hOff);
+    ctx.lineTo(x + 2.5 * rScale, y + 16 * rScale + hOff);
+    ctx.stroke();
+
+    // Lower Shaded Moss Accent
+    ctx.fillStyle = '#166534';
+    ctx.beginPath();
+    ctx.ellipse(x - 3 * rScale, y + 14 * rScale + hOff, 2.5 * rScale, 4 * rScale, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 3. Canopy Rendering
+    if (type === 'pine') {
+      this.drawPineTier(ctx, x, y + 2 + hOff, 26 * rScale, 18 * rScale);
+      this.drawPineTier(ctx, x, y - 10 + hOff, 20 * rScale, 16 * rScale);
+      this.drawPineTier(ctx, x, y - 22 + hOff, 14 * rScale, 16 * rScale);
+    } else {
+      const canopyWind = Math.sin(this.time * 2.2 + x * 0.05) * 1.5;
+
+      // Base Deep Ambient Shadow Under-canopy
+      const baseGrad = ctx.createRadialGradient(x - 4, y - 6 + hOff, 4, x, y + hOff, 26 * rScale);
+      baseGrad.addColorStop(0, '#15803d');
+      baseGrad.addColorStop(0.65, '#14532d');
+      baseGrad.addColorStop(1, '#052e16');
+      ctx.fillStyle = baseGrad;
+      ctx.beginPath();
+      ctx.arc(x, y + hOff, 24 * rScale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Lower Left Bough
+      this.drawFoliageLobe(ctx, x - 12 * rScale, y + 2 + hOff, 14 * rScale, '#16a34a', '#14532d', '#052e16');
+      // Lower Right Bough
+      this.drawFoliageLobe(ctx, x + 11 * rScale, y + 3 + hOff, 13 * rScale, '#15803d', '#14532d', '#052e16');
+      // Mid Left Bough
+      this.drawFoliageLobe(ctx, x - 10 * rScale + canopyWind * 0.5, y - 8 + hOff, 16 * rScale, '#4ade80', '#22c55e', '#15803d');
+      // Mid Right Bough
+      this.drawFoliageLobe(ctx, x + 9 * rScale, y - 7 + hOff, 15 * rScale, '#22c55e', '#16a34a', '#14532d');
+      // Central Crown Lobe
+      this.drawFoliageLobe(ctx, x + canopyWind * 0.8, y - 16 + hOff, 17 * rScale, '#4ade80', '#22c55e', '#15803d');
+
+      // Sun-Dappled Leaf Flecks & Rim Light on Crown
+      ctx.fillStyle = '#86efac';
+      ctx.beginPath();
+      ctx.arc(x - 6 * rScale + canopyWind, y - 20 + hOff, 3.5 * rScale, 0, Math.PI * 2);
+      ctx.arc(x - 1 * rScale + canopyWind, y - 22 + hOff, 3.0 * rScale, 0, Math.PI * 2);
+      ctx.arc(x + 4 * rScale + canopyWind, y - 18 + hOff, 2.5 * rScale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Golden Sun Glint
+      ctx.fillStyle = '#bbf7d0';
+      ctx.beginPath();
+      ctx.arc(x - 5 * rScale + canopyWind, y - 21 + hOff, 1.8 * rScale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  private drawFoliageLobe(ctx: CanvasRenderingContext2D, lx: number, ly: number, r: number, cLight: string, cMid: string, cDark: string): void {
+    const grad = ctx.createRadialGradient(lx - r * 0.35, ly - r * 0.35, r * 0.1, lx, ly, r);
+    grad.addColorStop(0, cLight);
+    grad.addColorStop(0.55, cMid);
+    grad.addColorStop(1, cDark);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(lx, ly, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Subtle edge leaf bumps for organic texture
+    ctx.fillStyle = cLight;
+    for (let a = -Math.PI * 0.8; a < 0; a += 0.7) {
+      const bx = lx + Math.cos(a) * (r - 1);
+      const by = ly + Math.sin(a) * (r - 1);
+      ctx.beginPath();
+      ctx.arc(bx, by, r * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  private drawPineTier(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+    const pineGrad = ctx.createLinearGradient(x - w / 2, y, x + w / 2, y + h);
+    pineGrad.addColorStop(0, '#15803d');
+    pineGrad.addColorStop(0.5, '#166534');
+    pineGrad.addColorStop(1, '#052e16');
+    ctx.fillStyle = pineGrad;
+
+    ctx.beginPath();
+    ctx.moveTo(x, y - h * 0.4);
+    ctx.lineTo(x + w / 2, y + h);
+    ctx.lineTo(x - w / 2, y + h);
+    ctx.closePath();
+    ctx.fill();
+
+    // Serrated bottom needles
+    ctx.fillStyle = '#14532d';
+    for (let nx = x - w / 2; nx <= x + w / 2; nx += 6) {
+      ctx.beginPath();
+      ctx.moveTo(nx - 3, y + h);
+      ctx.lineTo(nx, y + h + 3);
+      ctx.lineTo(nx + 3, y + h);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  private renderOverheadScenery(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    ctx.save();
+
+    // Exit Signpost
     if (route.exitX > 0) {
       const ex = route.exitX - 30;
       const ey = 200;
@@ -2098,91 +2583,6 @@ export class RouteExplorationEngine {
       ctx.textAlign = 'center';
       ctx.fillText('NEXT ROUTE ➔', ex + 2, ey + 12.5);
     }
-
-    ctx.restore();
-  }
-
-  private drawTree(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-    ctx.save();
-
-    // Natural variation per tree so they aren't all identical clones
-    const treeHash = Math.abs(Math.sin(x * 47.9 + y * 73.1));
-    const hOff = (treeHash - 0.5) * 6; // -3px to +3px height variation
-    const rScale = 0.92 + treeHash * 0.16; // 92% to 108% scale variation
-
-    // 1. Soft Elliptical Ground Drop Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-    ctx.beginPath();
-    ctx.ellipse(x, y + 16 + hOff, 20 * rScale, 8 * rScale, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 2. Gnarled Oak Trunk with Roots & Bark Texture
-    ctx.fillStyle = '#3a1805'; // Deep shadow
-    ctx.fillRect(x - 5 * rScale, y + 4 + hOff, 10 * rScale, 14);
-
-    // Spreading Root Flares
-    ctx.fillStyle = '#58240c';
-    ctx.beginPath();
-    ctx.moveTo(x - 8 * rScale, y + 17 + hOff);
-    ctx.lineTo(x + 8 * rScale, y + 17 + hOff);
-    ctx.lineTo(x + 5 * rScale, y + 9 + hOff);
-    ctx.lineTo(x - 5 * rScale, y + 9 + hOff);
-    ctx.closePath();
-    ctx.fill();
-
-    // Sunlit Bark Highlight on Left
-    ctx.fillStyle = '#78350f';
-    ctx.fillRect(x - 5 * rScale, y + 5 + hOff, 3 * rScale, 10);
-
-    // 3. Multi-Lobe Volumetric Foliage Canopy with Radial Lighting (Sun from top-left)
-    // Lobe 1: Base Deep Shadow Under-canopy
-    const baseGrad = ctx.createRadialGradient(x - 4, y - 6 + hOff, 4, x, y + hOff, 22 * rScale);
-    baseGrad.addColorStop(0, '#15803d');
-    baseGrad.addColorStop(0.65, '#166534');
-    baseGrad.addColorStop(1, '#0b2e16');
-    ctx.fillStyle = baseGrad;
-    ctx.beginPath();
-    ctx.arc(x, y + hOff, 21 * rScale, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Lobe 2: Left Mid Foliage Puff
-    const leftGrad = ctx.createRadialGradient(x - 8, y - 8 + hOff, 2, x - 5, y - 5 + hOff, 15 * rScale);
-    leftGrad.addColorStop(0, '#4ade80');
-    leftGrad.addColorStop(0.45, '#22c55e');
-    leftGrad.addColorStop(0.85, '#15803d');
-    leftGrad.addColorStop(1, '#14532d');
-    ctx.fillStyle = leftGrad;
-    ctx.beginPath();
-    ctx.arc(x - 6 * rScale, y - 5 + hOff, 14 * rScale, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Lobe 3: Right Mid Foliage Puff
-    const rightGrad = ctx.createRadialGradient(x + 2, y - 7 + hOff, 2, x + 6, y - 4 + hOff, 14 * rScale);
-    rightGrad.addColorStop(0, '#22c55e');
-    rightGrad.addColorStop(0.55, '#16a34a');
-    rightGrad.addColorStop(1, '#0f381e');
-    ctx.fillStyle = rightGrad;
-    ctx.beginPath();
-    ctx.arc(x + 6 * rScale, y - 4 + hOff, 13 * rScale, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Lobe 4: Center Dominant Crown Puff
-    const crownGrad = ctx.createRadialGradient(x - 4, y - 13 + hOff, 3, x, y - 9 + hOff, 16 * rScale);
-    crownGrad.addColorStop(0, '#4ade80');
-    crownGrad.addColorStop(0.35, '#22c55e');
-    crownGrad.addColorStop(0.8, '#15803d');
-    crownGrad.addColorStop(1, '#14532d');
-    ctx.fillStyle = crownGrad;
-    ctx.beginPath();
-    ctx.arc(x, y - 9 + hOff, 15 * rScale, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 4. Subtle Sun-Dappled Leaf Flecks on Upper Left Crown
-    ctx.fillStyle = '#86efac';
-    ctx.beginPath();
-    ctx.arc(x - 5 * rScale, y - 13 + hOff, 3, 0, Math.PI * 2);
-    ctx.arc(x - 1 * rScale, y - 15 + hOff, 2.4, 0, Math.PI * 2);
-    ctx.fill();
 
     ctx.restore();
   }

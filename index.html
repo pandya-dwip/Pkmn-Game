@@ -11,7 +11,7 @@
 
 <body>
   <div id="g">
-    <!-- Classic First Pokédex Top Sensor Assembly -->
+    <!-- Modernized Gen 1 Pokédex Top Sensor Assembly -->
     <header id="dex-bar">
       <div class="dex-lens-wrapper">
         <div class="dex-lens-bezel">
@@ -25,7 +25,23 @@
         <span class="dex-led led-yellow"></span>
         <span class="dex-led led-green"></span>
       </div>
-      <div class="dex-badge">POKÉDEX · KANTO TOURNAMENT</div>
+      <div class="dex-bar-actions">
+        <button id="btn-quick-pokedex" class="dex-header-btn" title="Open Pokédex Field Guide">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2">
+            <rect x="4" y="3" width="16" height="18" rx="2" />
+            <line x1="8" y1="7" x2="16" y2="7" />
+            <line x1="8" y1="11" x2="14" y2="11" />
+          </svg>
+          <span>POKÉDEX</span>
+        </button>
+        <button id="sb" class="dex-header-btn dex-settings-btn" title="Sound & System Settings">
+          <svg id="sb-svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          <span class="sb-text">SYSTEM</span>
+        </button>
+      </div>
     </header>
 
     <!-- Title Screen -->
@@ -34,45 +50,50 @@
     <!-- Tournament Bracket / Hub Screen -->
     <section id="map" class="scr"></section>
 
+    <!-- Dedicated Modern Pokédex Field Guide Screen -->
+    <section id="pokedex" class="scr"></section>
+
     <!-- Route Exploration Screen -->
     <section id="route" class="scr">
       <div id="route-hud">
         <div class="hud-col-left">
           <div id="hud-location" class="hud-badge">Route 1</div>
-          <div id="hud-destination" class="hud-sub">Toward: Pewter City</div>
-        </div>
-        <div class="hud-col-center">
-          <div id="hud-encounters" class="hud-enc-meter">
-            <span class="hud-enc-label">Wild Encounters</span>
-            <div class="hud-enc-dots" id="hud-enc-dots">
-              <i class="h-dot"></i><i class="h-dot"></i><i class="h-dot"></i><i class="h-dot"></i><i class="h-dot"></i>
-            </div>
-          </div>
+          <div id="hud-destination" class="hud-sub">Pallet → Viridian</div>
         </div>
         <div class="hud-col-right">
-          <div class="hud-pill" id="hud-balls">⚾ <span id="hud-balls-val">5</span></div>
-          <div class="hud-pill" id="hud-money">🪙 ₽<span id="hud-money-val">1,000</span></div>
-          <button id="hud-menu-btn" class="hud-btn" title="Party & Bag">🎒 MENU</button>
+          <div class="hud-pill" id="hud-balls">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="12" cy="12" r="9" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <circle cx="12" cy="12" r="3" fill="currentColor" />
+            </svg>
+            <span id="hud-balls-val">5</span>
+          </div>
+          <div class="hud-pill" id="hud-money">
+            <span class="hud-currency">₽</span><span id="hud-money-val">1,000</span>
+          </div>
+          <button id="hud-menu-btn" class="hud-btn" title="Party & Bag">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2">
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+            <span>MENU</span>
+          </button>
         </div>
       </div>
 
       <div id="route-viewport">
         <canvas id="route-canvas" width="800" height="480"></canvas>
         <div id="route-prompt" class="route-prompt hidden"></div>
-      </div>
-
-      <!-- Controls & D-Pad for Mobile/Touch and Desktop shortcuts -->
-      <div id="route-controls">
-        <div class="virtual-dpad" id="v-dpad">
-          <button class="dpad-btn dpad-up" data-dir="up">▲</button>
-          <button class="dpad-btn dpad-left" data-dir="left">◀</button>
-          <div class="dpad-center">●</div>
-          <button class="dpad-btn dpad-right" data-dir="right">▶</button>
-          <button class="dpad-btn dpad-down" data-dir="down">▼</button>
+        <!-- Modern Dynamic Virtual Touch Joystick -->
+        <div id="touch-joystick" class="touch-joystick hidden">
+          <div class="joystick-base">
+            <div id="joystick-stick" class="joystick-stick"></div>
+          </div>
         </div>
-        <div class="action-btn-cluster">
-          <button class="action-btn" id="btn-interact" title="Interact / Talk / Enter">A</button>
-        </div>
+        <!-- Contextual Action Floating Button (appears only when near interactable) -->
+        <button class="context-fab hidden" id="btn-interact" title="Interact">A</button>
       </div>
     </section>
 
@@ -382,8 +403,8 @@
       <div class="dex-speaker-grill">
         <span></span><span></span><span></span><span></span>
       </div>
-      <button id="sb" class="dex-sound-btn" title="Sound & Settings">
-        <span id="sb-icon">🔊</span>
+      <button id="sb-footer" class="dex-sound-btn" title="Sound & Settings">
+        <svg id="sb-icon-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
         <span class="sb-text">SOUND / SETTINGS</span>
       </button>
     </footer>
@@ -394,10 +415,10 @@
     <!-- Dedicated Pokédex Settings Modal Overlay -->
     <div id="set-ov">
       <div class="box set-box">
-        <div class="set-hdr">⚙ POKÉDEX SETTINGS</div>
+        <div class="set-hdr">POKÉDEX SETTINGS</div>
         <div class="set-body">
           <div class="set-row">
-            <span class="set-lbl">🔊 Master Sound</span>
+            <span class="set-lbl">Master Sound</span>
             <label class="dex-switch">
               <input type="checkbox" id="son" checked />
               <span class="dex-slider-sw round"></span>
@@ -408,27 +429,27 @@
             <input type="range" id="sv" min="0" max="100" value="70" class="dex-range" />
           </div>
           <div class="set-row">
-            <span class="set-lbl">🎵 Music Volume</span>
+            <span class="set-lbl">Music Volume</span>
             <input type="range" id="vm" min="0" max="100" value="60" class="dex-range" />
           </div>
           <div class="set-row">
-            <span class="set-lbl">⚔️ SFX Volume</span>
+            <span class="set-lbl">SFX Volume</span>
             <input type="range" id="vs" min="0" max="100" value="80" class="dex-range" />
           </div>
           <div class="set-row">
-            <span class="set-lbl">🐾 Pokémon Cries</span>
+            <span class="set-lbl">Pokémon Cries</span>
             <input type="range" id="vp" min="0" max="100" value="60" class="dex-range" />
           </div>
           <hr class="set-div" />
           <div class="set-row">
-            <span class="set-lbl">🎮 3D Pokémon Models</span>
+            <span class="set-lbl">3D Pokémon Models</span>
             <label class="dex-switch">
               <input type="checkbox" id="m3d" checked />
               <span class="dex-slider-sw round"></span>
             </label>
           </div>
           <div class="set-row">
-            <span class="set-lbl">⚡ 3D Quality Preset</span>
+            <span class="set-lbl">3D Quality Preset</span>
             <select id="m3q" class="dex-dropdown">
               <option value="AUTO">AUTO (Recommended)</option>
               <option value="HIGH">HIGH (Retina / Max FX)</option>
@@ -437,7 +458,7 @@
             </select>
           </div>
           <div class="set-btns">
-            <button id="btn-credits" class="set-btn-alt">📜 Credits & Attribution</button>
+            <button id="btn-credits" class="set-btn-alt">Credits & Attribution</button>
             <button id="btn-close-settings" class="set-btn-pri">CLOSE</button>
           </div>
         </div>

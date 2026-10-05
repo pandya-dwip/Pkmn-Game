@@ -25,6 +25,9 @@ import {
 import { KANTO_JOURNEY_ROUTES } from './data/routes';
 import { routeExplorationEngine } from './systems/RouteExplorationEngine';
 import { showPokemonCaughtModal } from './systems/CaptureModal';
+import { modernPokedexView } from './ui/ModernPokedexView';
+import { pokedexManager } from './systems/PokedexManager';
+import { ICONS } from './ui/icons';
 
 // ============================================================================
 // GLOBAL CONFIGURATION & TYPES
@@ -71,7 +74,7 @@ export const BALL_CONFIG = {
   ball: {
     id: 'ball',
     name: 'Poké Ball',
-    icon: '⚾',
+    icon: ICONS.pokeBall(18),
     multiplier: 1.0,
     price: 200,
     catchDesc: 'Standard (1.0×)',
@@ -82,7 +85,7 @@ export const BALL_CONFIG = {
   greatBall: {
     id: 'greatBall',
     name: 'Great Ball',
-    icon: '🔵',
+    icon: ICONS.greatBall(18),
     multiplier: 1.5,
     price: 600,
     catchDesc: 'Better (1.5×)',
@@ -93,7 +96,7 @@ export const BALL_CONFIG = {
   ultraBall: {
     id: 'ultraBall',
     name: 'Ultra Ball',
-    icon: '🟡',
+    icon: ICONS.ultraBall(18),
     multiplier: 2.0,
     price: 1200,
     catchDesc: 'Best (2.0×)',
@@ -238,7 +241,6 @@ export const STARTER_OPTIONS = [
   {
     id: 1,
     name: 'Bulbasaur',
-    icon: '🌱',
     type: 'Grass / Poison',
     typesShort: ['Gr', 'Po'],
     badgeClass: 'starter-bulba',
@@ -249,7 +251,6 @@ export const STARTER_OPTIONS = [
   {
     id: 4,
     name: 'Charmander',
-    icon: '🔥',
     type: 'Fire',
     typesShort: ['Fi'],
     badgeClass: 'starter-charm',
@@ -260,7 +261,6 @@ export const STARTER_OPTIONS = [
   {
     id: 7,
     name: 'Squirtle',
-    icon: '💧',
     type: 'Water',
     typesShort: ['Wa'],
     badgeClass: 'starter-squirt',
@@ -271,7 +271,6 @@ export const STARTER_OPTIONS = [
   {
     id: 25,
     name: 'Pikachu',
-    icon: '⚡',
     type: 'Electric',
     typesShort: ['El'],
     badgeClass: 'starter-pika',
@@ -282,7 +281,6 @@ export const STARTER_OPTIONS = [
   {
     id: 133,
     name: 'Eevee',
-    icon: '🦊',
     type: 'Normal',
     typesShort: ['No'],
     badgeClass: 'starter-eevee',
@@ -365,24 +363,27 @@ export const mh = (m: MonInstance) =>
 
 export const mvh = (v: any, e: number = 1) => {
   const mv = v && v.typeShort ? v : getMoveData(typeof v === 'string' ? v : (v?.name || 'Tackle'));
-  const icon = MOVE_ICONS[mv.typeShort as keyof typeof MOVE_ICONS] || '💥';
   const effTag =
     e > 1
-      ? `<span class="mv-eff es">2× EFF</span>`
+      ? `<span class="mv-eff es">2×</span>`
       : e < 1 && e > 0
-      ? `<span class="mv-eff ew">½× EFF</span>`
-      : e === 0
-      ? `<span class="mv-eff en">0× EFF</span>`
-      : '';
+        ? `<span class="mv-eff ew">½×</span>`
+        : e === 0
+          ? `<span class="mv-eff en">0×</span>`
+          : '';
+
+  const accStr = mv.accuracy ? `${mv.accuracy}%` : '—';
+  const pwrStr = formatMovePower(mv.power, mv.category);
 
   return `
     <div class="mv-row-top">
-      <span class="mn">${icon} ${mv.name.toUpperCase()}</span>
-      ${effTag}
+      <span class="mn">${mv.name.toUpperCase()}</span>
+      <span class="t-badge t-${mv.typeShort.toLowerCase()}">${mv.type.toUpperCase()}</span>
     </div>
     <div class="mv-row-sub">
-      <span class="t ${mv.typeShort}">${mv.type.toUpperCase()}</span>
-      <span class="mv-meta">PWR ${formatMovePower(mv.power, mv.category)} · ACC ${mv.accuracy}%</span>
+      <span class="mv-meta">PWR ${pwrStr}</span>
+      <span class="mv-meta">ACC ${accStr}</span>
+      ${effTag}
     </div>
   `;
 };
@@ -422,14 +423,14 @@ export const note = (l: string[]) => pick(l.join('<br>'), [{ h: 'OK' }]);
 
 export const renderBadgesBar = (badges: string[]): string => {
   const BADGES_LIST = [
-    { n: 'Boulder Badge', s: 'Boulder', ic: '🪨' },
-    { n: 'Cascade Badge', s: 'Cascade', ic: '💧' },
-    { n: 'Thunder Badge', s: 'Thunder', ic: '⚡' },
-    { n: 'Rainbow Badge', s: 'Rainbow', ic: '🌈' },
-    { n: 'Soul Badge', s: 'Soul', ic: '☠️' },
-    { n: 'Marsh Badge', s: 'Marsh', ic: '🔮' },
-    { n: 'Volcano Badge', s: 'Volcano', ic: '🔥' },
-    { n: 'Earth Badge', s: 'Earth', ic: '🌍' },
+    { n: 'Boulder Badge', s: 'Boulder', ic: ICONS.badgeBoulder(22) },
+    { n: 'Cascade Badge', s: 'Cascade', ic: ICONS.badgeCascade(22) },
+    { n: 'Thunder Badge', s: 'Thunder', ic: ICONS.badgeThunder(22) },
+    { n: 'Rainbow Badge', s: 'Rainbow', ic: ICONS.badgeRainbow(22) },
+    { n: 'Soul Badge', s: 'Soul', ic: ICONS.badgeSoul(22) },
+    { n: 'Marsh Badge', s: 'Marsh', ic: ICONS.badgeMarsh(22) },
+    { n: 'Volcano Badge', s: 'Volcano', ic: ICONS.badgeVolcano(22) },
+    { n: 'Earth Badge', s: 'Earth', ic: ICONS.badgeEarth(22) },
   ];
 
   const earnedCount = BADGES_LIST.filter(b => (badges || []).includes(b.n) || (badges || []).includes(b.s)).length;
@@ -437,19 +438,19 @@ export const renderBadgesBar = (badges: string[]): string => {
   return `
     <div class="badges-strip-container">
       <div class="badges-strip-header">
-        <span class="badges-strip-title">🏆 KANTO GYM BADGES</span>
+        <span class="badges-strip-title">${ICONS.trophy(16)} KANTO GYM BADGES</span>
         <span class="badges-strip-count">${earnedCount} / 8 EARNED</span>
       </div>
       <div class="badges-strip">
         ${BADGES_LIST.map(b => {
-          const earned = (badges || []).includes(b.n) || (badges || []).includes(b.s);
-          return `
+    const earned = (badges || []).includes(b.n) || (badges || []).includes(b.s);
+    return `
             <div class="badge-slot ${earned ? 'earned' : 'locked'}" title="${b.n} ${earned ? '(Earned)' : '(Locked)'}">
               <div class="badge-slot-icon">${b.ic}</div>
               <div class="badge-slot-name">${b.s}</div>
             </div>
           `;
-        }).join('')}
+  }).join('')}
       </div>
     </div>
   `;
@@ -458,15 +459,15 @@ export const renderBadgesBar = (badges: string[]): string => {
 export const renderResourcesBar = (): string => {
   return `
     <div class="resources-bar">
-      <div class="wallet-badge">💰 ₽${(G?.money || 0).toLocaleString()}</div>
+      <div class="wallet-badge">${ICONS.money(16)} ₽${(G?.money || 0).toLocaleString()}</div>
       <div class="inventory-pills">
-        <span title="Poké Balls (1.0× Catch)">⚾ ×${G?.balls || 0}</span>
-        <span title="Great Balls (1.5× Catch)">🔵 ×${G?.greatBalls || 0}</span>
-        <span title="Ultra Balls (2.0× Catch)">🟡 ×${G?.ultraBalls || 0}</span>
-        <span title="Oran Berries (30% HP)">🍓 ×${G?.b || 0}</span>
-        <span title="Sitrus Berries (50% HP)">🫐 ×${G?.b50 || 0}</span>
-        <span title="Full Heal Berries (100% HP)">✨ ×${G?.fh || 0}</span>
-        <span title="Revives">💊 ×${G?.rv || 0}</span>
+        <span title="Poké Balls (1.0× Catch)">${ICONS.pokeBall(15)} ×${G?.balls || 0}</span>
+        <span title="Great Balls (1.5× Catch)">${ICONS.greatBall(15)} ×${G?.greatBalls || 0}</span>
+        <span title="Ultra Balls (2.0× Catch)">${ICONS.ultraBall(15)} ×${G?.ultraBalls || 0}</span>
+        <span title="Oran Berries (30% HP)">${ICONS.oranBerry(15)} ×${G?.b || 0}</span>
+        <span title="Sitrus Berries (50% HP)">${ICONS.sitrusBerry(15)} ×${G?.b50 || 0}</span>
+        <span title="Full Heal Berries (100% HP)">${ICONS.fullHeal(15)} ×${G?.fh || 0}</span>
+        <span title="Revives">${ICONS.revive(15)} ×${G?.rv || 0}</span>
       </div>
     </div>
   `;
@@ -494,12 +495,12 @@ export function titleScr(): void {
     <p style="text-align:center">A Complete Kanto Journey RPG</p>
     <div class="col">
       <button id="bc" ${hasActiveSave ? '' : 'disabled'}>
-        ${hasActiveSave ? `▶ CONTINUE JOURNEY<br><small style="color:#facc15">${saveDetails}</small>` : 'CONTINUE'}
+        ${hasActiveSave ? `CONTINUE JOURNEY<br><small style="color:#facc15">${saveDetails}</small>` : 'CONTINUE'}
       </button>
-      <button id="bn">⭐ START NEW JOURNEY</button>
-      <button id="br">🗑 RESET SAVE DATA</button>
-      ${hasE4History ? '<button id="be4">👑 ELITE FOUR CHAMPION HISTORY</button>' : ''}
-      ${hasHistory ? '<button id="bh">🏆 CHAMPIONSHIP HISTORY</button>' : ''}
+      <button id="bn">NEW ADVENTURE</button>
+      ${hasHistory ? '<button id="bh">CHAMPIONSHIP RECORDS</button>' : ''}
+      ${hasE4History ? '<button id="be4">ELITE FOUR RECORDS</button>' : ''}
+      <button id="br" class="btn-secondary">RESET SAVE DATA</button>
     </div>
   `;
 
@@ -533,7 +534,7 @@ export function titleScr(): void {
         return;
       }
       note([
-        '<h1>🏆 KANTO CHAMPIONSHIP HISTORY</h1>',
+        '<h1>KANTO CHAMPIONSHIP HISTORY</h1>',
         ...all.slice(0, 5).map((r: any, idx: number) => `
           <b>#${idx + 1} ${r.trainerName || r.playerTeam?.[0] || 'CHAMPION'}</b> · ${r.date || ''}<br>
           <small>Team: ${(r.playerTeam || []).join(', ')}</small><br>
@@ -546,7 +547,7 @@ export function titleScr(): void {
     $('#be4').onclick = () => {
       const r = JSON.parse(localStorage.getItem('kantoEliteFourRecord') || '{}');
       note([
-        '<h1>👑 ELITE FOUR GRAND CHAMPIONS</h1>' + (r.date || ''),
+        '<h1>ELITE FOUR GRAND CHAMPIONS</h1>' + (r.date || ''),
         `<b>Trainer:</b> ${r.trainerName || 'Champion'}<br>`,
         '<b>Conquest Order:</b> ' + (r.orderDisplay || (r.order || []).join(' ➔ ')),
         '<br><b>Grand Champion Team:</b><br>' + ((r.playerTeam || []).join(', ') || ''),
@@ -584,7 +585,9 @@ export async function introScr(): Promise<void> {
       <div class="intro-container" style="text-align:center;padding:20px 12px;color:#f8fafc">
         <h1>PROFESSOR OAK</h1>
         <div style="display:flex;align-items:center;gap:14px;background:#1e293b;border:2px solid #334155;border-radius:18px;padding:16px;margin:16px 0;text-align:left">
-          <span style="font-size:52px;line-height:1">👨‍🏫</span>
+          <div style="width:52px;height:52px;border-radius:50%;background:#334155;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:2px solid #64748b">
+            ${ICONS.pokedex(26)}
+          </div>
           <p style="margin:0;line-height:1.5;font-size:13.5px;color:#f8fafc">
             "Welcome to the world of Pokémon! My name is Professor Oak.<br><br>
             This world is inhabited far and wide by creatures called Pokémon. For some people, Pokémon are pets. Others use them for battles.<br><br>
@@ -647,81 +650,116 @@ export function starterScr(trainerName: string = 'DWIP'): void {
   sound.music('select');
   show('map');
 
-  $('#map').innerHTML = `
-    <h1>CHOOSE YOUR STARTER</h1>
-    <p style="text-align:center">Welcome, <b>${trainerName.toUpperCase()}</b>! Select your first Pokémon partner (Lv.5):</p>
-    <div class="starter-grid-5">
-      ${STARTER_OPTIONS.map(
-    (s, idx) => `
-        <div class="starter-card-5 ${s.badgeClass}" data-idx="${idx}">
-          <div class="starter-card-art">
-            <img src="${U(s.id)}" alt="${s.name}" onerror="fb(this)">
-          </div>
-          <div class="starter-card-content">
-            <div class="starter-card-name">${s.icon} ${s.name.toUpperCase()}</div>
-            <div class="starter-card-types">${s.typesShort.map(tb).join('')}</div>
-            <div style="font-size:10.5px;color:#facc15;font-weight:700;margin-bottom:2px">${s.stats}</div>
-            <div class="starter-card-desc">${s.desc}</div>
-          </div>
+  let selectedIdx = 0;
+
+  const renderStarterView = () => {
+    const chosen = STARTER_OPTIONS[selectedIdx];
+    const artwork = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${chosen.id}.png`;
+
+    $('#map').innerHTML = `
+      <div class="starter-modern-screen">
+        <div class="starter-header-group">
+          <span class="starter-subtitle">BEGIN YOUR KANTO JOURNEY</span>
+          <h1 class="starter-title">CHOOSE YOUR PARTNER</h1>
+          <p class="starter-caption">Welcome, <b>${trainerName.toUpperCase()}</b>! Select your first Pokémon companion (Lv.5):</p>
         </div>
-      `
-  ).join('')}
-    </div>
-  `;
 
-  document.querySelectorAll<HTMLElement>('.starter-card-5').forEach(card => {
-    card.onclick = async () => {
-      const idx = parseInt(card.dataset.idx || '0', 10);
-      const chosen = STARTER_OPTIONS[idx];
+        <div class="starter-stage-card">
+          <div class="starter-stage-art">
+            <img class="starter-large-img" src="${artwork}" alt="${chosen.name}" onerror="this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${chosen.id}.png'">
+          </div>
+          <div class="starter-stage-info">
+            <div class="starter-stage-name">${chosen.name.toUpperCase()}</div>
+            <div class="starter-stage-types">
+              ${chosen.typesShort.map(t => `<span class="t-badge t-${t.toLowerCase()}">${TYPE_NAMES[t as keyof typeof TYPE_NAMES] || t}</span>`).join(' ')}
+            </div>
+            <div class="starter-stage-stats">${chosen.stats}</div>
+          </div>
+          <button id="btn-choose-starter" class="starter-choose-btn">
+            <span>CHOOSE ${chosen.name.toUpperCase()}</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
 
-      sound.cry(chosen.id, 'win');
+        <div class="starter-carousel-indicators">
+          ${STARTER_OPTIONS.map((s, idx) => `
+            <button class="starter-thumb-btn ${idx === selectedIdx ? 'active' : ''}" data-idx="${idx}" title="${s.name}">
+              <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${s.id}.png" alt="${s.name}" />
+              <span class="thumb-number">${idx + 1}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
 
-      const starterMon = mk(chosen.id, 5);
-      starterMon.moves = [...chosen.moves];
-
-      G = {
-        trainerName: trainerName.trim() || 'TRAINER',
-        starterId: chosen.id,
-        phase: 'ROUTE_ENCOUNTER',
-        gymIndex: 0,
-        badges: [],
-        money: ECONOMY.startingMoney,
-        balls: ECONOMY.startingBalls,
-        b: ECONOMY.startingBerries.oran,
-        b50: 1,
-        b75: 0,
-        fh: ECONOMY.startingBerries.fullHeal,
-        rv: ECONOMY.startingBerries.revive,
-        st: {},
-        team: [starterMon],
-        pcBox: [],
-        routeEncountersDone: 0,
-        interactionsDone: 0,
-        tk: 5,
-        tmax: 5,
-        tournament: createChampionship16(trainerName),
-        eliteFour: { defeated: [], activeMember: null },
-        defeated: false,
+    // Bind indicator clicks
+    $('#map').querySelectorAll<HTMLButtonElement>('.starter-thumb-btn').forEach(btn => {
+      btn.onclick = () => {
+        const idx = parseInt(btn.dataset.idx || '0', 10);
+        if (idx !== selectedIdx) {
+          selectedIdx = idx;
+          sound.cry(STARTER_OPTIONS[selectedIdx].id, 'battle');
+          renderStarterView();
+        }
       };
+    });
 
-      save();
+    // Confirm choice
+    const chooseBtn = $('#btn-choose-starter');
+    if (chooseBtn) {
+      chooseBtn.onclick = async () => {
+        sound.cry(chosen.id, 'win');
 
-      await note([
-        `<h1>YOUR JOURNEY BEGINS!</h1>`,
-        `Congratulations, <b>${trainerName.toUpperCase()}</b>!`,
-        `You received <b>${chosen.name.toUpperCase()}</b> (Lv.5) as your first partner.`,
-        `<br>You also received your starter adventurer kit:`,
-        `⚾ 5× Poké Balls`,
-        `🍓 3× Oran Berries (30% HP)`,
-        `✨ 2× Full Heal Berries (100% HP)`,
-        `💊 2× Revives`,
-        `💰 ₽1,000 Starting Funds`,
-        `<br>Ahead lies Route 1 toward Pewter City! Exactly 5 wild Pokémon encounters await you.`,
-      ]);
+        const starterMon = mk(chosen.id, 5);
+        starterMon.moves = [...chosen.moves];
 
-      enterRouteExploration(0);
-    };
-  });
+        G = {
+          trainerName: trainerName.trim() || 'TRAINER',
+          starterId: chosen.id,
+          phase: 'ROUTE_ENCOUNTER',
+          gymIndex: 0,
+          badges: [],
+          money: ECONOMY.startingMoney,
+          balls: ECONOMY.startingBalls,
+          b: ECONOMY.startingBerries.oran,
+          b50: 1,
+          b75: 0,
+          fh: ECONOMY.startingBerries.fullHeal,
+          rv: ECONOMY.startingBerries.revive,
+          st: {},
+          team: [starterMon],
+          pcBox: [],
+          routeEncountersDone: 0,
+          interactionsDone: 0,
+          tk: 5,
+          tmax: 5,
+          tournament: createChampionship16(trainerName),
+          eliteFour: { defeated: [], activeMember: null },
+          defeated: false,
+        };
+
+        pokedexManager.recordCaught(chosen.id);
+        save();
+
+        await note([
+          `<h1>YOUR JOURNEY BEGINS</h1>`,
+          `Welcome, <b>${trainerName.toUpperCase()}</b>!`,
+          `You and <b>${chosen.name.toUpperCase()}</b> (Lv.5) are ready to conquer the Kanto region.`,
+          `<br><b>Starter Adventurer Supplies:</b>`,
+          `• 5× Poké Balls`,
+          `• 3× Oran Berries (30% HP)`,
+          `• 2× Full Heal Berries (100% HP)`,
+          `• 2× Revives`,
+          `• ₽1,000 Starting Funds`,
+          `<br>Explore Route 1 toward Pewter City to catch wild partners and train for your first Gym battle.`,
+        ]);
+
+        enterRouteExploration(0);
+      };
+    }
+  };
+
+  renderStarterView();
 }
 
 // ============================================================================
@@ -741,9 +779,9 @@ export function saveCurrentRoutePosition(): void {
 
 export async function visitPokemonCenter(): Promise<void> {
   const choice = await pick(
-    '🏥 POKÉMON CENTER<br>Nurse Joy: "Welcome to the Pokémon Center!<br>Would you like me to heal your Pokémon to full health?"',
+    'POKÉMON CENTER<br>Nurse Joy: "Welcome to the Pokémon Center!<br>Would you like me to heal your Pokémon to full health?"',
     [
-      { h: '✨ YES, HEAL PARTY (100% HP)' },
+      { h: 'YES, HEAL PARTY (100% HP)' },
       { h: 'NO, THANK YOU' },
     ],
     false
@@ -756,9 +794,8 @@ export async function visitPokemonCenter(): Promise<void> {
     sound.beep(659, 0.2, 'sine');
     sound.beep(880, 0.35, 'sine', 0.1, 0.15);
     await note([
-      '<h3>🏥 NURSE JOY</h3>',
+      '<h3>NURSE JOY</h3>',
       'Restoring your Pokémon team...',
-      '✨ ✨ ✨',
       'Your Pokémon are fully healed to 100% HP! We hope to see you again!',
     ]);
   }
@@ -770,10 +807,10 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
     routeId !== undefined
       ? routeId
       : (G?.savedRoutePos?.routeId !== undefined
-          ? G.savedRoutePos.routeId
-          : (G?.currentRouteId !== undefined
-              ? G.currentRouteId
-              : Math.min(KANTO_JOURNEY_ROUTES.length - 1, G?.gymIndex || 0)));
+        ? G.savedRoutePos.routeId
+        : (G?.currentRouteId !== undefined
+          ? G.currentRouteId
+          : Math.min(KANTO_JOURNEY_ROUTES.length - 1, G?.gymIndex || 0)));
 
   if (G) {
     G.currentRouteId = rId;
@@ -797,8 +834,8 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
   const moneyVal = $('#hud-money-val');
   const encDots = $('#hud-enc-dots');
 
-  if (locEl) locEl.textContent = `🧭 ${routeDef.name}`;
-  if (destEl) destEl.textContent = `Toward: ${routeDef.destinationLabel}`;
+  if (locEl) locEl.textContent = routeDef.name;
+  if (destEl) destEl.textContent = `➔ ${routeDef.destinationLabel}`;
   if (ballsVal) ballsVal.textContent = String(G?.balls || 0);
   if (moneyVal) moneyVal.textContent = (G?.money || 0).toLocaleString();
 
@@ -848,10 +885,10 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
     const nextRouteDef = KANTO_JOURNEY_ROUTES[nextRouteIdx];
     const destination = nextRouteDef ? nextRouteDef.name : 'the next area';
     const choice = await pick(
-      `🚪 <b>${building.label}</b><br><br>Officer Jenny: "Halt, Trainer! This checkpoint gate connects to <b>${destination}</b>.<br>Would you like to pass through the gatehouse?"`,
+      `<b>${building.label}</b><br><br>Officer Jenny: "Halt, Trainer! This checkpoint gate connects to <b>${destination}</b>.<br>Would you like to pass through the gatehouse?"`,
       [
-        { h: `🌲 PROCEED TO ${destination.toUpperCase()} ➔` },
-        { h: `🎒 RETURN TO CITY HUB` },
+        { h: `PROCEED TO ${destination.toUpperCase()} ➔` },
+        { h: `RETURN TO CITY HUB` },
         { h: `CANCEL (Stay on current route)` },
       ],
       false
@@ -873,7 +910,7 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
       sound.beep(659, 0.15, 'sine');
       sound.beep(880, 0.25, 'sine', 0.1, 0.12);
       await note([
-        `<h1>🎉 ARRIVED AT ${destination.toUpperCase()}!</h1>`,
+        `<h1>ARRIVED AT ${destination.toUpperCase()}!</h1>`,
         `You have successfully passed through the gatehouse and arrived at <b>${destination}</b>!`,
         `<b>+5 fresh training sessions have been granted for reaching a new area!</b> (Total: ${G?.tk || 5})`,
         `Explore the city, visit the Pokémon Center and Poké Mart, and prepare for the Gym challenge!`,
@@ -948,7 +985,7 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
       sound.beep(659, 0.15, 'sine');
       sound.beep(880, 0.25, 'sine', 0.1, 0.12);
       await note([
-        `<h1>🎉 ARRIVED AT ${nextRouteDef.name.toUpperCase()}!</h1>`,
+        `<h1>ARRIVED AT ${nextRouteDef.name.toUpperCase()}!</h1>`,
         `You have arrived at <b>${nextRouteDef.name}</b>!`,
         `<b>+5 fresh training sessions have been granted!</b> (Total: ${G?.tk || 5})`,
       ]);
@@ -991,21 +1028,21 @@ export function journeyHubScr(): void {
 
   if (gymIdx < 8) {
     heroCardHTML = `
-      <div class="journey-main-card" style="border-color:#38bdf8">
+      <div class="journey-main-card">
         <div class="journey-card-header">
-          <span class="journey-step-badge" style="background:#0284c7">KANTO ROUTE EXPLORATION</span>
-          <span style="font-size:12px;font-weight:800;color:#facc15">${currentGym!.badgeIcon} GYM ${gymIdx + 1} OF 8</span>
+          <span class="journey-step-badge">KANTO ROUTE EXPLORATION</span>
+          <span style="font-size:12px;font-weight:800;color:var(--md-sys-color-accent-gold)">GYM ${gymIdx + 1} OF 8 · ${currentGym!.city.toUpperCase()}</span>
         </div>
         <div class="journey-card-title">${currentRouteDef?.name || 'Route'} ➔ ${currentRouteDef?.destinationLabel || currentGym!.city}</div>
         <div class="journey-card-desc">
-          Walk through the Kanto world! Explore tall grass, battle wild Pokémon, catch partners with Poké Balls, and visit Pokémon Centers, Poké Marts, and Gyms!
+          Travel through expansive Kanto routes, explore diverse tall grass zones, discover hidden items, and challenge Gym Leader ${currentGym!.leader}.
         </div>
         <div class="col" style="gap:8px">
-          <button id="btn-explore-route" style="width:100%;text-align:center;background:linear-gradient(180deg,#16a34a,#15803d);color:#fff;border-color:#14532d;font-size:15px;font-weight:900">
-            🌲 EXPLORE ROUTE & TRAVEL ➔
+          <button id="btn-explore-route" class="btn-primary" style="width:100%;text-align:center;font-size:14px;font-weight:900">
+            EXPLORE ROUTE & TRAVEL ➔
           </button>
-          <button id="btn-gym-battle" style="width:100%;text-align:center;background:linear-gradient(180deg,#ef4444,#dc2626);color:#fff;border-color:#b91c1c;font-size:14px;font-weight:900">
-            ⚔ CHALLENGE GYM LEADER ${currentGym!.leader.toUpperCase()} (${currentGym!.city} Gym)
+          <button id="btn-gym-battle" class="btn-accent" style="width:100%;text-align:center;font-size:13px;font-weight:900">
+            CHALLENGE GYM LEADER ${currentGym!.leader.toUpperCase()} (${currentGym!.city} Gym)
           </button>
         </div>
       </div>
@@ -1019,36 +1056,36 @@ export function journeyHubScr(): void {
     const isStarted = !!G.tournament && (G.tournament.currentRoundIndex > 0 || (G.tournament.history && G.tournament.history.length > 0));
 
     heroCardHTML = `
-      <div class="journey-main-card" style="border-color:#facc15">
+      <div class="journey-main-card">
         <div class="journey-card-header">
-          <span class="journey-step-badge" style="background:#facc15;color:#0f172a">ALL 8 BADGES OBTAINED</span>
-          <span style="font-size:12px;font-weight:800;color:#facc15">16-TRAINER TOURNAMENT</span>
+          <span class="journey-step-badge">ALL 8 BADGES OBTAINED</span>
+          <span style="font-size:12px;font-weight:800;color:var(--md-sys-color-accent-gold)">16-TRAINER TOURNAMENT</span>
         </div>
-        <div class="journey-card-title">👑 KANTO CHAMPIONSHIP TOURNAMENT</div>
+        <div class="journey-card-title">KANTO CHAMPIONSHIP TOURNAMENT</div>
         <div class="journey-card-desc">
           ${isStarted
-            ? `Tournament in progress! <b>${roundName}</b> is ready.<br>Next Opponent: <b>${oppName}</b>. Heal, shop, train, and return to the arena when ready!`
-            : `You have earned all eight Kanto Gym Badges and qualified for the Championship! 15 elite trainers await you.`}
+        ? `Tournament in progress! <b>${roundName}</b> is ready.<br>Next Opponent: <b>${oppName}</b>. Prepare your team and enter the arena.`
+        : `All eight Kanto Gym Badges earned! 15 elite trainers await you in the Kanto Championship.`}
         </div>
-        <button id="btn-enter-championship" style="width:100%;text-align:center;background:linear-gradient(180deg,#eab308,#ca8a04);color:#0f172a;border-color:#a16207;font-size:15px;font-weight:900">
-          🏆 ${isStarted ? `RETURN TO TOURNAMENT (${roundName.toUpperCase()}) ➔` : 'ENTER 16-PLAYER CHAMPIONSHIP ➔'}
+        <button id="btn-enter-championship" class="btn-accent" style="width:100%;text-align:center;font-size:14px;font-weight:900">
+          ${isStarted ? `RETURN TO TOURNAMENT (${roundName.toUpperCase()}) ➔` : 'ENTER 16-PLAYER CHAMPIONSHIP ➔'}
         </button>
       </div>
     `;
   } else {
     // Champion -> Elite Four
     heroCardHTML = `
-      <div class="journey-main-card" style="border-color:#38bdf8">
+      <div class="journey-main-card">
         <div class="journey-card-header">
-          <span class="journey-step-badge" style="background:#38bdf8;color:#0f172a">KANTO CHAMPION</span>
-          <span style="font-size:12px;font-weight:800;color:#38bdf8">THE TRUE ENDGAME</span>
+          <span class="journey-step-badge">KANTO CHAMPION</span>
+          <span style="font-size:12px;font-weight:800;color:var(--md-sys-color-accent-blue)">THE ENDGAME</span>
         </div>
-        <div class="journey-card-title">❄️🥋👻🐲 THE ELITE FOUR CHAMBERS</div>
+        <div class="journey-card-title">THE ELITE FOUR CHAMBERS</div>
         <div class="journey-card-desc">
-          Challenge Lorelei, Bruno, Agatha, and Lance in any chosen order! Complete team healing after each win.
+          Challenge Lorelei, Bruno, Agatha, and Lance in any chosen order! Complete team healing after each victory.
         </div>
-        <button id="btn-enter-elitefour" style="width:100%;text-align:center;background:linear-gradient(180deg,#0284c7,#0369a1);color:#fff;border-color:#075985;font-size:15px;font-weight:900">
-          ⚔ CHALLENGE THE ELITE FOUR ➔
+        <button id="btn-enter-elitefour" class="btn-primary" style="width:100%;text-align:center;font-size:14px;font-weight:900">
+          CHALLENGE THE ELITE FOUR ➔
         </button>
       </div>
     `;
@@ -1063,27 +1100,27 @@ export function journeyHubScr(): void {
     ${heroCardHTML}
 
     <div class="quick-actions-bar" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-      <button id="qh-center" class="qpm-btn" style="flex:1;min-width:140px;background:linear-gradient(180deg,#ec4899,#db2777);color:#fff;border-color:#be185d" title="Nurse Joy: Free Full Heal for entire team">
-        🏥 POKÉMON CENTER
+      <button id="qh-pokedex" class="qpm-btn" style="flex:1;min-width:130px;background:var(--md-sys-color-primary);color:#fff;border-color:var(--md-sys-color-primary-hover);display:flex;align-items:center;justify-content:center;gap:6px" title="Field research guide">
+        ${ICONS.pokedex(16)} POKÉDEX
       </button>
-      <button id="qh-train" class="qpm-btn qpm-train" style="flex:1;min-width:140px" title="Select a Pokémon to train (1 session)">
-        💪 TRAIN (${G.tk || 0}/${G.tmax || 5})${getTrainingXpMultiplier(G) > 1.0 ? ' <span class="boost-badge">2× XP</span>' : ''}
+      <button id="qh-center" class="qpm-btn" style="flex:1;min-width:130px;background:#be185d;color:#fff;border-color:#9d174d;display:flex;align-items:center;justify-content:center;gap:6px" title="Full Heal team">
+        ${ICONS.center(16)} POKÉMON CENTER
       </button>
-      <button id="qh-shop" class="qpm-btn" style="flex:1;min-width:140px;background:linear-gradient(180deg,#0284c7,#0369a1);color:#fff;border-color:#075985" title="Buy supplies">
-        🛒 POKÉ MART
+      <button id="qh-shop" class="qpm-btn" style="flex:1;min-width:130px;background:#0369a1;color:#fff;border-color:#075985;display:flex;align-items:center;justify-content:center;gap:6px" title="Buy supplies">
+        ${ICONS.shop(16)} POKÉ MART
       </button>
-      <button id="qh-heal" class="qpm-btn qpm-heal" style="flex:1;min-width:140px" title="Heal a Pokémon using bag berries">
-        🩹 HEAL POKÉMON
+      <button id="qh-train" class="qpm-btn qpm-train" style="flex:1;min-width:130px;display:flex;align-items:center;justify-content:center;gap:6px" title="Select a Pokémon to train">
+        ${ICONS.train(16)} TRAIN (${G.tk || 0}/${G.tmax || 5})${getTrainingXpMultiplier(G) > 1.0 ? ' <span class="boost-badge">2× XP</span>' : ''}
       </button>
     </div>
 
-    <table>
+    <div class="party-list-container">
       ${G.team.map((m, idx) => trow(m, idx)).join('')}
-    </table>
+    </div>
 
     <div class="col" style="margin-top:12px;gap:8px">
-      <button id="btn-open-bag">🎒 BAG & MEDICINES</button>
-      <button id="btn-open-team">👥 TEAM & PC BOX (${G.pcBox.length} in Box)</button>
+      <button id="btn-open-bag" style="display:flex;align-items:center;justify-content:center;gap:6px">${ICONS.bag(16)} BAG & MEDICINES</button>
+      <button id="btn-open-team" style="display:flex;align-items:center;justify-content:center;gap:6px">${ICONS.team(16)} TEAM & PC STORAGE (${G.pcBox.length} stored)</button>
     </div>
   `;
 
@@ -1108,6 +1145,11 @@ export function journeyHubScr(): void {
     $('#btn-enter-elitefour').onclick = () => eliteFourHub();
   }
 
+  const qhPokedex = $('#qh-pokedex');
+  if (qhPokedex) {
+    qhPokedex.onclick = () => pokedexScr('hub');
+  }
+
   const qhCenter = $('#qh-center');
   if (qhCenter) {
     qhCenter.onclick = async () => {
@@ -1117,7 +1159,6 @@ export function journeyHubScr(): void {
   }
 
   $('#qh-train').onclick = () => trainScr();
-  $('#qh-heal').onclick = () => healScr();
   $('#qh-shop').onclick = () => shopScr();
 
   $('#btn-open-bag').onclick = async () => {
@@ -1153,6 +1194,25 @@ export function journeyHubScr(): void {
   });
 }
 
+// ============================================================================
+// SCREEN 7: MODERN DIGITAL POKÉDEX FIELD RESEARCH DEVICE
+// ============================================================================
+export function pokedexScr(returnTo: 'route' | 'hub' = 'hub'): void {
+  sound.music('menu');
+  show('pokedex');
+  modernPokedexView.onClose = () => {
+    if (returnTo === 'route') {
+      enterRouteExploration(G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? G.gymIndex);
+    } else {
+      journeyHubScr();
+    }
+  };
+  const pokedexEl = $('#pokedex');
+  if (pokedexEl) {
+    modernPokedexView.render(pokedexEl);
+  }
+}
+
 
 // ============================================================================
 // SCREEN 8: POKÉ MART (SHOP SYSTEM)
@@ -1165,7 +1225,7 @@ export function shopScr(): void {
   const city = currentGym ? currentGym.city : 'Indigo Plateau';
 
   $('#map').innerHTML = `
-    <h1>🛒 POKÉ MART</h1>
+    <h1>POKÉ MART</h1>
     <p style="text-align:center">${city} Branch · Stock up on supplies for your journey!</p>
     ${renderBadgesBar(G.badges)}
     ${renderResourcesBar()}
@@ -1173,7 +1233,7 @@ export function shopScr(): void {
     <div class="shop-grid">
       <div class="shop-item-card">
         <div class="shop-item-left">
-          <span class="shop-item-icon">⚾</span>
+          <span class="shop-item-icon">${ICONS.pokeBall(24)}</span>
           <div>
             <div class="shop-item-title">Poké Ball</div>
             <div class="shop-item-desc">Standard capsule for wild Pokémon (Catch Rate: 1.0×).</div>
@@ -1186,7 +1246,7 @@ export function shopScr(): void {
 
       <div class="shop-item-card">
         <div class="shop-item-left">
-          <span class="shop-item-icon">🔵</span>
+          <span class="shop-item-icon">${ICONS.greatBall(24)}</span>
           <div>
             <div class="shop-item-title">Great Ball</div>
             <div class="shop-item-desc">High-performance capsule with higher success (Catch Rate: 1.5×).</div>
@@ -1199,7 +1259,7 @@ export function shopScr(): void {
 
       <div class="shop-item-card">
         <div class="shop-item-left">
-          <span class="shop-item-icon">🟡</span>
+          <span class="shop-item-icon">${ICONS.ultraBall(24)}</span>
           <div>
             <div class="shop-item-title">Ultra Ball</div>
             <div class="shop-item-desc">Ultra-performance capsule with maximum effectiveness (Catch Rate: 2.0×).</div>
@@ -1212,7 +1272,7 @@ export function shopScr(): void {
 
       <div class="shop-item-card">
         <div class="shop-item-left">
-          <span class="shop-item-icon">🍓</span>
+          <span class="shop-item-icon">${ICONS.oranBerry(24)}</span>
           <div>
             <div class="shop-item-title">Oran Berry</div>
             <div class="shop-item-desc">Restores +30% of a Pokémon's maximum HP.</div>
@@ -1225,7 +1285,7 @@ export function shopScr(): void {
 
       <div class="shop-item-card">
         <div class="shop-item-left">
-          <span class="shop-item-icon">🫐</span>
+          <span class="shop-item-icon">${ICONS.sitrusBerry(24)}</span>
           <div>
             <div class="shop-item-title">Sitrus Berry</div>
             <div class="shop-item-desc">Restores +50% of a Pokémon's maximum HP.</div>
@@ -1238,7 +1298,7 @@ export function shopScr(): void {
 
       <div class="shop-item-card">
         <div class="shop-item-left">
-          <span class="shop-item-icon">✨</span>
+          <span class="shop-item-icon">${ICONS.fullHeal(24)}</span>
           <div>
             <div class="shop-item-title">Full Heal Berry</div>
             <div class="shop-item-desc">Completely restores HP to 100% full capacity.</div>
@@ -1251,7 +1311,7 @@ export function shopScr(): void {
 
       <div class="shop-item-card">
         <div class="shop-item-left">
-          <span class="shop-item-icon">💊</span>
+          <span class="shop-item-icon">${ICONS.revive(24)}</span>
           <div>
             <div class="shop-item-title">Revive</div>
             <div class="shop-item-desc">Revives a fainted Pokémon with 50% HP.</div>
@@ -1264,7 +1324,7 @@ export function shopScr(): void {
 
       <div class="shop-item-card">
         <div class="shop-item-left">
-          <span class="shop-item-icon">⚡</span>
+          <span class="shop-item-icon">${ICONS.thunderStone(24)}</span>
           <div>
             <div class="shop-item-title">Evolution Stone Pack</div>
             <div class="shop-item-desc">Mystery evolution catalyst (Thunder, Fire, Water, Leaf, or Moon).</div>
@@ -1277,7 +1337,7 @@ export function shopScr(): void {
     </div>
 
     <div class="col" style="margin-top:14px">
-      <button id="shop-back">RETURN TO CITY</button>
+      <button id="shop-back" style="display:flex;align-items:center;justify-content:center;gap:6px">${ICONS.city(16)} RETURN TO CITY</button>
     </div>
   `;
 
@@ -1350,7 +1410,7 @@ export async function teamScr(activeBoxPage: number = 0): Promise<void> {
     if (!m) {
       return `
         <div class="mon-card-empty">
-          <span style="font-size:20px;margin-bottom:4px">➕</span>
+          <span style="display:inline-flex;margin-bottom:4px">${ICONS.plus(22)}</span>
           <span>EMPTY SLOT #${idx + 1}</span>
           <small style="margin-top:4px">Select a PC Pokémon to add</small>
         </div>
@@ -1367,7 +1427,7 @@ export async function teamScr(activeBoxPage: number = 0): Promise<void> {
     return `
       <div class="mon-card-compact ${isLead ? 'lead' : ''} ${isFainted ? 'fainted' : ''}" data-party-idx="${idx}">
         <span class="mon-card-slot-badge">#${idx + 1}</span>
-        ${isLead ? '<span class="mon-card-lead-star" title="Lead Pokémon">⭐</span>' : ''}
+        ${isLead ? `<span class="mon-card-lead-star" title="Lead Pokémon">${ICONS.star(14)}</span>` : ''}
         <img class="mon-card-img" src="${U(m.id)}" alt="${name}" onerror="fb(this)">
         <div class="mon-card-name" title="${name}">${name}</div>
         <div class="mon-card-lv">Lv. ${m.lv}</div>
@@ -1381,8 +1441,8 @@ export async function teamScr(activeBoxPage: number = 0): Promise<void> {
             <div class="mon-card-hp-fill" style="width:${hpPct}%;background:${isFainted ? '#ef4444' : hpPct > 50 ? '#22c55e' : hpPct > 20 ? '#eab308' : '#ef4444'}"></div>
           </div>
         </div>
-        <button class="mon-card-action-btn btn-party-manage" data-idx="${idx}">
-          MANAGE ⚙️
+        <button class="mon-card-action-btn btn-party-manage" data-idx="${idx}" style="display:flex;align-items:center;justify-content:center;gap:5px">
+          ${ICONS.manage(14)} MANAGE
         </button>
       </div>
     `;
@@ -1414,8 +1474,8 @@ export async function teamScr(activeBoxPage: number = 0): Promise<void> {
   if (G.pcBox.length === 0) {
     pcGridHTML = `
       <div style="grid-column: 1 / -1; padding: 24px; text-align: center; color: #94a3b8; background: #1e293b; border-radius: 12px; border: 1px dashed #334155">
-        📦 No Pokémon currently stored in PC Box.<br>
-        When your active party of 6 is full, wild Pokémon caught or recruited will be safely stored here!
+        No Pokémon currently stored in PC Box.<br>
+        When your active party of 6 is full, wild Pokémon caught will be safely stored here!
       </div>
     `;
   } else {
@@ -1438,8 +1498,8 @@ export async function teamScr(activeBoxPage: number = 0): Promise<void> {
               <span style="color:${isFainted ? '#ef4444' : '#94a3b8'}">${m.hp}/${maxHp}</span>
             </div>
           </div>
-          <button class="mon-card-action-btn btn-pc-withdraw" data-pcidx="${globalIdx}" style="${G.team.length < MAX_ACTIVE_TEAM ? 'background:#16a34a;border-color:#22c55e' : 'background:#2563eb;border-color:#3b82f6'}">
-            ${G.team.length < MAX_ACTIVE_TEAM ? 'WITHDRAW ➔' : 'SWAP 🔄'}
+          <button class="mon-card-action-btn btn-pc-withdraw" data-pcidx="${globalIdx}" style="${G.team.length < MAX_ACTIVE_TEAM ? 'background:#16a34a;border-color:#22c55e' : 'background:#2563eb;border-color:#3b82f6'};display:flex;align-items:center;justify-content:center;gap:4px">
+            ${G.team.length < MAX_ACTIVE_TEAM ? 'WITHDRAW' : 'SWAP'}
           </button>
         </div>
       `;
@@ -1448,14 +1508,14 @@ export async function teamScr(activeBoxPage: number = 0): Promise<void> {
 
   $('#map').innerHTML = `
     <div class="team-pc-container">
-      <h1>👥 TEAM & PC BOX</h1>
+      <h1>TEAM & PC STORAGE</h1>
       <p style="text-align:center">Active Party: <b>${G.team.length} / 6</b> · Stored in PC: <b>${G.pcBox.length}</b></p>
       ${renderBadgesBar(G.badges)}
       ${renderResourcesBar()}
 
       <!-- ACTIVE PARTY SECTION -->
       <div class="section-title-bar">
-        <span class="section-title-text">⭐ ACTIVE PARTY</span>
+        <span class="section-title-text">${ICONS.team(16)} ACTIVE PARTY</span>
         <span class="section-title-count">${G.team.length} / 6 SLOTS</span>
       </div>
 
@@ -1465,7 +1525,7 @@ export async function teamScr(activeBoxPage: number = 0): Promise<void> {
 
       <!-- PC BOX STORAGE SECTION -->
       <div class="section-title-bar" style="border-left-color:#38bdf8;margin-top:14px">
-        <span class="section-title-text">📦 PC BOX STORAGE</span>
+        <span class="section-title-text">${ICONS.box(16)} PC BOX STORAGE</span>
         <span class="section-title-count">${G.pcBox.length} TOTAL STORED</span>
       </div>
 
@@ -1476,8 +1536,8 @@ export async function teamScr(activeBoxPage: number = 0): Promise<void> {
       </div>
 
       <div class="col" style="margin-top:16px">
-        <button id="btn-team-close" style="width:100%;text-align:center;font-size:14px;font-weight:900">
-          🔙 RETURN
+        <button id="btn-team-close" style="width:100%;text-align:center;font-size:14px;font-weight:900;display:flex;align-items:center;justify-content:center;gap:6px">
+          ${ICONS.back(16)} RETURN
         </button>
       </div>
     </div>
@@ -1507,10 +1567,10 @@ export async function teamScr(activeBoxPage: number = 0): Promise<void> {
       const name = spec ? spec.name.toUpperCase() : 'POKÉMON';
 
       const actions = [
-        { h: '💪 TRAIN INDIVIDUALLY' },
-        { h: '🩹 HEAL WITH MEDICINE' },
-        ...(idx > 0 ? [{ h: '⭐ SET AS LEAD POKÉMON' }] : []),
-        ...(G.team.length > 1 ? [{ h: '📦 DEPOSIT TO PC BOX' }] : []),
+        { h: 'TRAIN INDIVIDUALLY' },
+        { h: 'HEAL WITH MEDICINE' },
+        ...(idx > 0 ? [{ h: 'SET AS LEAD POKÉMON' }] : []),
+        ...(G.team.length > 1 ? [{ h: 'DEPOSIT TO PC BOX' }] : []),
       ];
 
       const actIdx = await pick(
@@ -1822,7 +1882,7 @@ export async function battleWild(
     await note([
       `<h1>WILD BATTLE VICTORY!</h1>`,
       `Defeated wild <b>${wildMon.name.toUpperCase()}</b>!`,
-      `💰 Earned <b>+₽${rewardMoney.toLocaleString()}</b> in prize money! (Total: ₽${(G.money || 0).toLocaleString()})`,
+      `Earned <b>+₽${rewardMoney.toLocaleString()}</b> in prize money! (Total: ₽${(G.money || 0).toLocaleString()})`,
       `Your team gained valuable battle experience.`,
     ]);
   }
@@ -1840,7 +1900,7 @@ export async function battleWild(
     sound.beep(659, 0.15, 'sine');
     sound.beep(880, 0.25, 'sine', 0.1, 0.12);
     await note([
-      `<h1>💪 BATTLE TRAINING REWARD</h1>`,
+      `<h1>BATTLE TRAINING REWARD</h1>`,
       `You have completed <b>5 wild Pokémon battles</b>!`,
       `<b>+5 fresh training sessions have been granted!</b>`,
       `<p style="font-size:15px;color:#16a34a;font-weight:800;margin-top:8px">Total Training Sessions Available: ${G.tk}</p>`,
@@ -1861,7 +1921,7 @@ export async function battleWild(
 // ============================================================================
 export const championshipBracketHTML = (state: Championship16State): string => {
   const { trainers, activeIds, history, currentRoundIndex } = state;
-  const ROUNDS = ['ROUND OF 16', 'QUARTER FINALS', 'SEMI FINALS', 'THE FINAL', 'CHAMPION 🏆'];
+  const ROUNDS = ['ROUND OF 16', 'QUARTER FINALS', 'SEMI FINALS', 'THE FINAL', 'CHAMPION'];
 
   let html = '<div class="bk16-wrapper"><div class="bk16">';
   for (let round = 0; round < 5; round++) {
@@ -1871,7 +1931,7 @@ export const championshipBracketHTML = (state: Championship16State): string => {
       if (round === 4) {
         // Champion slot
         const winnerId = history[3] ? history[3][0]?.winnerId : -1;
-        const name = winnerId >= 0 ? trainers[winnerId].name : '🏆 ???';
+        const name = winnerId >= 0 ? trainers[winnerId].name : 'CHAMPION';
         html += `<div class="bk16-slot ${winnerId === 0 ? 'me' : 'winner'}" style="text-align:center;padding:12px 8px"><b>${name}</b></div>`;
       } else {
         const match = history[round] ? history[round][m] : null;
@@ -1926,7 +1986,7 @@ export function championshipScr(): void {
   const roundName = ROUND_NAMES_16[roundIdx] || 'THE FINAL';
 
   $('#map').innerHTML = `
-    <h1>KANTO CHAMPIONSHIP 🏆</h1>
+    <h1>KANTO CHAMPIONSHIP</h1>
     <p style="text-align:center">16 Elite Trainers · ${roundName}</p>
     ${renderBadgesBar(G.badges)}
     ${renderResourcesBar()}
@@ -1937,13 +1997,13 @@ export function championshipScr(): void {
         <span class="journey-step-badge" style="background:#eab308;color:#0f172a">${roundName} MATCH</span>
         <span style="font-size:12px;font-weight:800;color:#facc15">${G.tournament.activeIds.length} TRAINERS REMAIN</span>
       </div>
-      <div class="journey-card-title">${opp.avatar} ${opp.name} (${opp.title})</div>
+      <div class="journey-card-title">${ICONS.star(18)} ${opp.name} (${opp.title})</div>
       <div class="journey-card-desc">
         Style: <b>${opp.style}</b> · Team: <b>${opp.team.length} Pokémon</b><br>
         "${opp.dialogue?.intro || "I've come too far to lose now!"}"
       </div>
-      <button id="btn-champ-fight" style="width:100%;text-align:center;background:linear-gradient(180deg,#eab308,#ca8a04);color:#0f172a;border-color:#a16207;font-size:15px;font-weight:900">
-        ⚔ START BATTLE VS ${opp.name.toUpperCase()}
+      <button id="btn-champ-fight" style="width:100%;text-align:center;background:linear-gradient(180deg,#eab308,#ca8a04);color:#0f172a;border-color:#a16207;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;gap:8px">
+        ${ICONS.swords(18)} START BATTLE VS ${opp.name.toUpperCase()}
       </button>
     </div>
 
@@ -1951,26 +2011,26 @@ export function championshipScr(): void {
     <div class="champ-prep-actions">
       <div class="champ-prep-grid">
         <button id="btn-champ-train" class="champ-prep-btn" title="Train a Pokémon with 2x boosted XP">
-          💪 TRAIN (${G.tk || 0}/${G.tmax || 5})<span class="boost-badge">2× XP</span>
+          ${ICONS.train(16)} TRAIN (${G.tk || 0}/${G.tmax || 5})<span class="boost-badge">2× XP</span>
         </button>
         <button id="btn-champ-bag" class="champ-prep-btn" title="Open bag to use berries, stones, or revives">
-          🎒 BAG / MEDICINE
+          ${ICONS.bag(16)} BAG / MEDICINE
         </button>
         <button id="btn-champ-team" class="champ-prep-btn" title="Manage party and PC box Pokémon">
-          👥 TEAM & PC BOX
+          ${ICONS.team(16)} TEAM & PC BOX
         </button>
         <button id="btn-champ-bracket" class="champ-prep-btn" title="Scroll down to view tournament bracket">
-          📊 VIEW BRACKET
+          ${ICONS.bracket(16)} VIEW BRACKET
         </button>
         <button id="btn-champ-city" class="champ-prep-btn" style="grid-column: 1 / -1; background: linear-gradient(180deg,#0284c7,#0369a1); border-color: #075985; color: #fff" title="Take a break in the city to heal, shop, or manage team">
-          🏙 RETURN TO CITY (Pokémon Center / Poké Mart)
+          ${ICONS.city(16)} RETURN TO CITY (Pokémon Center / Poké Mart)
         </button>
       </div>
     </div>
 
     <!-- Active Party Preview Table -->
     <div class="section-title-bar" style="margin-top:12px">
-      <span class="section-title-text">⚔️ ACTIVE BATTLE SQUAD</span>
+      <span class="section-title-text">${ICONS.swords(16)} ACTIVE BATTLE SQUAD</span>
       <span class="section-title-count">${G.team.length}/6 READY</span>
     </div>
     <table>
@@ -1980,7 +2040,7 @@ export function championshipScr(): void {
     <!-- Bracket Section -->
     <div id="champ-bracket-section" style="margin-top:16px">
       <div class="section-title-bar" style="border-left-color:#facc15">
-        <span class="section-title-text">📊 16-PLAYER TOURNAMENT BRACKET</span>
+        <span class="section-title-text">${ICONS.bracket(16)} 16-PLAYER TOURNAMENT BRACKET</span>
         <span class="section-title-count">${roundName}</span>
       </div>
       ${championshipBracketHTML(G.tournament)}
@@ -2194,7 +2254,7 @@ export async function battleChampionship(roundIndex: number): Promise<void> {
     } catch { }
 
     await note([
-      `<h1>🏆 KANTO CHAMPION!</h1>`,
+      `<h1>KANTO CHAMPION!</h1>`,
       `<b>Congratulations, ${G.trainerName.toUpperCase()}!</b>`,
       `You defeated ${opp.name} and conquered the Kanto Championship Tournament!`,
       `Championship Prize: <b>+₽${ECONOMY.tournamentReward.toLocaleString()}</b>`,
@@ -2224,7 +2284,7 @@ export const ELITE_FOUR_MEMBERS: Record<string, EliteFourMember> = {
   lorelei: {
     id: 'lorelei',
     name: 'Lorelei',
-    avatar: '❄️',
+    avatar: 'L',
     title: 'Elite Four Master of Ice & Water',
     type: 'ICE / WATER',
     badgeClass: 'e4-type-ice',
@@ -2240,7 +2300,7 @@ export const ELITE_FOUR_MEMBERS: Record<string, EliteFourMember> = {
   bruno: {
     id: 'bruno',
     name: 'Bruno',
-    avatar: '🥋',
+    avatar: 'B',
     title: 'Elite Four Master of Fighting & Rock',
     type: 'FIGHTING / ROCK',
     badgeClass: 'e4-type-fighting',
@@ -2256,7 +2316,7 @@ export const ELITE_FOUR_MEMBERS: Record<string, EliteFourMember> = {
   agatha: {
     id: 'agatha',
     name: 'Agatha',
-    avatar: '👻',
+    avatar: 'A',
     title: 'Elite Four Master of Ghost & Poison',
     type: 'GHOST / POISON',
     badgeClass: 'e4-type-ghost',
@@ -2272,7 +2332,7 @@ export const ELITE_FOUR_MEMBERS: Record<string, EliteFourMember> = {
   lance: {
     id: 'lance',
     name: 'Lance',
-    avatar: '🐲',
+    avatar: 'L',
     title: 'Elite Four Dragon Master',
     type: 'DRAGON / FLYING',
     badgeClass: 'e4-type-dragon',
@@ -2296,7 +2356,7 @@ export async function directLevelUp(m: MonInstance): Promise<void> {
   m.hp += Math.max(1, newMax - oldMax);
   ui();
   sound.beep(880, 0.35, 'triangle', 0.2);
-  await say(`⚡ POWER-UP ACTIVATED!<br><b>${name}</b> gained a direct level-up to <b>Level ${m.lv}</b>!`, 300);
+  await say(`POWER-UP ACTIVATED!<br><b>${name}</b> gained a direct level-up to <b>Level ${m.lv}</b>!`, 300);
   await evo(m);
   await learn(m);
   save();
@@ -2318,7 +2378,7 @@ export async function eliteFourPowerUpModal(): Promise<void> {
   });
 
   const pickIdx = await pick(
-    `⚡ <b>ELITE FOUR POWER-UP BLESSING</b><br>
+    `<b>ELITE FOUR POWER-UP BLESSING</b><br>
      Remaining Level-Ups: <b>${remaining} / 3</b><br>
      Select a Pokémon to bestow an immediate +1 level:`,
     choices,
@@ -2334,7 +2394,7 @@ export async function eliteFourPowerUpModal(): Promise<void> {
       eliteFourPowerUpModal();
     } else {
       await note([
-        `⚡ <b>ALL ELITE FOUR POWER-UPS USED!</b>`,
+        `<b>ALL ELITE FOUR POWER-UPS USED!</b>`,
         `All 3 preparation level-ups have been applied to your team.`,
         `Your squad is fully primed for the Elite Four battles!`,
       ]);
@@ -2364,7 +2424,7 @@ export async function eliteFourHub(): Promise<void> {
   const memberKeys = ['lorelei', 'bruno', 'agatha', 'lance'];
 
   $('#map').innerHTML = `
-    <h1>THE ELITE FOUR 🏛️</h1>
+    <h1>THE ELITE FOUR</h1>
     <p style="text-align:center">Indigo Plateau · Defeated: <b>${defCount} / 4 Members</b></p>
     ${renderBadgesBar(G.badges)}
     ${renderResourcesBar()}
@@ -2372,13 +2432,13 @@ export async function eliteFourHub(): Promise<void> {
     <!-- Elite Four 3x Level-Up Power-Up Banner -->
     <div class="e4-powerup-banner">
       <div>
-        <div style="font-weight:900;font-size:15px;color:#facc15">⚡ ELITE FOUR POWER-UP BLESSING</div>
+        <div style="font-weight:900;font-size:15px;color:#facc15;display:flex;align-items:center;gap:6px">${ICONS.lightning(18)} ELITE FOUR POWER-UP BLESSING</div>
         <div style="font-size:12.5px;color:#cbd5e1;margin-top:2px">
           Champion Preparation: <b>${G.eliteFour.powerUpsRemaining || 0} of 3 Uses Remaining</b> (+1 Level Each)
         </div>
       </div>
       <button id="btn-e4-powerup" class="powerup-btn" ${(G.eliteFour.powerUpsRemaining || 0) <= 0 ? 'disabled' : ''}>
-        ${(G.eliteFour.powerUpsRemaining || 0) > 0 ? `⚡ USE POWER-UP (${G.eliteFour.powerUpsRemaining} LEFT)` : '✓ ALL 3 USED'}
+        ${(G.eliteFour.powerUpsRemaining || 0) > 0 ? `USE POWER-UP (${G.eliteFour.powerUpsRemaining} LEFT)` : 'ALL 3 USED'}
       </button>
     </div>
 
@@ -2386,16 +2446,16 @@ export async function eliteFourHub(): Promise<void> {
     <div class="champ-prep-actions" style="margin-bottom:12px">
       <div class="champ-prep-grid">
         <button id="btn-e4-bag" class="champ-prep-btn" title="Open bag to use berries, revives, or stones">
-          🎒 BAG / MEDICINE
+          ${ICONS.bag(16)} BAG / MEDICINE
         </button>
         <button id="btn-e4-team" class="champ-prep-btn" title="Manage active party and PC storage">
-          👥 TEAM & PC BOX
+          ${ICONS.team(16)} TEAM & PC BOX
         </button>
         <button id="btn-e4-shop" class="champ-prep-btn" title="Visit Indigo Plateau Poké Mart branch">
-          🛒 POKÉ MART
+          ${ICONS.shop(16)} POKÉ MART
         </button>
         <button id="btn-e4-heal" class="champ-prep-btn" title="Heal party Pokémon with berries">
-          🩹 HEAL POKÉMON
+          ${ICONS.heal(16)} HEAL POKÉMON
         </button>
       </div>
     </div>
@@ -2407,11 +2467,11 @@ export async function eliteFourHub(): Promise<void> {
         const isDef = G.eliteFour!.defeated.includes(k);
         return `
             <div class="e4-card ${isDef ? 'defeated' : ''}" data-key="${k}">
-              <div class="e4-avatar">${m.avatar}</div>
+              <div class="e4-avatar">${m.name.slice(0, 1)}</div>
               <div class="e4-name">${m.name}</div>
               <div class="e4-type-badge ${m.badgeClass}">${m.type}</div>
               <div class="e4-status-badge ${isDef ? 'e4-status-done' : 'e4-status-available'}">
-                ${isDef ? '✓ DEFEATED' : '⚔ CHALLENGE'}
+                ${isDef ? 'DEFEATED' : 'CHALLENGE'}
               </div>
             </div>
           `;
@@ -2420,7 +2480,7 @@ export async function eliteFourHub(): Promise<void> {
     </div>
 
     <div class="section-title-bar" style="margin-top:14px">
-      <span class="section-title-text">⚔️ ACTIVE BATTLE SQUAD</span>
+      <span class="section-title-text">${ICONS.swords(16)} ACTIVE BATTLE SQUAD</span>
       <span class="section-title-count">${G.team.length}/6 READY</span>
     </div>
     <table>
@@ -2428,7 +2488,7 @@ export async function eliteFourHub(): Promise<void> {
     </table>
 
     <div class="col" style="margin-top:14px;gap:8px">
-      <button id="btn-e4-hub-return">🏙 RETURN TO CITY</button>
+      <button id="btn-e4-hub-return" style="display:flex;align-items:center;justify-content:center;gap:6px">${ICONS.city(16)} RETURN TO CITY</button>
     </div>
   `;
 
@@ -2586,12 +2646,12 @@ export async function battleEliteFour(memberId: string): Promise<void> {
 
     const defCount = G.eliteFour?.defeated?.length || 0;
     await note([
-      `<h1>⚔️ DEFEATED BY ${member.avatar} ${member.name.toUpperCase()}</h1>`,
+      `<h1>DEFEATED BY ${member.name.toUpperCase()}</h1>`,
       `<b>${member.title}</b>`,
       `<p style="margin:8px 0;font-style:italic">"Train harder and challenge me again when you are truly prepared!"</p>`,
       `Your team whited out and rushed to the <b>Indigo Plateau Pokémon Center</b>.<br>Nurse Joy has fully restored all your Pokémon to 100% full health!`,
       `<br><b>PROGRESSION CHECKPOINT SAVED:</b>`,
-      `✓ <b>${defCount} of 4</b> Elite Four Members remain completed!`,
+      `<b>${defCount} of 4</b> Elite Four Members remain completed!`,
       ...(defCount > 0 ? [`Defeated: <b>${G.eliteFour!.defeated.map(k => ELITE_FOUR_MEMBERS[k]?.name || k).join(', ')}</b>`] : []),
       `<br>You can challenge <b>${member.name}</b> again immediately or prepare your team!`,
     ]);
@@ -2633,10 +2693,10 @@ export async function battleEliteFour(memberId: string): Promise<void> {
     .join('');
 
   await note([
-    `<h1>${member.avatar} ${member.name.toUpperCase()} DEFEATED!</h1>`,
+    `<h1>${member.name.toUpperCase()} DEFEATED!</h1>`,
     `<b>Member ${G.eliteFour.defeated.length} of 4 vanquished!</b>`,
     `<div class="heal-screen">
-      <div class="heal-header-icon">🩹✨</div>
+      <div class="heal-header-icon">${ICONS.heal(36)}</div>
       <div class="heal-title">TEAM FULLY RESTORED</div>
       <div class="heal-desc">All HP restored. All fainted Pokémon revived to full strength.</div>
       <div class="heal-team-list">${healRows}</div>
@@ -2675,7 +2735,7 @@ export async function hallOfFameScr(): Promise<void> {
 
   $('#map').innerHTML = `
     <div class="hof-container">
-      <div class="hof-trophy">👑🏆</div>
+      <div class="hof-trophy">${ICONS.crown(44)}</div>
       <div class="hof-header">HALL OF FAME</div>
       <div class="hof-trainer-title">GRAND CHAMPION: <b>${G.trainerName.toUpperCase()}</b></div>
       <p style="font-size:12.5px;color:#cbd5e1;line-height:1.5;max-width:440px;margin:0 auto 12px">
@@ -2738,15 +2798,15 @@ export async function showGymDefeat(gymIndex: number, gym: GymLeaderDefinition):
       <div class="defeat-subtitle" style="font-size:13px;line-height:1.45;color:#1e293b">
         You whited out and rushed to the <b>${gym.city} Pokémon Center</b>.<br>
         Nurse Joy has fully restored all your Pokémon to full health!<br>
-        <span style="color:#16a34a;font-weight:800">💪 +3 Training sessions granted to power up your team!</span>
+        <span style="color:#16a34a;font-weight:800">+3 Training sessions granted to power up your team!</span>
         ${lossFee > 0 ? `<br><small style="color:#ef4444">Dropped ₽${lossFee.toLocaleString()} in prize money to the Gym.</small>` : ''}
       </div>
     </div>`,
     [
-      { h: '⚔️ <b>RETRY GYM BATTLE</b>' },
-      { h: '🚶 <b>EXPLORE ROUTE & TRAIN</b>' },
-      { h: '🛒 <b>VISIT POKÉ MART</b>' },
-      { h: '🎒 <b>TEAM MANAGEMENT & HUB</b>' },
+      { h: '<b>RETRY GYM BATTLE</b>' },
+      { h: '<b>EXPLORE ROUTE & TRAIN</b>' },
+      { h: '<b>VISIT POKÉ MART</b>' },
+      { h: '<b>TEAM MANAGEMENT & HUB</b>' },
     ],
     false,
     'defeat-actions'
@@ -2807,7 +2867,7 @@ export async function showDefeat(isEliteFour: boolean = false, foeName: string =
 
   const choice = await pick(
     `<div class="defeat-screen">
-      <div class="defeat-skull">⚔️</div>
+      <div class="defeat-skull">${ICONS.skull(36)}</div>
       <div class="defeat-title">${titleText}</div>
       <div class="defeat-subtitle">All your Pokémon fainted in battle!</div>
       <div class="defeat-stats">
@@ -2817,9 +2877,9 @@ export async function showDefeat(isEliteFour: boolean = false, foeName: string =
       </div>
     </div>`,
     [
-      { h: '<b>🔄 RETRY MATCH</b>' },
-      { h: '🏙 RETURN TO CITY / PREPARATION' },
-      { h: '🏠 MAIN MENU' },
+      { h: '<b>RETRY MATCH</b>' },
+      { h: 'RETURN TO CITY / PREPARATION' },
+      { h: 'MAIN MENU' },
     ],
     false,
     'defeat-actions'
@@ -2846,19 +2906,40 @@ export async function showDefeat(isEliteFour: boolean = false, foeName: string =
 export const trow = (m: MonInstance, idx?: number) => {
   const maxHp = st(m).max;
   const isFull = m.hp >= maxHp;
+  const isFainted = m.hp <= 0;
   const hasSessions = (G.tk || 0) > 0;
   const idxAttr = idx !== undefined ? `data-idx="${idx}"` : '';
+  const spec = POKEMON_SPECIES_MAP[m.id];
+  const hpPct = Math.min(100, Math.max(0, (m.hp / maxHp) * 100));
+  const hpColorClass = hpPct > 50 ? 'hp-high' : hpPct > 20 ? 'hp-mid' : 'hp-low';
+  const artwork = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${m.id}.png`;
 
-  return `<tr><td><div class="row">${mh(m)}</div></td><td>${POKEMON_SPECIES_MAP[m.id]?.typesShort
-    .map(tb)
-    .join('')}<small>EXP <span class="eb"><i style="width:${Math.min(100, (m.exp / need(m)) * 100)}%"></i></span> ${m.exp
-    }/${need(m)}</small>${idx !== undefined
-      ? `<div class="team-ind-actions">
-           <button class="ind-btn ind-train" ${idxAttr} ${!hasSessions ? 'disabled' : ''} title="Train this Pokémon individually">💪 TRAIN</button>
-           <button class="ind-btn ind-heal" ${idxAttr} ${isFull ? 'disabled' : ''} title="Heal this Pokémon individually">🩹 HEAL</button>
-         </div>`
+  return `
+    <div class="party-member-card ${isFainted ? 'fainted' : ''}">
+      <div class="party-art">
+        <img src="${artwork}" alt="${spec?.name || 'Mon'}" onerror="fb(this)">
+      </div>
+      <div class="party-info">
+        <div class="party-name-row">
+          <span class="party-name">${spec?.name || 'Pokémon'}</span>
+          <span class="party-lv">Lv. ${m.lv}</span>
+        </div>
+        <div class="party-hp-meter">
+          <div class="party-hp-track">
+            <div class="party-hp-bar ${hpColorClass}" style="width: ${hpPct}%"></div>
+          </div>
+          <span class="party-hp-text">${m.hp}/${maxHp} HP</span>
+        </div>
+      </div>
+      ${idx !== undefined
+      ? `<div class="party-actions">
+             <button class="party-mini-btn ind-train" ${idxAttr} ${!hasSessions ? 'disabled' : ''} title="Train Pokémon">Train</button>
+             <button class="party-mini-btn ind-heal" ${idxAttr} ${isFull ? 'disabled' : ''} title="Heal Pokémon">Heal</button>
+           </div>`
       : ''
-    }</td></tr>`;
+    }
+    </div>
+  `;
 };
 
 export async function trainSingleMon(idx: number): Promise<void> {
@@ -2879,9 +2960,9 @@ export async function trainSingleMon(idx: number): Promise<void> {
   m.hp += h;
   m.exp += e;
 
-  const notes = ['💪 TRAINING COMPLETE!', `${n} gained +${e} EXP!`];
+  const notes = ['TRAINING COMPLETE!', `${n} gained +${e} EXP!`];
   if (mult > 1.0) {
-    notes.push('🏆 <b>Championship Training Bonus</b>: 2× XP Boost applied!');
+    notes.push('<b>Championship Training Bonus</b>: 2× XP Boost applied!');
   }
   HUB = notes;
   await lvls(m);
@@ -2911,7 +2992,7 @@ export async function healSingleMon(idx: number): Promise<void> {
   if (m.hp <= 0 && (G.rv || 0) > 0) {
     items.push({
       k: 'r',
-      label: `💊 Revive (×${G.rv})`,
+      label: `Revive (×${G.rv})`,
       count: G.rv || 0,
       desc: 'Revives fainted Pokémon to 50% HP',
       apply: () => {
@@ -2924,7 +3005,7 @@ export async function healSingleMon(idx: number): Promise<void> {
   if ((G.b || 0) > 0 && m.hp > 0) {
     items.push({
       k: 'b',
-      label: `🍓 Oran Berry (×${G.b})`,
+      label: `Oran Berry (×${G.b})`,
       count: G.b || 0,
       desc: `Restores +30% HP (+${Math.ceil(maxHp * 0.3)} HP)`,
       apply: () => {
@@ -2937,7 +3018,7 @@ export async function healSingleMon(idx: number): Promise<void> {
   if ((G.b50 || 0) > 0 && m.hp > 0) {
     items.push({
       k: 'b50',
-      label: `🫐 Sitrus Berry (×${G.b50})`,
+      label: `Sitrus Berry (×${G.b50})`,
       count: G.b50 || 0,
       desc: `Restores +50% HP (+${Math.ceil(maxHp * 0.5)} HP)`,
       apply: () => {
@@ -2950,7 +3031,7 @@ export async function healSingleMon(idx: number): Promise<void> {
   if ((G.fh || 0) > 0) {
     items.push({
       k: 'fh',
-      label: `✨ Full Heal Berry (×${G.fh})`,
+      label: `Full Heal Berry (×${G.fh})`,
       count: G.fh || 0,
       desc: 'Completely restores HP to 100% full',
       apply: () => {
@@ -2962,7 +3043,7 @@ export async function healSingleMon(idx: number): Promise<void> {
 
   if (items.length === 0) {
     if (m.hp <= 0) {
-      await note([`${n} has fainted!`, 'You need a 💊 Revive to restore a fainted Pokémon.']);
+      await note([`${n} has fainted!`, 'You need a Revive to restore a fainted Pokémon.']);
       return;
     }
     await note(['No healing berries remaining in your bag!', 'Purchase berries at the Poké Mart.']);
@@ -2988,7 +3069,7 @@ export async function healSingleMon(idx: number): Promise<void> {
   save();
 
   await note([
-    `🩹 HEAL COMPLETE!`,
+    `HEAL COMPLETE!`,
     `Used ${itemUsed.label.split('(')[0].trim()} on ${n}.`,
     `${n} HP: <b>${m.hp}/${maxHp}</b>`,
   ]);
@@ -3022,8 +3103,7 @@ export async function healScr(): Promise<void> {
 export async function trainScr(): Promise<void> {
   const mult = getTrainingXpMultiplier(G);
   const i = await pick(
-    `TRAINING SESSIONS ${mult > 1.0 ? '<span class="boost-badge">2× XP BOOST</span>' : ''}<br>${'★'.repeat(G.tk || 0)}${'☆'.repeat((G.tmax || 5) - (G.tk || 0))}<br>${G.tk || 0} / ${G.tmax || 5
-    } remaining<br>Select a Pokémon to train (${mult > 1.0 ? '+2× EXP' : '+EXP'}, +15% HP):`,
+    `TRAINING SESSIONS ${mult > 1.0 ? '<span class="boost-badge">2× XP BOOST</span>' : ''}<br><b>${G.tk || 0} / ${G.tmax || 5} Available</b><br>Select a Pokémon to train (${mult > 1.0 ? '+2× EXP' : '+EXP'}, +15% HP):`,
     G.team.map(m => ({
       d: (G.tk || 0) < 1,
       h: `${mh(m)}<small>EXP ${m.exp}/${need(m)}</small>`,
@@ -3092,8 +3172,8 @@ export function showMoveLearnComparisonModal(m: MonInstance, newMove: MoveData):
       newMove.category === 'Physical'
         ? 'category-physical'
         : newMove.category === 'Special'
-        ? 'category-special'
-        : 'category-status';
+          ? 'category-special'
+          : 'category-status';
 
     const currentMovesHTML = m.moves
       .map((mvName, idx) => {
@@ -3104,14 +3184,13 @@ export function showMoveLearnComparisonModal(m: MonInstance, newMove: MoveData):
           cMove.category === 'Physical'
             ? 'category-physical'
             : cMove.category === 'Special'
-            ? 'category-special'
-            : 'category-status';
-        const cIcon = MOVE_ICONS[cMove.typeShort as keyof typeof MOVE_ICONS] || '💥';
+              ? 'category-special'
+              : 'category-status';
 
         return `
         <div class="move-compare-card">
           <div class="move-compare-top">
-            <span class="move-compare-name">${idx + 1}. ${cIcon} ${cMove.name.toUpperCase()}</span>
+            <span class="move-compare-name">${idx + 1}. ${cMove.name.toUpperCase()}</span>
             <span class="t ${cMove.typeShort}">${cMove.type.toUpperCase()}</span>
           </div>
           <div class="move-compare-stats">
@@ -3130,14 +3209,14 @@ export function showMoveLearnComparisonModal(m: MonInstance, newMove: MoveData):
     o.innerHTML = `
       <div class="move-learn-box">
         <div class="move-learn-header">
-          <div class="move-learn-title">✨ NEW MOVE LEARNED!</div>
+          <div class="move-learn-title">NEW MOVE LEARNED!</div>
           <div class="move-learn-subtitle"><b>${monName} (Lv. ${m.lv})</b> wants to learn a new technique!</div>
         </div>
 
         <!-- NEW MOVE BANNER -->
         <div class="new-move-banner">
           <div class="new-move-top">
-            <span class="new-move-name">${MOVE_ICONS[newMove.typeShort as keyof typeof MOVE_ICONS] || '💥'} ${newMove.name.toUpperCase()}</span>
+            <span class="new-move-name">${newMove.name.toUpperCase()}</span>
             <span class="t ${newMove.typeShort}">${newMove.type.toUpperCase()}</span>
           </div>
           <div class="move-compare-stats">
@@ -3157,7 +3236,7 @@ export function showMoveLearnComparisonModal(m: MonInstance, newMove: MoveData):
         </div>
 
         <button class="btn-cancel-learn" id="btn-cancel-move-learn">
-          🛡️ DO NOT LEARN (Keep Current 4 Moves)
+          DO NOT LEARN (Keep Current 4 Moves)
         </button>
       </div>
     `;
@@ -3576,22 +3655,22 @@ export async function sw(s: 'p' | 'f', j: number): Promise<void> {
 }
 
 export const ITEMS: Record<string, { ic: string; n: string; d: string; pct: number; t: (m: MonInstance) => boolean; k: keyof GameSaveState }> = {
-  ball: { ic: '⚾', n: 'Poké Ball', d: 'Catch Rate: Standard (1.0×)', pct: 0, t: () => !!(B && B.isWild), k: 'balls' },
-  greatBall: { ic: '🔵', n: 'Great Ball', d: 'Catch Rate: Better (1.5×)', pct: 0, t: () => !!(B && B.isWild), k: 'greatBalls' },
-  ultraBall: { ic: '🟡', n: 'Ultra Ball', d: 'Catch Rate: Best (2.0×)', pct: 0, t: () => !!(B && B.isWild), k: 'ultraBalls' },
-  b: { ic: '🍓', n: 'Oran Berry (30%)', d: 'Restores 30% of max HP.', pct: 0.3, t: m => m.hp > 0 && m.hp < st(m).max, k: 'b' },
-  s: { ic: '🫐', n: 'Sitrus Berry (50%)', d: 'Restores 50% of max HP.', pct: 0.5, t: m => m.hp > 0 && m.hp < st(m).max, k: 'b50' },
-  h: { ic: '🍇', n: 'Enigma Berry (75%)', d: 'Restores 75% of max HP.', pct: 0.75, t: m => m.hp > 0 && m.hp < st(m).max, k: 'b75' },
-  f: { ic: '✨', n: 'Full Heal Berry (100%)', d: 'Restores 100% of max HP.', pct: 1.0, t: m => m.hp > 0 && m.hp < st(m).max, k: 'fh' },
-  r: { ic: '💊', n: 'Revive', d: 'Revives a fainted Pokémon with 50% HP.', pct: 0.5, t: m => m.hp <= 0, k: 'rv' },
+  ball: { ic: ICONS.pokeBall(18), n: 'Poké Ball', d: 'Catch Rate: Standard (1.0×)', pct: 0, t: () => !!(B && B.isWild), k: 'balls' },
+  greatBall: { ic: ICONS.greatBall(18), n: 'Great Ball', d: 'Catch Rate: Better (1.5×)', pct: 0, t: () => !!(B && B.isWild), k: 'greatBalls' },
+  ultraBall: { ic: ICONS.ultraBall(18), n: 'Ultra Ball', d: 'Catch Rate: Best (2.0×)', pct: 0, t: () => !!(B && B.isWild), k: 'ultraBalls' },
+  b: { ic: ICONS.oranBerry(18), n: 'Oran Berry (30%)', d: 'Restores 30% of max HP.', pct: 0.3, t: m => m.hp > 0 && m.hp < st(m).max, k: 'b' },
+  s: { ic: ICONS.sitrusBerry(18), n: 'Sitrus Berry (50%)', d: 'Restores 50% of max HP.', pct: 0.5, t: m => m.hp > 0 && m.hp < st(m).max, k: 'b50' },
+  h: { ic: ICONS.oranBerry(18), n: 'Enigma Berry (75%)', d: 'Restores 75% of max HP.', pct: 0.75, t: m => m.hp > 0 && m.hp < st(m).max, k: 'b75' },
+  f: { ic: ICONS.fullHeal(18), n: 'Full Heal Berry (100%)', d: 'Restores 100% of max HP.', pct: 1.0, t: m => m.hp > 0 && m.hp < st(m).max, k: 'fh' },
+  r: { ic: ICONS.revive(18), n: 'Revive', d: 'Revives a fainted Pokémon with 50% HP.', pct: 0.5, t: m => m.hp <= 0, k: 'rv' },
 };
 
 export const STN: Record<string, [string, string]> = {
-  El: ['⚡', 'Thunder Stone'],
-  Fi: ['🔥', 'Fire Stone'],
-  Wa: ['💧', 'Water Stone'],
-  Gr: ['🌿', 'Leaf Stone'],
-  Mo: ['🌙', 'Moon Stone'],
+  El: [ICONS.thunderStone(18), 'Thunder Stone'],
+  Fi: [ICONS.fireStone(18), 'Fire Stone'],
+  Wa: [ICONS.waterStone(18), 'Water Stone'],
+  Gr: [ICONS.leafStone(18), 'Leaf Stone'],
+  Mo: [ICONS.moonStone(18), 'Moon Stone'],
 };
 
 export const qty = (k: string) => {
@@ -3638,7 +3717,7 @@ export async function bagUI(tm: MonInstance[], bt?: number): Promise<any> {
     const i = await pick(
       'BAG',
       all.map(x => ({
-        h: `<b>${x.ic} ${x.n}</b> ×${x.c}<br><small>${x.d}</small>`,
+        h: `<div style="display:flex;align-items:center;gap:10px">${x.ic}<span><b>${x.n}</b> ×${x.c}<br><small>${x.d}</small></span></div>`,
       })),
       true
     );
@@ -3992,10 +4071,10 @@ export async function turn(pa: any): Promise<string | null> {
         let destinationMsg = '';
         if (G.team.length < MAX_ACTIVE_TEAM) {
           G.team.push(captured);
-          destinationMsg = `🎉 Added to your active party (${G.team.length}/6)!`;
+          destinationMsg = `Added to your active party (${G.team.length}/6)!`;
         } else {
           G.pcBox.push(captured);
-          destinationMsg = `📦 Party is full (6/6). Safely sent to PC Box Storage!`;
+          destinationMsg = `Party is full (6/6). Safely sent to PC Box Storage!`;
         }
 
         G.routeEncountersDone = (G.routeEncountersDone || 0) + 1;
@@ -4104,9 +4183,26 @@ export async function menu(): Promise<any> {
     };
 
     const root = () => {
-      c.className = 'main';
+      c.className = 'main battle-actions-grid';
       const canRun = !!(B && B.isWild);
-      c.innerHTML = `<button data-a="f"><i>⚔</i>FIGHT</button><button data-a="p"><i>◓</i>POKÉMON</button><button data-a="b"><i>🎒</i>BAG</button><button data-a="r" ${canRun ? '' : 'disabled title="You cannot run from an official battle!"'}><i>👟</i>RUN</button>`;
+      c.innerHTML = `
+        <button class="battle-act-btn act-fight" data-a="f" title="Choose a move to attack">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M19 13l2 2-5 5-2-2"/></svg>
+          <span>FIGHT</span>
+        </button>
+        <button class="battle-act-btn act-bag" data-a="b" title="Use items or Poké Balls">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3"><rect x="5" y="7" width="14" height="14" rx="2"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg>
+          <span>BAG</span>
+        </button>
+        <button class="battle-act-btn act-pokemon" data-a="p" title="Switch party Pokémon">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+          <span>POKÉMON</span>
+        </button>
+        <button class="battle-act-btn act-run" data-a="r" ${canRun ? '' : 'disabled title="Cannot flee from an official trainer battle!"'}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M13 4v6m0 0l4-2m-4 2l-3 4-3-1M13 10l-2 5 4 4"/></svg>
+          <span>RUN</span>
+        </button>
+      `;
     };
 
     c.onclick = async e => {
@@ -4194,7 +4290,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch { }
     const icon = sound.SND.on && sound.SND.v > 0 ? '🔊' : '🔇';
     if (sbIcon) sbIcon.textContent = icon;
-    else if (sb) sb.textContent = icon;
   };
 
   if (son) {
@@ -4214,8 +4309,14 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
+  const sbFooter = q('sb-footer');
   if (sb && setOv) {
     sb.onclick = () => {
+      setOv.style.display = 'flex';
+    };
+  }
+  if (sbFooter && setOv) {
+    sbFooter.onclick = () => {
       setOv.style.display = 'flex';
     };
   }
@@ -4319,7 +4420,7 @@ document.addEventListener('DOMContentLoaded', () => {
       activePointerId = e.pointerId;
       try {
         dpad.setPointerCapture(e.pointerId);
-      } catch {}
+      } catch { }
       handlePointerCoord(e.clientX, e.clientY);
     });
 
@@ -4335,7 +4436,7 @@ document.addEventListener('DOMContentLoaded', () => {
         activePointerId = null;
         try {
           dpad.releasePointerCapture(e.pointerId);
-        } catch {}
+        } catch { }
         setActiveDir(null);
       }
     };
@@ -4384,6 +4485,20 @@ document.addEventListener('DOMContentLoaded', () => {
       saveCurrentRoutePosition();
       routeExplorationEngine.stop();
       journeyHubScr();
+    };
+  }
+
+  const btnQuickPokedex = q('btn-quick-pokedex');
+  if (btnQuickPokedex) {
+    btnQuickPokedex.onclick = () => {
+      const isRoute = document.getElementById('route')?.classList.contains('on');
+      if (isRoute) {
+        saveCurrentRoutePosition();
+        routeExplorationEngine.stop();
+        pokedexScr('route');
+      } else {
+        pokedexScr('hub');
+      }
     };
   }
 

@@ -29,80 +29,53 @@ export async function showPokemonCaughtModal(
     overlay.className = 'caught-modal-overlay';
 
     const typeBadges = spec?.typesShort
-      .map(
-        t => `<i class="t ${t}">${TYPE_NAMES[t as keyof typeof TYPE_NAMES] || t}</i>`
-      )
+      .map(t => `<span class="t-badge t-${t.toLowerCase()}">${TYPE_NAMES[t as keyof typeof TYPE_NAMES] || t}</span>`)
       .join(' ') || '';
 
     overlay.innerHTML = `
-      <div class="caught-card">
-        <div class="caught-header-pill">✨ POKÉMON CAUGHT! ✨</div>
+      <div class="caught-card modern-caught-card">
+        <div class="caught-header-label">CAPTURED!</div>
         <div class="caught-art-stage">
-          <div class="caught-art-glow"></div>
           <div id="caught-3d-viewport" class="caught-3d-mount">
             <img class="caught-2d-img" src="${artworkUrl}" alt="${name}" onerror="this.style.opacity='0'" />
           </div>
         </div>
 
         <div class="caught-name-row">${name}</div>
-        <div class="caught-lv-pill">Level ${mon.lv}</div>
-        <div class="caught-types">${typeBadges}</div>
+        <div class="caught-meta-row">
+          <span class="caught-lv-chip">Lv. ${mon.lv}</span>
+          <div class="caught-types">${typeBadges}</div>
+        </div>
 
-        <div class="caught-hp-meter">
-          <div class="caught-hp-label">
-            <span>HP: <b>${stats.max} / ${stats.max}</b></span>
-            <span class="caught-hp-badge-full">100% FULL HP</span>
+        <div class="caught-stats-sheet">
+          <div class="stat-line">
+            <span class="stat-k">HP</span>
+            <span class="stat-v">${stats.max} / ${stats.max}</span>
           </div>
-          <div class="caught-hp-bar">
-            <div class="caught-hp-fill"></div>
+          <div class="stat-line">
+            <span class="stat-k">Attack</span>
+            <span class="stat-v">${stats.atk}</span>
+          </div>
+          <div class="stat-line">
+            <span class="stat-k">Defense</span>
+            <span class="stat-v">${stats.def}</span>
+          </div>
+          <div class="stat-line">
+            <span class="stat-k">Speed</span>
+            <span class="stat-v">${stats.spe}</span>
           </div>
         </div>
 
-        <div class="caught-stats-grid">
-          <div class="caught-stat-cell">
-            <div class="caught-stat-name">Attack</div>
-            <div class="caught-stat-val">${stats.atk}</div>
-          </div>
-          <div class="caught-stat-cell">
-            <div class="caught-stat-name">Defense</div>
-            <div class="caught-stat-val">${stats.def}</div>
-          </div>
-          <div class="caught-stat-cell">
-            <div class="caught-stat-name">Speed</div>
-            <div class="caught-stat-val">${stats.spe}</div>
-          </div>
-          <div class="caught-stat-cell">
-            <div class="caught-stat-name">Sp. Atk</div>
-            <div class="caught-stat-val">${stats.spa}</div>
-          </div>
-          <div class="caught-stat-cell">
-            <div class="caught-stat-name">Sp. Def</div>
-            <div class="caught-stat-val">${stats.spd}</div>
-          </div>
-          <div class="caught-stat-cell">
-            <div class="caught-stat-name">Total BST</div>
-            <div class="caught-stat-val">${stats.atk + stats.def + stats.spa + stats.spd + stats.spe}</div>
-          </div>
-        </div>
+        ${destinationMsg ? `<div class="caught-dest-hint">${destinationMsg}</div>` : ''}
 
-        <div style="font-size:11px;font-weight:800;color:#94a3b8;margin-bottom:6px;text-transform:uppercase">Known Moves</div>
-        <div class="caught-moves-list">
-          ${mon.moves.map(m => `<span class="caught-move-chip">${m.toUpperCase()}</span>`).join('')}
-        </div>
-
-        <div class="caught-destination-notice">${destinationMsg}</div>
-
-        <button id="btn-caught-continue" class="caught-confirm-btn">CONTINUE JOURNEY ➔</button>
+        <button id="btn-caught-continue" class="caught-continue-btn">
+          <span>Continue</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
       </div>
     `;
 
     document.body.appendChild(overlay);
-
-    // If 3D is active, we can render the 3D model inside the viewport
-    const container3d = overlay.querySelector('#caught-3d-viewport') as HTMLElement;
-    if (pokemon3DManager.isEnabled() && container3d) {
-      // 3D will render via the existing manager if compatible, or fallback to high-res official artwork
-    }
 
     const btn = overlay.querySelector('#btn-caught-continue') as HTMLButtonElement;
     btn.onclick = () => {

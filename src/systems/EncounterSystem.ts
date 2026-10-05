@@ -33,24 +33,83 @@ export interface InteractionEvent {
   };
 }
 
-// Route pools by Gym level
+// Route encounter pools by Route/Gym level with multi-zone support
+export const ROUTE_ZONES: Record<number, Record<string, number[]>> = {
+  // Route 0 (Route 1: Pallet Town ➔ Viridian City)
+  0: {
+    field: [16, 19, 10, 13],         // Pidgey, Rattata, Caterpie, Weedle
+    deep: [21, 29, 32],               // Spearow, Nidoran-F, Nidoran-M
+    water: [54, 60, 129],             // Psyduck, Poliwag, Magikarp
+    rare: [25, 39],                   // Pikachu, Jigglypuff
+  },
+  // Route 1 (Route 2 & Viridian Forest ➔ Pewter City)
+  1: {
+    forest: [10, 11, 12, 13, 14, 15], // Caterpie, Metapod, Butterfree, Weedle, Kakuna, Beedrill
+    field: [16, 17, 19, 20],          // Pidgeotto, Raticate
+    rock: [74, 50, 41],               // Geodude, Diglett, Zubat
+    rare: [25, 123, 127],             // Pikachu, Scyther, Pinsir
+  },
+  // Route 2 (Route 3/4 & Mt. Moon ➔ Cerulean City)
+  2: {
+    field: [21, 22, 23, 27],          // Spearow, Fearow, Ekans, Sandshrew
+    water: [54, 60, 118, 120],        // Psyduck, Poliwag, Goldeen, Staryu
+    grass: [43, 69, 46],              // Oddish, Bellsprout, Paras
+    rare: [35, 37, 63],               // Clefairy, Vulpix, Abra
+  },
+  // Route 3 (Route 5/6 ➔ Vermilion City)
+  3: {
+    field: [52, 56, 19, 20],          // Meowth, Mankey, Rattata, Raticate
+    electric: [81, 100, 25],          // Magnemite, Voltorb, Pikachu
+    water: [79, 90, 116, 129],        // Slowpoke, Shellder, Horsea, Magikarp
+    rare: [96, 92, 115],              // Drowzee, Gastly, Kangaskhan
+  },
+  // Route 4 (Route 7/8/9 & Rock Tunnel ➔ Celadon City)
+  4: {
+    meadow: [43, 44, 69, 70],         // Gloom, Weepinbell
+    fire: [58, 77, 37],               // Growlithe, Ponyta, Vulpix
+    urban: [88, 109, 52],             // Grimer, Koffing, Meowth
+    rare: [114, 102, 128, 133],       // Tangela, Exeggcute, Tauros, Eevee
+  },
+  // Route 5 (Safari Outskirts & Cycling Road ➔ Fuchsia City)
+  5: {
+    coastal: [98, 99, 118, 119],      // Krabby, Kingler, Goldeen, Seaking
+    savannah: [84, 85, 111, 83],      // Doduo, Dodrio, Rhyhorn, Farfetch'd
+    marsh: [48, 49, 108, 116],        // Venonat, Venomoth, Lickitung, Horsea
+    rare: [123, 127, 115, 128],       // Scyther, Pinsir, Kangaskhan, Tauros
+  },
+  // Route 6 (Silph Suburbs ➔ Saffron City)
+  6: {
+    psychic: [64, 96, 97, 122],       // Kadabra, Drowzee, Hypno, Mr. Mime
+    ghost: [92, 93],                  // Gastly, Haunter
+    tech: [81, 82, 100, 101, 137],    // Magnemite, Magneton, Voltorb, Electrode, Porygon
+    rare: [124, 131, 143],            // Jynx, Lapras, Snorlax
+  },
+  // Route 7 (Sea Route 19/20 ➔ Cinnabar Island)
+  7: {
+    ocean: [72, 73, 120, 121, 130],   // Tentacool, Tentacruel, Staryu, Starmie, Gyarados
+    volcano: [77, 78, 58, 59, 126],   // Ponyta, Rapidash, Growlithe, Arcanine, Magmar
+    fossil: [138, 140, 142],          // Omanyte, Kabuto, Aerodactyl
+    rare: [125, 131, 143, 147],       // Electabuzz, Lapras, Snorlax, Dratini
+  },
+  // Route 8 (Victory Road ➔ Viridian Final Gym & Indigo Plateau)
+  8: {
+    cavern: [75, 76, 67, 68, 95],     // Graveler, Golem, Machoke, Machamp, Onix
+    summit: [22, 112, 148, 149],      // Fearow, Rhydon, Dragonair, Dragonite
+    elite: [65, 94, 130],             // Alakazam, Gengar, Gyarados
+    rare: [147, 148, 149, 150, 151],  // Dratini, Dragonair, Dragonite, Mewtwo, Mew
+  },
+};
+
+// Route pools by Gym level (fallback aggregate)
 export const ROUTE_POOLS: Record<number, number[]> = {
-  // Before Gym 1 (Pewter - Lv 3-5)
-  0: [16, 19, 10, 13, 21, 29, 32, 25, 39], // Pidgey, Rattata, Caterpie, Weedle, Spearow, Nidoran-F, Nidoran-M, Pikachu, Jigglypuff
-  // Between Gym 1 & 2 (Cerulean - Lv 10-15)
-  1: [17, 20, 23, 27, 43, 69, 54, 74, 120, 60], // Pidgeotto, Raticate, Ekans, Sandshrew, Oddish, Bellsprout, Psyduck, Geodude, Staryu, Poliwag
-  // Between Gym 2 & 3 (Vermilion - Lv 15-20)
-  2: [52, 56, 81, 100, 96, 92, 50, 46, 79], // Meowth, Mankey, Magnemite, Voltorb, Drowzee, Gastly, Diglett, Paras, Slowpoke
-  // Between Gym 3 & 4 (Celadon - Lv 20-26)
-  3: [58, 37, 77, 88, 109, 114, 102, 84, 128], // Growlithe, Vulpix, Ponyta, Grimer, Koffing, Tangela, Exeggcute, Doduo, Tauros
-  // Between Gym 4 & 5 (Fuchsia - Lv 26-32)
-  4: [83, 85, 48, 111, 118, 116, 98, 127, 123], // Farfetch'd, Dodrio, Venonat, Rhyhorn, Goldeen, Horsea, Krabby, Pinsir, Scyther
-  // Between Gym 5 & 6 (Saffron - Lv 32-38)
-  5: [64, 93, 82, 101, 108, 115, 122, 124, 137], // Kadabra, Haunter, Magneton, Electrode, Lickitung, Kangaskhan, Mr. Mime, Jynx, Porygon
-  // Between Gym 6 & 7 (Cinnabar - Lv 38-44)
-  6: [78, 59, 126, 125, 131, 138, 140, 142, 143], // Rapidash, Arcanine, Magmar, Electabuzz, Lapras, Omanyte, Kabuto, Aerodactyl, Snorlax
-  // Between Gym 7 & 8 (Viridian - Lv 44-50)
-  7: [147, 148, 149, 130, 112, 76, 68, 65, 94], // Dratini, Dragonair, Dragonite, Gyarados, Rhydon, Golem, Machamp, Alakazam, Gengar
+  0: [16, 19, 10, 13, 21, 29, 32, 25, 39],
+  1: [17, 20, 23, 27, 43, 69, 54, 74, 120, 60],
+  2: [52, 56, 81, 100, 96, 92, 50, 46, 79],
+  3: [58, 37, 77, 88, 109, 114, 102, 84, 128],
+  4: [83, 85, 48, 111, 118, 116, 98, 127, 123],
+  5: [64, 93, 82, 101, 108, 115, 122, 124, 137],
+  6: [78, 59, 126, 125, 131, 138, 140, 142, 143],
+  7: [147, 148, 149, 130, 112, 76, 68, 65, 94],
 };
 
 // Rare encounter candidates
@@ -59,8 +118,25 @@ export const RARE_POKEMON_IDS = [25, 35, 37, 63, 115, 123, 127, 131, 133, 137, 1
 let UID_COUNTER = 0;
 export const createInstanceUid = () => 'p' + Date.now().toString(36) + (UID_COUNTER++).toString(36);
 
-export function generateEncounterMon(gymIndex: number, isRare: boolean = false): EncounterMon {
-  const pool = isRare ? RARE_POKEMON_IDS : (ROUTE_POOLS[gymIndex] || ROUTE_POOLS[0]);
+export function generateEncounterMon(gymIndex: number, isRare: boolean = false, zone?: string): EncounterMon {
+  let pool: number[] = [];
+
+  const routeZoneMap = ROUTE_ZONES[gymIndex] || ROUTE_ZONES[0];
+  if (isRare) {
+    pool = routeZoneMap['rare'] || RARE_POKEMON_IDS;
+  } else if (zone && routeZoneMap[zone]) {
+    pool = routeZoneMap[zone];
+  } else {
+    // If no specific zone, pick from all available zone pools in this route
+    const zoneKeys = Object.keys(routeZoneMap).filter(k => k !== 'rare');
+    if (zoneKeys.length > 0) {
+      const randomKey = zoneKeys[Math.floor(Math.random() * zoneKeys.length)];
+      pool = routeZoneMap[randomKey];
+    } else {
+      pool = ROUTE_POOLS[gymIndex] || ROUTE_POOLS[0];
+    }
+  }
+
   const id = pool[Math.floor(Math.random() * pool.length)] || 16;
   const spec = POKEMON_SPECIES_MAP[id] || POKEMON_SPECIES_MAP[16];
 

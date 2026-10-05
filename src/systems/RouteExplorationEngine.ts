@@ -13,6 +13,7 @@
 import { POKEMON_SPECIES_MAP } from '../data/pokemon';
 import { sound } from '../audio/SoundSynthesizer';
 import { generateEncounterMon, EncounterMon } from './EncounterSystem';
+import { inputManager } from './InputManager';
 
 export interface RouteBuilding {
   type: 'center' | 'mart' | 'gym' | 'gate';
@@ -50,6 +51,7 @@ export interface GrassPatch {
   y: number;
   w: number;
   h: number;
+  zone?: string;
 }
 
 export interface RouteDefinition {
@@ -147,12 +149,24 @@ export class RouteExplorationEngine {
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
     window.addEventListener('resize', () => this.resize());
+
+    const viewport = document.getElementById('route-viewport');
+    const joystick = document.getElementById('touch-joystick');
+    const stick = document.getElementById('joystick-stick');
+    if (viewport && joystick && stick) {
+      inputManager.init(viewport, joystick, stick);
+      inputManager.onInteract = () => this.interact();
+      inputManager.onOpenMenu = () => {
+        if (this.onOpenMenu) this.onOpenMenu();
+      };
+    }
   }
 
   public destroy(): void {
     this.stop();
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
+    inputManager.destroy();
   }
 
   public setDirection(dir: 'up' | 'down' | 'left' | 'right' | null): void {
@@ -368,26 +382,29 @@ export class RouteExplorationEngine {
       }
     }
 
-    let dx = 0;
-    let dy = 0;
+    const move = inputManager.getMovement();
+    let dx = move.dx;
+    let dy = move.dy;
 
+    // Combine with legacy keys if any
     if (this.keys['ArrowUp']) dy -= 1;
     if (this.keys['ArrowDown']) dy += 1;
     if (this.keys['ArrowLeft']) dx -= 1;
     if (this.keys['ArrowRight']) dx += 1;
 
-    // Normalize diagonal
-    if (dx !== 0 && dy !== 0) {
-      dx *= 0.7071;
-      dy *= 0.7071;
+    const len = Math.hypot(dx, dy);
+    if (len > 1.0) {
+      dx /= len;
+      dy /= len;
     }
 
-    if (dy < 0) this.player.dir = 'up';
-    else if (dy > 0) this.player.dir = 'down';
-    else if (dx < 0) this.player.dir = 'left';
-    else if (dx > 0) this.player.dir = 'right';
+    if (Math.abs(dx) > Math.abs(dy)) {
+      this.player.dir = dx > 0 ? 'right' : 'left';
+    } else if (Math.abs(dy) > 0) {
+      this.player.dir = dy > 0 ? 'down' : 'up';
+    }
 
-    const isMoving = dx !== 0 || dy !== 0;
+    const isMoving = len > 0.05;
 
     if (isMoving) {
       this.player.stepTimer += dt;
@@ -404,7 +421,7 @@ export class RouteExplorationEngine {
       this.player.cooldownTimer -= dt;
     }
 
-    // Move player with collision checks
+    // Move player with collision checks - speed scales with thumb stick magnitude
     const targetX = this.player.x + dx * this.player.speed * dt;
     const targetY = this.player.y + dy * this.player.speed * dt;
 
@@ -437,8 +454,9 @@ export class RouteExplorationEngine {
       this.player.y = clampedY;
     }
 
-    // Check Tall Grass
+    // Check Tall Grass & Specific Encounter Zone
     let inGrassNow = false;
+    let currentGrassZone: string | undefined = undefined;
     for (const patch of this.currentRoute.grassPatches) {
       if (
         this.player.x >= patch.x &&
@@ -447,6 +465,7 @@ export class RouteExplorationEngine {
         this.player.y <= patch.y + patch.h
       ) {
         inGrassNow = true;
+        currentGrassZone = patch.zone;
         break;
       }
     }
@@ -458,32 +477,34 @@ export class RouteExplorationEngine {
         this.spawnGrassParticle(this.player.x, this.player.y + 12);
       }
       if (this.player.cooldownTimer <= 0) {
-        this.player.grassSteps += dt * 3.5;
+        this.player.grassSteps += dt * 2.6; // Balanced exploration pacing
         if (this.player.grassSteps >= 4.0) {
           this.player.grassSteps = 0;
-          // Roll for wild encounter
+          // Roll for wild encounter with fair exploration probability
           const encounterRoll = Math.random();
-          if (encounterRoll < 0.65) {
-            this.triggerWildBattle();
+          if (encounterRoll < 0.45) {
+            this.triggerWildBattle(currentGrassZone);
             return;
           }
         }
       }
     }
 
-    // Check Interactive Proximity Prompt
+    // Check Contextual Proximity Prompt
     const promptEl = document.getElementById('route-prompt');
-    let promptText = '';
+    let promptTarget = '';
+    let promptAction = '';
 
     for (const npc of this.currentRoute.npcs) {
       const dist = Math.hypot(this.player.x - npc.x, this.player.y - npc.y);
       if (dist < 55) {
-        promptText = `💬 Press [A] to talk to ${npc.name}`;
+        promptTarget = npc.name;
+        promptAction = 'Talk';
         break;
       }
     }
 
-    if (!promptText) {
+    if (!promptTarget) {
       for (const b of this.currentRoute.buildings) {
         const nearDoor =
           this.player.x >= b.x - 20 &&
@@ -491,33 +512,45 @@ export class RouteExplorationEngine {
           this.player.y >= b.y + b.h - 16 &&
           this.player.y <= b.y + b.h + 45;
         if (nearDoor) {
-          promptText = `🚪 Press [A] to enter ${b.label}`;
+          promptTarget = b.label;
+          promptAction = b.type === 'gym' ? 'Enter Gym' : 'Enter';
           break;
         }
       }
     }
 
-    if (!promptText && this.currentRoute.exitX > 0) {
+    if (!promptTarget && this.currentRoute.exitX > 0) {
       const ex = this.currentRoute.exitX - 30;
       const ey = 200;
       if (Math.hypot(this.player.x - ex, this.player.y - ey) < 55) {
-        promptText = `🚪 Press [A] to proceed to Next Route ➔`;
+        promptTarget = this.currentRoute.destinationLabel || 'Next Route';
+        promptAction = 'Travel';
       }
     }
 
     const actBtn = document.getElementById('btn-interact');
     if (promptEl) {
-      if (promptText) {
-        promptEl.textContent = promptText;
+      if (promptTarget) {
+        promptEl.innerHTML = `<span class="context-label">${promptTarget}</span><button class="context-action-btn" id="context-pill-btn">${promptAction}</button>`;
         promptEl.classList.remove('hidden');
+        const pillBtn = document.getElementById('context-pill-btn');
+        if (pillBtn) {
+          pillBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.interact();
+          };
+        }
       } else {
         promptEl.classList.add('hidden');
       }
     }
     if (actBtn) {
-      if (promptText) {
+      if (promptTarget) {
+        actBtn.classList.remove('hidden');
         actBtn.classList.add('pulse');
+        actBtn.textContent = promptAction;
       } else {
+        actBtn.classList.add('hidden');
         actBtn.classList.remove('pulse');
       }
     }
@@ -545,28 +578,36 @@ export class RouteExplorationEngine {
       }
     }
 
-    // Update Camera
+    // Update Camera with Smooth Lerp
     if (this.canvas) {
       const targetCamX = this.player.x - this.canvas.width / 2;
       const targetCamY = this.player.y - this.canvas.height / 2;
 
+      let desiredCamX = 0;
+      let desiredCamY = 0;
+
       if (this.canvas.width >= this.currentRoute.worldWidth) {
-        this.camX = -(this.canvas.width - this.currentRoute.worldWidth) / 2;
+        desiredCamX = -(this.canvas.width - this.currentRoute.worldWidth) / 2;
       } else {
         const maxCamX = this.currentRoute.worldWidth - this.canvas.width;
-        this.camX = Math.max(0, Math.min(maxCamX, targetCamX));
+        desiredCamX = Math.max(0, Math.min(maxCamX, targetCamX));
       }
 
       if (this.canvas.height >= this.currentRoute.worldHeight) {
-        this.camY = -(this.canvas.height - this.currentRoute.worldHeight) / 2;
+        desiredCamY = -(this.canvas.height - this.currentRoute.worldHeight) / 2;
       } else {
         const maxCamY = this.currentRoute.worldHeight - this.canvas.height;
-        this.camY = Math.max(0, Math.min(maxCamY, targetCamY));
+        desiredCamY = Math.max(0, Math.min(maxCamY, targetCamY));
       }
+
+      // Smooth camera interpolation
+      const lerp = Math.min(1.0, dt * 10);
+      this.camX += (desiredCamX - this.camX) * lerp;
+      this.camY += (desiredCamY - this.camY) * lerp;
     }
   }
 
-  private triggerWildBattle(): void {
+  private triggerWildBattle(zone?: string): void {
     if (!this.currentRoute || this.isPaused) return;
 
     this.isPaused = true;
@@ -577,7 +618,8 @@ export class RouteExplorationEngine {
     const savedX = this.player.x;
     const savedY = this.player.y;
 
-    const mon = generateEncounterMon(this.currentRoute.id, Math.random() < 0.12);
+    const isRare = zone === 'rare' || Math.random() < 0.08;
+    const mon = generateEncounterMon(this.currentRoute.id, isRare, zone);
 
     if (this.onTriggerEncounter) {
       this.onTriggerEncounter(mon, savedX, savedY);

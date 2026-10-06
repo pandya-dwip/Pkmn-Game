@@ -37,10 +37,10 @@ export interface InteractionEvent {
 export const ROUTE_ZONES: Record<number, Record<string, number[]>> = {
   // Route 0 (Route 1: Pallet Town ➔ Viridian City)
   0: {
-    field: [16, 19, 10, 13],         // Pidgey, Rattata, Caterpie, Weedle
-    deep: [21, 29, 32],               // Spearow, Nidoran-F, Nidoran-M
-    water: [54, 60, 129],             // Psyduck, Poliwag, Magikarp
-    rare: [25, 39],                   // Pikachu, Jigglypuff
+    field: [16, 19, 10, 13],         // Pidgey, Rattata, Caterpie, Weedle (Lv 2-4)
+    deep: [21, 29, 32, 43, 69],      // Spearow, Nidoran-F, Nidoran-M, Oddish, Bellsprout (Lv 4-6)
+    water: [54, 60, 129, 118],       // Psyduck, Poliwag, Magikarp, Goldeen (Lv 4-6)
+    rare: [25, 133, 123, 125, 39, 63], // Pikachu, Eevee, Scyther, Electabuzz, Jigglypuff, Abra (Lv 8-14 HIGH LEVEL!)
   },
   // Route 1 (Route 2 & Viridian Forest ➔ Pewter City)
   1: {
@@ -140,10 +140,13 @@ export function generateEncounterMon(gymIndex: number, isRare: boolean = false, 
   const id = pool[Math.floor(Math.random() * pool.length)] || 16;
   const spec = POKEMON_SPECIES_MAP[id] || POKEMON_SPECIES_MAP[16];
 
-  const baseLv = gymIndex === 0 ? 3 : Math.min(50, 8 + gymIndex * 5);
-  const lvVariance = gymIndex === 0 ? 2 : 3;
-  const lv = Math.max(3, baseLv + Math.floor(Math.random() * (lvVariance * 2 + 1)) - lvVariance);
-  const iv = Math.floor(Math.random() * 16);
+  const isRareZone = isRare || zone === 'rare';
+  const baseLv = gymIndex === 0
+    ? (isRareZone ? 9 : (zone === 'deep' ? 5 : 3))
+    : Math.min(50, 8 + gymIndex * 5 + (isRareZone ? 5 : 0));
+  const lvVariance = isRareZone ? 3 : (gymIndex === 0 ? 1 : 2);
+  const lv = Math.max(isRareZone ? 8 : 2, baseLv + Math.floor(Math.random() * (lvVariance * 2 + 1)) - lvVariance);
+  const iv = isRareZone ? (10 + Math.floor(Math.random() * 6)) : Math.floor(Math.random() * 16);
 
   // HP calculation
   const maxHp = Math.floor(((2 * spec.baseHP + iv) * lv) / 100) + lv + 10;

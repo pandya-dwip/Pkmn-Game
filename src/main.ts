@@ -967,6 +967,15 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
     routeExplorationEngine.isPaused = false;
   };
 
+  routeExplorationEngine.onReadSignpost = async (sp) => {
+    routeExplorationEngine.isPaused = true;
+    await note([
+      `<h3>📋 ${sp.title}</h3>`,
+      ...sp.lines.map((l) => `<p style="font-weight:600;margin:6px 0;line-height:1.4;">${l}</p>`),
+    ]);
+    routeExplorationEngine.isPaused = false;
+  };
+
   routeExplorationEngine.onRouteExit = async (nextRouteId) => {
     if (nextRouteId < KANTO_JOURNEY_ROUTES.length) {
       const nextRouteDef = KANTO_JOURNEY_ROUTES[nextRouteId];

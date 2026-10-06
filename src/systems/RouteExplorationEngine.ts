@@ -72,7 +72,44 @@ export interface RouteTree {
   x: number;
   y: number;
   scale?: number;
-  type?: 'oak' | 'pine';
+  type?: 'oak' | 'pine' | 'blossom' | 'mystic';
+}
+
+export interface RouteLedge {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  stairs?: { x: number; w: number }[];
+}
+
+export interface RoutePond {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  pier?: { x: number; y: number; w: number; h: number };
+}
+
+export interface RouteSignpost {
+  id: string;
+  x: number;
+  y: number;
+  title: string;
+  lines: string[];
+}
+
+export interface RouteSection {
+  id: string;
+  name: string;
+  subtitle: string;
+  icon: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  badgeColor?: string;
+  isRareZone?: boolean;
 }
 
 export interface RouteDefinition {
@@ -95,6 +132,10 @@ export interface RouteDefinition {
   fences?: RouteFence[];
   stones?: RouteStone[];
   trees?: RouteTree[];
+  ledges?: RouteLedge[];
+  ponds?: RoutePond[];
+  sections?: RouteSection[];
+  signposts?: RouteSignpost[];
 }
 
 export class RouteExplorationEngine {
@@ -105,6 +146,9 @@ export class RouteExplorationEngine {
   private time: number = 0;
   private particles: Array<{ x: number; y: number; vx: number; vy: number; size: number; alpha: number; type: 'leaf' | 'pollen' | 'blossom'; rot: number; rotSpeed: number }> = [];
   private grassParticles: Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string }> = [];
+  private activeSection: RouteSection | null = null;
+  private sectionBannerTimer: number = 0;
+  private targetDest: { x: number; y: number } | null = null;
 
   // Player State
   public player = {
@@ -144,8 +188,21 @@ export class RouteExplorationEngine {
   public onEnterGate: ((building: RouteBuilding) => void) | null = null;
   public onPickItem: ((item: RouteItem) => void) | null = null;
   public onTalkNPC: ((npc: RouteNPC) => void) | null = null;
+  public onReadSignpost: ((sp: RouteSignpost) => void) | null = null;
   public onRouteExit: ((nextRouteIndex: number) => void) | null = null;
   public onOpenMenu: (() => void) | null = null;
+
+  private handlePointerDown = (e: PointerEvent): void => {
+    if (this.isPaused || !this.canvas || !this.currentRoute) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+    const screenX = (e.clientX - rect.left) * scaleX;
+    const screenY = (e.clientY - rect.top) * scaleY;
+    const worldX = screenX + this.camX;
+    const worldY = screenY + this.camY;
+    this.targetDest = { x: worldX, y: worldY };
+  };
 
   constructor() {
     this.handleKeyDown = this.handleKeyDown.bind(this);
@@ -173,6 +230,7 @@ export class RouteExplorationEngine {
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
     window.addEventListener('resize', () => this.resize());
+    canvas.addEventListener('pointerdown', this.handlePointerDown);
 
     const viewport = document.getElementById('route-viewport');
     const joystick = document.getElementById('touch-joystick');
@@ -190,6 +248,9 @@ export class RouteExplorationEngine {
     this.stop();
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
+    if (this.canvas) {
+      this.canvas.removeEventListener('pointerdown', this.handlePointerDown);
+    }
     inputManager.destroy();
   }
 
@@ -259,6 +320,19 @@ export class RouteExplorationEngine {
         return;
       }
     }
+
+    // Check Route Signposts
+    if (this.currentRoute.signposts) {
+      for (const sp of this.currentRoute.signposts) {
+        if (Math.hypot(this.player.x - sp.x, this.player.y - sp.y) < 50) {
+          sound.beep(750, 0.1, 'sine');
+          if (this.onReadSignpost) {
+            this.onReadSignpost(sp);
+          }
+          return;
+        }
+      }
+    }
   }
 
   public hasNearbyInteractable(): boolean {
@@ -278,6 +352,11 @@ export class RouteExplorationEngine {
       const ex = this.currentRoute.exitX - 30;
       const ey = 200;
       if (Math.hypot(this.player.x - ex, this.player.y - ey) < 55) return true;
+    }
+    if (this.currentRoute.signposts) {
+      for (const sp of this.currentRoute.signposts) {
+        if (Math.hypot(this.player.x - sp.x, this.player.y - sp.y) < 50) return true;
+      }
     }
     return false;
   }
@@ -416,7 +495,24 @@ export class RouteExplorationEngine {
     if (this.keys['ArrowLeft']) dx -= 1;
     if (this.keys['ArrowRight']) dx += 1;
 
-    const len = Math.hypot(dx, dy);
+    let len = Math.hypot(dx, dy);
+
+    // If manual input is given, cancel tap-to-move destination
+    if (len > 0.05) {
+      this.targetDest = null;
+    } else if (this.targetDest) {
+      const tdx = this.targetDest.x - this.player.x;
+      const tdy = this.targetDest.y - this.player.y;
+      const tdist = Math.hypot(tdx, tdy);
+      if (tdist < 10) {
+        this.targetDest = null;
+      } else {
+        dx = tdx / tdist;
+        dy = tdy / tdist;
+        len = 1.0;
+      }
+    }
+
     if (len > 1.0) {
       dx /= len;
       dy /= len;
@@ -463,26 +559,26 @@ export class RouteExplorationEngine {
       }
     }
 
-    // Check Tall Grass & Wild Encounters (All Off-Road Terrain is Grass)
-    const onRoad = this.isPointOnRoad(this.player.x, this.player.y, this.currentRoute);
-    const inBuilding = this.isInsideBuilding(this.player.x, this.player.y, this.currentRoute);
-    const inGrassNow = !onRoad && !inBuilding && this.currentRoute.theme !== 'city';
-
+    // Check Tall Grass (Spawn Grass Patches) & Wild Encounters
+    // Normal lawn grass outside paths is safe walking terrain.
+    // Wild Pokémon encounters ONLY occur when wading inside tall grass patches!
+    let inGrassNow = false;
     let currentGrassZone: string | undefined = undefined;
-    if (inGrassNow) {
-      for (const patch of this.currentRoute.grassPatches) {
-        if (
-          this.player.x >= patch.x - 4 &&
-          this.player.x <= patch.x + patch.w + 4 &&
-          this.player.y >= patch.y - 4 &&
-          this.player.y <= patch.y + patch.h + 4
-        ) {
-          currentGrassZone = patch.zone;
-          break;
-        }
-      }
-      if (!currentGrassZone) {
-        currentGrassZone = this.currentRoute.theme === 'forest' ? 'forest' : 'field';
+
+    // Check player's foot position for realistic wading
+    const footX = this.player.x;
+    const footY = this.player.y + 10;
+
+    for (const patch of this.currentRoute.grassPatches) {
+      if (
+        footX >= patch.x - 2 &&
+        footX <= patch.x + patch.w + 2 &&
+        footY >= patch.y - 2 &&
+        footY <= patch.y + patch.h + 2
+      ) {
+        inGrassNow = true;
+        currentGrassZone = patch.zone;
+        break;
       }
     }
 
@@ -493,17 +589,43 @@ export class RouteExplorationEngine {
         this.spawnGrassParticle(this.player.x, this.player.y + 12);
       }
       if (this.player.cooldownTimer <= 0) {
-        this.player.grassSteps += dt * 2.2; // Exploration pacing
-        if (this.player.grassSteps >= 4.0) {
+        // Increased spawn rate when walking in tall grass (responsive & snappy)
+        this.player.grassSteps += dt * 3.8;
+        if (this.player.grassSteps >= 2.6) {
           this.player.grassSteps = 0;
-          // Roll for wild encounter
+          // Roll for wild encounter (~60% chance per check)
           const encounterRoll = Math.random();
-          if (encounterRoll < 0.40) {
-            this.triggerWildBattle(currentGrassZone);
+          if (encounterRoll < 0.60) {
+            this.triggerWildBattle(currentGrassZone || (this.currentRoute.theme === 'forest' ? 'forest' : 'field'));
             return;
           }
         }
       }
+    }
+
+    // Update Active Map Section & On-Screen Banner
+    if (this.currentRoute.sections) {
+      for (const sec of this.currentRoute.sections) {
+        if (
+          this.player.x >= sec.x &&
+          this.player.x <= sec.x + sec.w &&
+          this.player.y >= sec.y &&
+          this.player.y <= sec.y + sec.h
+        ) {
+          if (!this.activeSection || this.activeSection.id !== sec.id) {
+            this.activeSection = sec;
+            this.sectionBannerTimer = 3.8;
+            const locEl = document.getElementById('route-location-label');
+            if (locEl) {
+              locEl.innerHTML = `${this.currentRoute.name} &bull; ${sec.icon} ${sec.name}`;
+            }
+          }
+          break;
+        }
+      }
+    }
+    if (this.sectionBannerTimer > 0) {
+      this.sectionBannerTimer -= dt;
     }
 
     // Check Contextual Proximity Prompt
@@ -517,6 +639,16 @@ export class RouteExplorationEngine {
         promptTarget = npc.name;
         promptAction = 'Talk';
         break;
+      }
+    }
+
+    if (!promptTarget && this.currentRoute.signposts) {
+      for (const sp of this.currentRoute.signposts) {
+        if (Math.hypot(this.player.x - sp.x, this.player.y - sp.y) < 50) {
+          promptTarget = sp.title;
+          promptAction = 'Read Sign';
+          break;
+        }
       }
     }
 
@@ -661,54 +793,66 @@ export class RouteExplorationEngine {
     // 1. Terrain Grass Base
     this.renderTerrain(ctx, route);
 
-    // 2. Paths & Cobblestone Avenues
+    // 2. Freshwater Ponds with Aquatic Caustics & Wooden Piers
+    this.renderPonds(ctx, route);
+
+    // 3. Terraced Cliff Ledges with Carved Stone Stairs
+    this.renderLedges(ctx, route);
+
+    // 4. Paths & Cobblestone Avenues
     this.renderPaths(ctx, route);
 
-    // 3. Tall Grass with Wind Sway Animation & Wildflowers (Lush everywhere outside roads!)
+    // 5. Tall Grass with Wind Sway Animation & Wildflowers (Special mystical grass in Rare Sanctuary!)
     this.renderTallGrass(ctx, route);
 
-    // 4. Natural Stones & Boulders
+    // 6. Natural Stones & Boulders
     this.renderStones(ctx, route);
 
-    // 5. Wooden Post-and-Rail Fences
+    // 6.5 Carved Wooden Signposts
+    this.renderSignposts(ctx, route);
+
+    // 7. Wooden Post-and-Rail Fences
     this.renderFences(ctx, route);
 
-    // 6. Buildings (Pokémon Center, Poké Mart, Gym, Route Gate)
+    // 8. Buildings (Pokémon Center, Poké Mart, Gym, Route Gate)
     for (const b of route.buildings) {
       this.renderBuilding(ctx, b);
     }
 
-    // 7. Ground Items (3D Poké Balls with Sparkle)
+    // 9. Ground Items (3D Poké Balls with Sparkle)
     for (const it of route.items) {
       if (!it.collected) {
         this.renderGroundItem(ctx, it);
       }
     }
 
-    // 8. Trees BEHIND Player
+    // 10. Trees BEHIND Player
     this.renderTreesLayer(ctx, route, 'behind');
 
-    // 9. NPCs with Animated Interaction Prompts
+    // 11. NPCs with Animated Interaction Prompts
     for (const npc of route.npcs) {
       this.renderNPC(ctx, npc);
     }
 
-    // 10. Grass Particles
+    // 12. Grass Particles
     this.renderGrassParticles(ctx);
 
-    // 11. Player Character (Detailed Red/Ash with Animated Walking Cycle)
+    // 13. Player Character (Detailed Red/Ash with Animated Walking Cycle)
     this.renderPlayer(ctx);
 
-    // 12. Trees IN FRONT OF Player
+    // 14. Trees IN FRONT OF Player
     this.renderTreesLayer(ctx, route, 'front');
 
-    // 13. Overhead Exit Signpost & Scenery
+    // 15. Overhead Exit Signpost & Scenery
     this.renderOverheadScenery(ctx, route);
 
-    // 14. Ambient Atmospheric Particles (Leaves & Pollen in the Breeze)
+    // 16. Ambient Atmospheric Particles (Leaves & Pollen in the Breeze)
     this.renderAtmosphere(ctx, route);
 
     ctx.restore();
+
+    // 17. Active Map Section HUD Badge & Rare Area Warning Banner (Screen Space)
+    this.renderSectionBanner(ctx);
   }
 
   private renderTerrain(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
@@ -717,94 +861,46 @@ export class RouteExplorationEngine {
     const isRock = route.theme === 'rock';
     const isWater = route.theme === 'water';
 
-    // Theme-tailored natural turf palettes
+    // Theme-tailored vibrant natural turf base
     const baseCol = isForest
-      ? '#173d2a'
+      ? '#1e5234'
       : isCity
-        ? '#255d3c'
+        ? '#2d6945'
         : isRock
-          ? '#3b5238'
+          ? '#3b633b'
           : isWater
-            ? '#1c4e3e'
-            : '#22552b';
-
-    const fleckCol = isForest
-      ? '#1d4832'
-      : isCity
-        ? '#2c6944'
-        : isRock
-          ? '#445c40'
-          : isWater
-            ? '#235e4b'
-            : '#296133';
-
-    const shadeCol = isForest
-      ? '#123322'
-      : isCity
-        ? '#1e4d31'
-        : isRock
-          ? '#32462f'
-          : isWater
-            ? '#164032'
-            : '#1c4623';
+            ? '#215e4b'
+            : '#2e7d32'; // Vibrant, rich clean natural lawn green!
 
     // 1. Rich Base Ground Lawn Fill
     ctx.fillStyle = baseCol;
     ctx.fillRect(0, 0, route.worldWidth, route.worldHeight);
 
-    // 2. Multi-tone Organic Turf Dappling (Natural non-grid procedural noise)
-    const patchSize = 42;
-    const cols = Math.ceil(route.worldWidth / patchSize);
-    const rows = Math.ceil(route.worldHeight / patchSize);
+    // 2. Subtle Natural Meadow Gradient (Clean sunlight flow without dark blotches)
+    const meadowGrad = ctx.createLinearGradient(0, 0, route.worldWidth, route.worldHeight);
+    meadowGrad.addColorStop(0, 'rgba(255, 255, 255, 0.04)');
+    meadowGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0)');
+    meadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0.03)');
+    ctx.fillStyle = meadowGrad;
+    ctx.fillRect(0, 0, route.worldWidth, route.worldHeight);
 
-    for (let c = 0; c < cols; c++) {
-      for (let r = 0; r < rows; r++) {
-        const hash = Math.sin(c * 12.9898 + r * 78.233) * 43758.5453;
-        const seed = hash - Math.floor(hash);
+    // 3. Ground Micro-Details: Clover clusters, yellow dandelions & delicate short lawn blades
+    // (Giving the normal walkable turf realistic living grass texture without any dark spots)
+    for (let x = 20; x < route.worldWidth - 20; x += 40) {
+      for (let y = 25; y < route.worldHeight - 25; y += 38) {
+        // Skip paths and buildings for clean ground
+        if (this.isPointOnRoad(x, y, route)) continue;
+        if (this.isInsideBuilding(x, y, route)) continue;
 
-        const px = c * patchSize;
-        const py = r * patchSize;
-
-        if (seed > 0.6) {
-          // Lighter sunlit grass patch
-          ctx.fillStyle = fleckCol;
-          ctx.beginPath();
-          ctx.ellipse(px + 21, py + 21, 20, 15, 0.2, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (seed < 0.22) {
-          // Deeper shaded loam patch
-          ctx.fillStyle = shadeCol;
-          ctx.beginPath();
-          ctx.ellipse(px + 21, py + 21, 16, 12, -0.2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-    }
-
-    // 3. Sunlit Dappled Canopy Light Patches (Warm golden sun filtering through leaves)
-    ctx.fillStyle = 'rgba(254, 240, 138, 0.04)';
-    for (let sx = 40; sx < route.worldWidth; sx += 120) {
-      for (let sy = 30; sy < route.worldHeight; sy += 110) {
-        const ox = ((sy * 17) % 50) - 25;
-        const oy = ((sx * 23) % 40) - 20;
-        ctx.beginPath();
-        ctx.ellipse(sx + ox, sy + oy, 38, 24, 0.4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    // 4. Ground Micro-Details: Clover clusters & tiny yellow meadow dandelions
-    for (let x = 25; x < route.worldWidth - 25; x += 55) {
-      for (let y = 35; y < route.worldHeight - 35; y += 50) {
         const dHash = Math.sin(x * 37.1 + y * 91.7) * 10000;
         const val = dHash - Math.floor(dHash);
 
-        const ox = (val * 30) - 15;
-        const oy = ((val * 7) % 1) * 24 - 12;
+        const ox = (val * 24) - 12;
+        const oy = ((val * 7) % 1) * 20 - 10;
         const gx = x + ox;
         const gy = y + oy;
 
-        if (val > 0.78) {
+        if (val > 0.82) {
           // Wild 4-leaf clover cluster
           ctx.fillStyle = '#4ade80';
           ctx.beginPath();
@@ -821,14 +917,17 @@ export class RouteExplorationEngine {
           ctx.fill();
           ctx.fillStyle = '#ea580c';
           ctx.fillRect(gx - 0.5, gy - 0.5, 1, 1);
-        } else if (val > 0.45 && val < 0.52) {
-          // Embedded smooth tiny pebble
-          ctx.fillStyle = '#64748b';
+        } else if (val > 0.35 && val < 0.65) {
+          // Subtle short lawn blade pair (natural crisp lawn texture)
+          ctx.fillStyle = val > 0.50 ? '#388e3c' : '#43a047';
           ctx.beginPath();
-          ctx.ellipse(gx, gy, 2.5, 1.5, 0.3, 0, Math.PI * 2);
+          ctx.moveTo(gx - 2, gy + 3);
+          ctx.lineTo(gx - 1, gy);
+          ctx.lineTo(gx, gy + 3);
+          ctx.moveTo(gx, gy + 3);
+          ctx.lineTo(gx + 1.5, gy + 0.5);
+          ctx.lineTo(gx + 2.5, gy + 3);
           ctx.fill();
-          ctx.fillStyle = '#94a3b8';
-          ctx.fillRect(gx - 1, gy - 1, 1, 1);
         }
       }
     }
@@ -1011,140 +1110,191 @@ export class RouteExplorationEngine {
     const camW = this.canvas ? this.canvas.width : 800;
     const camH = this.canvas ? this.canvas.height : 480;
 
-    // 1. Designated Encounter Zone Base Under-Beds
     for (const g of route.grassPatches) {
+      // 1. Frustum Culling: skip patches outside camera view
+      if (
+        g.x + g.w < this.camX - 40 ||
+        g.x > this.camX + camW + 40 ||
+        g.y + g.h < this.camY - 40 ||
+        g.y > this.camY + camH + 40
+      ) {
+        continue;
+      }
+
       ctx.save();
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+
+      // 2. Soft Ambient Drop Shadow Underneath Grass Patch
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.16)';
       ctx.beginPath();
-      ctx.roundRect(g.x + 2, g.y + 4, g.w, g.h, 12);
+      ctx.roundRect(g.x + 2, g.y + 5, g.w, g.h, 14);
       ctx.fill();
 
-      ctx.fillStyle = '#143825';
+      const isRarePatch = g.zone === 'rare';
+
+      // 3. Rich Fertile Humus & Moss Under-Bed (Natural blend with lawn turf)
+      ctx.fillStyle = isRarePatch ? '#0d3824' : '#225d33';
       ctx.beginPath();
-      ctx.roundRect(g.x, g.y, g.w, g.h, 10);
+      ctx.roundRect(g.x, g.y, g.w, g.h, 12);
       ctx.fill();
 
-      ctx.fillStyle = '#1b4a32';
+      ctx.fillStyle = isRarePatch ? '#134e31' : '#2c733f';
       ctx.beginPath();
-      ctx.roundRect(g.x + 3, g.y + 3, g.w - 6, g.h - 6, 8);
+      ctx.roundRect(g.x + 2.5, g.y + 2.5, g.w - 5, g.h - 5, 10);
       ctx.fill();
-      ctx.restore();
-    }
 
-    // 2. Dense Living Grass Across the ENTIRE Off-Road Terrain (Visible camera viewport)
-    const tuftStep = 22;
-    const startX = Math.floor(Math.max(10, this.camX - 25) / tuftStep) * tuftStep;
-    const endX = Math.ceil(Math.min(route.worldWidth - 10, this.camX + camW + 25) / tuftStep) * tuftStep;
-    const startY = Math.floor(Math.max(50, this.camY - 25) / tuftStep) * tuftStep;
-    const endY = Math.ceil(Math.min(route.worldHeight - 30, this.camY + camH + 25) / tuftStep) * tuftStep;
-
-    ctx.save();
-
-    for (let tx = startX; tx < endX; tx += tuftStep) {
-      for (let ty = startY; ty < endY; ty += tuftStep) {
-        // Skip roads / paths
-        if (this.isPointOnRoad(tx, ty, route)) continue;
-        // Skip buildings
-        if (this.isInsideBuilding(tx, ty, route)) continue;
-
-        // Dynamic 2-Phase Wind Waves
-        const broadWind = Math.sin(this.time * 2.8 + tx * 0.05 + ty * 0.04) * 4.0;
-        const rustle = Math.sin(this.time * 6.5 + tx * 0.2 + ty * 0.1) * 1.2;
-        let windSway = broadWind + rustle;
-
-        // Reactive Player Blade Parting:
-        const distToPlayer = Math.hypot(tx - px, ty - py);
-        if (distToPlayer < 36) {
-          const pushFactor = (1 - distToPlayer / 36) * 7.5;
-          const pushDir = tx >= px ? 1 : -1;
-          windSway += pushFactor * pushDir;
-        }
-
-        // Blade 1: Deep Shadow Blade
-        ctx.fillStyle = '#0f291c';
+      if (isRarePatch) {
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
+        ctx.lineWidth = 1.8;
         ctx.beginPath();
-        ctx.moveTo(tx - 4, ty + 13);
-        ctx.lineTo(tx + windSway * 0.7 - 2, ty + 2);
-        ctx.lineTo(tx + 2, ty + 13);
-        ctx.closePath();
-        ctx.fill();
+        ctx.roundRect(g.x + 1, g.y + 1, g.w - 2, g.h - 2, 11);
+        ctx.stroke();
+      }
 
-        // Blade 2: Left Curved Jade Blade
-        ctx.fillStyle = '#2d6a4f';
+      // 4. Natural Organic Edge Scalloping (Breaks straight rectangular boundaries)
+      ctx.fillStyle = isRarePatch ? '#10b981' : '#388e3c';
+      // Top Edge Fringe
+      for (let ex = g.x + 6; ex < g.x + g.w - 6; ex += 16) {
+        const ew = Math.sin(this.time * 2.5 + ex * 0.05) * 2;
         ctx.beginPath();
-        ctx.moveTo(tx - 5, ty + 13);
-        ctx.quadraticCurveTo(tx - 3 + windSway * 0.5, ty + 7, tx - 3 + windSway, ty + 1);
-        ctx.lineTo(tx - 1, ty + 13);
-        ctx.closePath();
+        ctx.moveTo(ex - 3, g.y + 4);
+        ctx.quadraticCurveTo(ex + ew, g.y - 4, ex + 3, g.y + 4);
         ctx.fill();
-
-        // Blade 3: Center Dominant Emerald Blade with Sunlit Tip
-        ctx.fillStyle = '#40916c';
+      }
+      // Bottom Edge Fringe
+      for (let ex = g.x + 6; ex < g.x + g.w - 6; ex += 16) {
+        const ew = Math.sin(this.time * 2.5 + ex * 0.05) * 2;
         ctx.beginPath();
-        ctx.moveTo(tx - 2, ty + 13);
-        ctx.quadraticCurveTo(tx + windSway * 0.5, ty + 6, tx + windSway + 1, ty - 2);
-        ctx.lineTo(tx + 2, ty + 13);
-        ctx.closePath();
+        ctx.moveTo(ex - 3, g.y + g.h - 2);
+        ctx.quadraticCurveTo(ex + ew, g.y + g.h + 5, ex + 3, g.y + g.h - 2);
         ctx.fill();
-
-        // Sunlit Lime Tip on Center Blade
-        ctx.fillStyle = '#74c69d';
+      }
+      // Left Edge Fringe
+      for (let ey = g.y + 6; ey < g.y + g.h - 6; ey += 16) {
         ctx.beginPath();
-        ctx.moveTo(tx + windSway - 1, ty + 3);
-        ctx.lineTo(tx + windSway + 1, ty - 2);
-        ctx.lineTo(tx + windSway + 3, ty + 3);
-        ctx.closePath();
+        ctx.moveTo(g.x + 3, ey - 3);
+        ctx.quadraticCurveTo(g.x - 4, ey, g.x + 3, ey + 3);
         ctx.fill();
-
-        // Blade 4: Right Curved Lime Blade
-        ctx.fillStyle = '#52b788';
+      }
+      // Right Edge Fringe
+      for (let ey = g.y + 6; ey < g.y + g.h - 6; ey += 16) {
         ctx.beginPath();
-        ctx.moveTo(tx + 1, ty + 13);
-        ctx.quadraticCurveTo(tx + 3 + windSway * 0.6, ty + 7, tx + 4 + windSway, ty + 2);
-        ctx.lineTo(tx + 5, ty + 13);
-        ctx.closePath();
+        ctx.moveTo(g.x + g.w - 3, ey - 3);
+        ctx.quadraticCurveTo(g.x + g.w + 4, ey, g.x + g.w - 3, ey + 3);
         ctx.fill();
+      }
 
-        // Embedded Colorful Wildflowers (Buttercups, Poppies, Bluebells, Daisies, Lavender)
-        const flowerHash = Math.abs(Math.sin(tx * 13.9 + ty * 31.7));
-        if (flowerHash > 0.82) {
-          const flowerColors = [
-            { petal: '#facc15', eye: '#c2410c' }, // Golden Buttercup
-            { petal: '#ef4444', eye: '#450a0a' }, // Crimson Poppy
-            { petal: '#38bdf8', eye: '#ffffff' }, // Forget-Me-Not Blue
-            { petal: '#ffffff', eye: '#f59e0b' }, // White Daisy
-            { petal: '#c084fc', eye: '#581c87' }, // Purple Lavender
-          ];
-          const fIdx = Math.floor(flowerHash * 100) % flowerColors.length;
-          const fPair = flowerColors[fIdx];
+      // 5. Dense Living Tall Grass Blade Tufts
+      const tuftStep = 15;
+      for (let gx = g.x + 4; gx < g.x + g.w - 4; gx += tuftStep) {
+        for (let gy = g.y + 4; gy < g.y + g.h - 4; gy += tuftStep) {
+          // Organic deterministic tuft offset
+          const jx = Math.sin(gx * 23.1 + gy * 47.9) * 2.8;
+          const jy = Math.cos(gx * 41.3 + gy * 19.7) * 2.2;
+          const tx = gx + jx;
+          const ty = gy + jy;
 
-          const fx = tx + 3 + windSway * 0.65;
-          const fy = ty + 3;
+          // Dynamic 2-Phase Wind Waves
+          const broadWind = Math.sin(this.time * 2.6 + tx * 0.045 + ty * 0.035) * 3.8;
+          const rustle = Math.sin(this.time * 6.0 + tx * 0.18 + ty * 0.12) * 1.2;
+          let windSway = broadWind + rustle;
 
-          // Flexible Flower Stem
-          ctx.strokeStyle = '#2d6a4f';
-          ctx.lineWidth = 1.2;
+          // Reactive Player Blade Parting: blades push aside as Red walks through
+          const distToPlayer = Math.hypot(tx - px, ty - (py + 10));
+          if (distToPlayer < 36) {
+            const pushFactor = (1 - distToPlayer / 36) * 8.5;
+            const pushDir = tx >= px ? 1 : -1;
+            windSway += pushFactor * pushDir;
+          }
+
+          // Blade 1: Deep Occlusion Shadow Blade behind
+          ctx.fillStyle = '#0f381e';
           ctx.beginPath();
-          ctx.moveTo(tx + 2, ty + 12);
-          ctx.quadraticCurveTo(tx + 2 + windSway * 0.3, ty + 8, fx, fy + 3);
-          ctx.stroke();
-
-          // Petals
-          ctx.fillStyle = fPair.petal;
-          ctx.beginPath();
-          ctx.arc(fx, fy, 2.6, 0, Math.PI * 2);
+          ctx.moveTo(tx - 4, ty + 13);
+          ctx.lineTo(tx + windSway * 0.65 - 2, ty + 2);
+          ctx.lineTo(tx + 2, ty + 13);
+          ctx.closePath();
           ctx.fill();
 
-          // Center Eye
-          ctx.fillStyle = fPair.eye;
+          // Blade 2: Left Curved Jade Blade
+          ctx.fillStyle = isRarePatch ? '#059669' : '#2e7d32';
           ctx.beginPath();
-          ctx.arc(fx, fy, 1.0, 0, Math.PI * 2);
+          ctx.moveTo(tx - 5, ty + 13);
+          ctx.quadraticCurveTo(tx - 3 + windSway * 0.5, ty + 7, tx - 3 + windSway, ty + 1);
+          ctx.lineTo(tx - 1, ty + 13);
+          ctx.closePath();
           ctx.fill();
+
+          // Blade 3: Center Dominant Lush Emerald Blade
+          ctx.fillStyle = isRarePatch ? '#10b981' : '#388e3c';
+          ctx.beginPath();
+          ctx.moveTo(tx - 2, ty + 13);
+          ctx.quadraticCurveTo(tx + windSway * 0.5, ty + 6, tx + windSway + 1, ty - 3);
+          ctx.lineTo(tx + 2, ty + 13);
+          ctx.closePath();
+          ctx.fill();
+
+          // Sunlit Lime/Gold Tip Glow on Center Blade
+          ctx.fillStyle = isRarePatch ? '#fde047' : '#81c784';
+          ctx.beginPath();
+          ctx.moveTo(tx + windSway - 1, ty + 2);
+          ctx.lineTo(tx + windSway + 1, ty - 3);
+          ctx.lineTo(tx + windSway + 3, ty + 2);
+          ctx.closePath();
+          ctx.fill();
+
+          // Blade 4: Right Curved Bright Lime Blade
+          ctx.fillStyle = isRarePatch ? '#34d399' : '#4caf50';
+          ctx.beginPath();
+          ctx.moveTo(tx + 1, ty + 13);
+          ctx.quadraticCurveTo(tx + 3 + windSway * 0.6, ty + 7, tx + 4 + windSway, ty + 2);
+          ctx.lineTo(tx + 5, ty + 13);
+          ctx.closePath();
+          ctx.fill();
+
+          // Embedded Natural Clustered Wildflowers
+          const clusterKey = Math.floor(gx / 48) * 37 + Math.floor(gy / 48) * 73;
+          const clusterHash = Math.abs(Math.sin(clusterKey));
+          const isFlowerSpot = clusterHash > 0.65 && ((gx % 48 < 24) && (gy % 48 < 24));
+
+          if (isFlowerSpot) {
+            const flowerColors = [
+              { petal: '#facc15', eye: '#c2410c' }, // Golden Buttercup
+              { petal: '#ef4444', eye: '#450a0a' }, // Crimson Poppy
+              { petal: '#38bdf8', eye: '#ffffff' }, // Forget-Me-Not Blue
+              { petal: '#ffffff', eye: '#f59e0b' }, // White Daisy
+              { petal: '#c084fc', eye: '#581c87' }, // Purple Lavender
+            ];
+            const fIdx = Math.floor(clusterHash * 10) % flowerColors.length;
+            const fPair = flowerColors[fIdx];
+
+            const fx = tx + 2 + windSway * 0.65;
+            const fy = ty + 3;
+
+            // Flexible Flower Stem
+            ctx.strokeStyle = '#2d6a4f';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(tx + 2, ty + 12);
+            ctx.quadraticCurveTo(tx + 2 + windSway * 0.3, ty + 8, fx, fy + 3);
+            ctx.stroke();
+
+            // Petals
+            ctx.fillStyle = fPair.petal;
+            ctx.beginPath();
+            ctx.arc(fx, fy, 2.6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Center Eye
+            ctx.fillStyle = fPair.eye;
+            ctx.beginPath();
+            ctx.arc(fx, fy, 1.0, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
       }
-    }
 
-    ctx.restore();
+      ctx.restore();
+    }
   }
 
   private renderBuilding(ctx: CanvasRenderingContext2D, b: RouteBuilding): void {
@@ -1859,33 +2009,260 @@ export class RouteExplorationEngine {
     ctx.ellipse(npc.x, npc.y + 13, 11, 5.5, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. NPC Avatar
-    ctx.font = '23px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText(npc.avatar, npc.x, npc.y + 9);
+    // 2. High-Quality Pixel-Art Styled NPC Character Sprite
+    this.drawNPCCharacter(ctx, npc);
 
     // 3. Proximity Interactive Indicator (💬 Speech bubble)
     const dist = Math.hypot(this.player.x - npc.x, this.player.y - npc.y);
     if (dist < 55) {
       const bob = Math.sin(this.time * 5) * 3;
       ctx.font = '15px system-ui';
-      ctx.fillText('💬', npc.x, npc.y - 23 + bob);
+      ctx.textAlign = 'center';
+      ctx.fillText('💬', npc.x, npc.y - 25 + bob);
     }
 
     // 4. Sleek Name Tag
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.roundRect(npc.x - 32, npc.y - 19, 64, 15, 6);
+    ctx.roundRect(npc.x - 34, npc.y - 22, 68, 16, 6);
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = '#ffffff';
     ctx.font = '900 9px system-ui';
-    ctx.fillText(npc.name, npc.x, npc.y - 8);
+    ctx.textAlign = 'center';
+    ctx.fillText(npc.name, npc.x, npc.y - 10);
 
     ctx.restore();
+  }
+
+  private drawNPCCharacter(ctx: CanvasRenderingContext2D, npc: RouteNPC): void {
+    const nx = npc.x;
+    const ny = npc.y;
+    const key = (npc.id + ' ' + npc.name + ' ' + (npc.avatar || '')).toLowerCase();
+
+    if (key.includes('angler') || key.includes('ned')) {
+      // ANGLER NED: Yellow bucket hat, blue overalls, holding fishing rod with line
+      // Legs
+      ctx.fillStyle = '#1e3a8a';
+      ctx.fillRect(nx - 5, ny + 3, 4, 8);
+      ctx.fillRect(nx + 1, ny + 3, 4, 8);
+      // Boots
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(nx - 6, ny + 10, 5, 3);
+      ctx.fillRect(nx + 1, ny + 10, 5, 3);
+      // Overalls & Shirt
+      ctx.fillStyle = '#0284c7';
+      ctx.fillRect(nx - 6, ny - 6, 12, 10);
+      ctx.fillStyle = '#ea580c';
+      ctx.fillRect(nx - 3, ny - 6, 6, 4);
+      // Head
+      ctx.fillStyle = '#fed7aa';
+      ctx.fillRect(nx - 4, ny - 14, 8, 8);
+      // Eyes
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(nx - 2, ny - 11, 2, 2);
+      ctx.fillRect(nx + 1, ny - 11, 2, 2);
+      // Yellow Bucket Hat
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(nx - 7, ny - 16, 14, 4);
+      ctx.fillRect(nx - 5, ny - 20, 10, 5);
+      // Fishing Rod
+      ctx.strokeStyle = '#92400e';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(nx + 4, ny - 2);
+      ctx.lineTo(nx + 16, ny - 16);
+      ctx.stroke();
+      // Fishing Line drooping down
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(nx + 16, ny - 16);
+      ctx.quadraticCurveTo(nx + 20, ny - 4, nx + 22, ny + 16);
+      ctx.stroke();
+      // Red Bobber
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(nx + 22, ny + 16, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (key.includes('ranger') || key.includes('vance')) {
+      // RANGER VANCE: Green safari uniform, khaki hat, binoculars
+      // Pants
+      ctx.fillStyle = '#713f12';
+      ctx.fillRect(nx - 5, ny + 3, 4, 8);
+      ctx.fillRect(nx + 1, ny + 3, 4, 8);
+      // Boots
+      ctx.fillStyle = '#451a03';
+      ctx.fillRect(nx - 6, ny + 10, 5, 3);
+      ctx.fillRect(nx + 1, ny + 10, 5, 3);
+      // Ranger Park Uniform
+      ctx.fillStyle = '#15803d';
+      ctx.fillRect(nx - 6, ny - 6, 12, 10);
+      // Gold Badge
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(nx - 4, ny - 3, 3, 3);
+      // Head
+      ctx.fillStyle = '#fed7aa';
+      ctx.fillRect(nx - 4, ny - 14, 8, 8);
+      // Eyes
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(nx - 2, ny - 11, 2, 2);
+      ctx.fillRect(nx + 1, ny - 11, 2, 2);
+      // Safari Hat
+      ctx.fillStyle = '#a16207';
+      ctx.fillRect(nx - 8, ny - 16, 16, 3.5);
+      ctx.fillRect(nx - 5, ny - 20, 10, 5);
+      // Binoculars around neck
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(nx - 3, ny - 2, 6, 3.5);
+
+    } else if (key.includes('botanist') || key.includes('clara') || key.includes('girl') || key.includes('beauty')) {
+      // BOTANIST CLARA: Pink dress/apron, green skirt, sunhat with flower ribbon
+      // Skirt
+      ctx.fillStyle = '#16a34a';
+      ctx.fillRect(nx - 6, ny + 2, 12, 8);
+      // Shoes
+      ctx.fillStyle = '#db2777';
+      ctx.fillRect(nx - 5, ny + 10, 4, 3);
+      ctx.fillRect(nx + 1, ny + 10, 4, 3);
+      // Apron Top
+      ctx.fillStyle = '#f472b6';
+      ctx.fillRect(nx - 5, ny - 6, 10, 9);
+      // Hair
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(nx - 6, ny - 15, 12, 10);
+      // Head
+      ctx.fillStyle = '#fed7aa';
+      ctx.fillRect(nx - 4, ny - 14, 8, 8);
+      // Eyes
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(nx - 2, ny - 11, 2, 2);
+      ctx.fillRect(nx + 1, ny - 11, 2, 2);
+      // Straw Sunhat
+      ctx.fillStyle = '#fef08a';
+      ctx.fillRect(nx - 8, ny - 16, 16, 3.5);
+      ctx.fillRect(nx - 5, ny - 20, 10, 5);
+      // Pink Flower Ribbon on hat
+      ctx.fillStyle = '#f472b6';
+      ctx.fillRect(nx - 5, ny - 16, 10, 2);
+      ctx.beginPath();
+      ctx.arc(nx + 3, ny - 15, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (key.includes('officer') || key.includes('jenny')) {
+      // OFFICER JENNY: Cyan police uniform, peaked cap with gold badge
+      // Pants
+      ctx.fillStyle = '#1e3a8a';
+      ctx.fillRect(nx - 5, ny + 3, 4, 8);
+      ctx.fillRect(nx + 1, ny + 3, 4, 8);
+      // Boots
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(nx - 6, ny + 10, 5, 3);
+      ctx.fillRect(nx + 1, ny + 10, 5, 3);
+      // Police Jacket
+      ctx.fillStyle = '#0284c7';
+      ctx.fillRect(nx - 6, ny - 6, 12, 10);
+      // White Tie & Gold Buttons
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(nx - 1, ny - 6, 2, 6);
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(nx - 1, ny + 1, 2, 2);
+      // Hair
+      ctx.fillStyle = '#0284c7';
+      ctx.fillRect(nx - 6, ny - 15, 12, 9);
+      // Head
+      ctx.fillStyle = '#fed7aa';
+      ctx.fillRect(nx - 4, ny - 14, 8, 8);
+      // Eyes
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(nx - 2, ny - 11, 2, 2);
+      ctx.fillRect(nx + 1, ny - 11, 2, 2);
+      // Peaked Police Cap
+      ctx.fillStyle = '#0369a1';
+      ctx.fillRect(nx - 7, ny - 18, 14, 5);
+      // Cap Brim
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(nx - 6, ny - 14, 12, 2);
+      // Gold Star Badge on Cap
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(nx, ny - 16, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else {
+      // DEFAULT GUIDE / TRAINER RED:
+      // Jeans
+      ctx.fillStyle = '#1e3a8a';
+      ctx.fillRect(nx - 5, ny + 3, 4, 8);
+      ctx.fillRect(nx + 1, ny + 3, 4, 8);
+      // Red Shoes
+      ctx.fillStyle = '#dc2626';
+      ctx.fillRect(nx - 6, ny + 10, 5, 3);
+      ctx.fillRect(nx + 1, ny + 10, 5, 3);
+      // Red Trainer Vest
+      ctx.fillStyle = '#dc2626';
+      ctx.fillRect(nx - 6, ny - 6, 12, 10);
+      // White undershirt
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(nx - 2, ny - 6, 4, 5);
+      // Head
+      ctx.fillStyle = '#fed7aa';
+      ctx.fillRect(nx - 4, ny - 14, 8, 8);
+      // Eyes
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(nx - 2, ny - 11, 2, 2);
+      ctx.fillRect(nx + 1, ny - 11, 2, 2);
+      // Red Baseball Cap
+      ctx.fillStyle = '#dc2626';
+      ctx.fillRect(nx - 6, ny - 18, 12, 5);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(nx - 5, ny - 14, 10, 2);
+    }
+  }
+
+  private renderSignposts(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    if (!route.signposts || route.signposts.length === 0) return;
+
+    for (const sp of route.signposts) {
+      ctx.save();
+
+      // 1. Contact Drop Shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(sp.x, sp.y + 16, 10, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2. Wooden Post
+      ctx.fillStyle = '#58240c';
+      ctx.fillRect(sp.x - 2.5, sp.y - 2, 5, 18);
+
+      // 3. Wooden Signboard with Bevel
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(sp.x - 17, sp.y - 18, 34, 18);
+      ctx.fillStyle = '#fef3c7';
+      ctx.fillRect(sp.x - 15, sp.y - 16, 30, 14);
+
+      // Board Text Lines
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(sp.x - 11, sp.y - 13, 22, 1.8);
+      ctx.fillRect(sp.x - 11, sp.y - 9.5, 18, 1.8);
+      ctx.fillRect(sp.x - 11, sp.y - 6, 14, 1.8);
+
+      // 4. Proximity Interactive Indicator (📋 Read bubble)
+      const dist = Math.hypot(this.player.x - sp.x, this.player.y - sp.y);
+      if (dist < 50) {
+        const bob = Math.sin(this.time * 5) * 3;
+        ctx.font = '13px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('📋', sp.x, sp.y - 24 + bob);
+      }
+
+      ctx.restore();
+    }
   }
 
   private renderGrassParticles(ctx: CanvasRenderingContext2D): void {
@@ -2243,6 +2620,62 @@ export class RouteExplorationEngine {
       }
     }
 
+    // 6. Water Ponds (Walkable only on wooden docks/piers)
+    if (route.ponds) {
+      for (const pond of route.ponds) {
+        if (
+          x >= pond.x - 6 &&
+          x <= pond.x + pond.w + 6 &&
+          footY >= pond.y - 4 &&
+          footY <= pond.y + pond.h + 4
+        ) {
+          if (pond.pier) {
+            const onPier =
+              x >= pond.pier.x - 4 &&
+              x <= pond.pier.x + pond.pier.w + 4 &&
+              footY >= pond.pier.y - 4 &&
+              footY <= pond.pier.y + pond.pier.h + 4;
+            if (onPier) continue;
+          }
+          return true;
+        }
+      }
+    }
+
+    // 7. Terraced Cliff Ledges (Walkable only at stone stairways)
+    if (route.ledges) {
+      for (const ledge of route.ledges) {
+        if (
+          x >= ledge.x - 4 &&
+          x <= ledge.x + ledge.w + 4 &&
+          footY >= ledge.y - 2 &&
+          footY <= ledge.y + ledge.h + 4
+        ) {
+          let onStairs = false;
+          if (ledge.stairs) {
+            for (const st of ledge.stairs) {
+              if (x >= st.x - 4 && x <= st.x + st.w + 4) {
+                onStairs = true;
+                break;
+              }
+            }
+          }
+          if (!onStairs) {
+            return true;
+          }
+        }
+      }
+    }
+
+    // 8. Signposts (Solid Wooden Post)
+    if (route.signposts) {
+      for (const sp of route.signposts) {
+        if (Math.hypot(x - sp.x, footY - sp.y) < 14) {
+          return true;
+        }
+      }
+    }
+
     return false;
   }
 
@@ -2409,7 +2842,277 @@ export class RouteExplorationEngine {
     }
   }
 
-  private drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number = 1.0, type: 'oak' | 'pine' = 'oak'): void {
+  private renderPonds(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    if (!route.ponds || route.ponds.length === 0) return;
+
+    for (const pond of route.ponds) {
+      ctx.save();
+
+      // 1. Shore Sandy Soil Bed with Soft Ambient Drop Shadow
+      ctx.fillStyle = '#653b1b';
+      ctx.beginPath();
+      ctx.roundRect(pond.x - 6, pond.y - 6, pond.w + 12, pond.h + 14, 16);
+      ctx.fill();
+
+      // Shore Grass Fringe
+      ctx.fillStyle = '#22552b';
+      ctx.beginPath();
+      ctx.roundRect(pond.x - 3, pond.y - 3, pond.w + 6, pond.h + 8, 14);
+      ctx.fill();
+
+      // 2. Deep Water Body with Vibrant Radial Caustic Depth
+      const waterGrad = ctx.createLinearGradient(pond.x, pond.y, pond.x, pond.y + pond.h);
+      waterGrad.addColorStop(0, '#1d4ed8');
+      waterGrad.addColorStop(0.5, '#2563eb');
+      waterGrad.addColorStop(1, '#0284c7');
+      ctx.fillStyle = waterGrad;
+      ctx.beginPath();
+      ctx.roundRect(pond.x, pond.y, pond.w, pond.h, 12);
+      ctx.fill();
+
+      // 3. Animated Surface Ripples & Caustics
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.lineWidth = 1.5;
+      for (let ry = pond.y + 14; ry < pond.y + pond.h - 10; ry += 24) {
+        const waveShift = Math.sin(this.time * 2.4 + ry * 0.1) * 6;
+        ctx.beginPath();
+        ctx.moveTo(pond.x + 12, ry);
+        ctx.bezierCurveTo(
+          pond.x + pond.w * 0.3 + waveShift, ry - 3,
+          pond.x + pond.w * 0.7 - waveShift, ry + 3,
+          pond.x + pond.w - 12, ry
+        );
+        ctx.stroke();
+      }
+
+      // 4. Floating Lily Pads with Pink Water Lotus Blossoms
+      const padPositions = [
+        { ox: 34, oy: 28 },
+        { ox: pond.w - 42, oy: 36 },
+        { ox: 50, oy: pond.h - 38 },
+        { ox: pond.w - 60, oy: pond.h - 30 },
+      ];
+      for (const p of padPositions) {
+        const lx = pond.x + p.ox;
+        const ly = pond.y + p.oy;
+        // Lily pad leaf
+        ctx.fillStyle = '#15803d';
+        ctx.beginPath();
+        ctx.arc(lx, ly, 7, 0.3, Math.PI * 1.9);
+        ctx.lineTo(lx, ly);
+        ctx.closePath();
+        ctx.fill();
+        // Lotus blossom
+        ctx.fillStyle = '#f472b6';
+        ctx.beginPath();
+        ctx.arc(lx + 1, ly - 1, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fef08a';
+        ctx.beginPath();
+        ctx.arc(lx + 1, ly - 1, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 5. Wooden Dock / Pier Extension (Walkable!)
+      if (pond.pier) {
+        const pr = pond.pier;
+        // Shadow beneath pier
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.fillRect(pr.x + 2, pr.y + 4, pr.w, pr.h);
+
+        // Submerged Wooden Pilings
+        ctx.fillStyle = '#451a03';
+        ctx.fillRect(pr.x + 4, pr.y + pr.h - 8, 6, 12);
+        ctx.fillRect(pr.x + pr.w - 10, pr.y + pr.h - 8, 6, 12);
+
+        // Horizontal Wooden Planks
+        for (let py = pr.y; py < pr.y + pr.h; py += 12) {
+          ctx.fillStyle = '#78350f';
+          ctx.fillRect(pr.x, py, pr.w, 10);
+          ctx.fillStyle = '#9a3412';
+          ctx.fillRect(pr.x, py, pr.w, 1.5);
+          ctx.fillStyle = '#451a03';
+          ctx.fillRect(pr.x, py + 9, pr.w, 1);
+          // Nail rivets
+          ctx.fillStyle = '#1e293b';
+          ctx.fillRect(pr.x + 3, py + 4, 1.5, 1.5);
+          ctx.fillRect(pr.x + pr.w - 4.5, py + 4, 1.5, 1.5);
+        }
+
+        // Rope bollards on pier end
+        ctx.fillStyle = '#92400e';
+        ctx.fillRect(pr.x + 2, pr.y + pr.h - 4, 5, 6);
+        ctx.fillRect(pr.x + pr.w - 7, pr.y + pr.h - 4, 5, 6);
+      }
+
+      ctx.restore();
+    }
+  }
+
+  private renderLedges(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    if (!route.ledges || route.ledges.length === 0) return;
+
+    for (const ledge of route.ledges) {
+      ctx.save();
+
+      // 1. Drop shadow onto lower ground
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
+      ctx.fillRect(ledge.x, ledge.y + ledge.h, ledge.w, 8);
+
+      // 2. Earth / Rock Cliff Stratification Face
+      const cliffGrad = ctx.createLinearGradient(ledge.x, ledge.y, ledge.x, ledge.y + ledge.h);
+      cliffGrad.addColorStop(0, '#8c5835');
+      cliffGrad.addColorStop(0.35, '#713f12');
+      cliffGrad.addColorStop(0.75, '#542d0c');
+      cliffGrad.addColorStop(1, '#381c06');
+      ctx.fillStyle = cliffGrad;
+      ctx.fillRect(ledge.x, ledge.y + 4, ledge.w, ledge.h - 4);
+
+      // Horizontal Rock Strata Layers
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(ledge.x, ledge.y + ledge.h * 0.45);
+      ctx.lineTo(ledge.x + ledge.w, ledge.y + ledge.h * 0.45);
+      ctx.moveTo(ledge.x, ledge.y + ledge.h * 0.75);
+      ctx.lineTo(ledge.x + ledge.w, ledge.y + ledge.h * 0.75);
+      ctx.stroke();
+
+      // 3. Lush Green Overhanging Grass Lip on Top
+      ctx.fillStyle = '#22552b';
+      ctx.fillRect(ledge.x, ledge.y - 2, ledge.w, 6);
+      ctx.fillStyle = '#4ade80';
+      ctx.fillRect(ledge.x, ledge.y - 2, ledge.w, 1.5);
+
+      // Scalloped grass fringe hanging over cliff edge
+      ctx.fillStyle = '#22552b';
+      for (let gx = ledge.x; gx < ledge.x + ledge.w; gx += 10) {
+        ctx.beginPath();
+        ctx.arc(gx + 5, ledge.y + 4, 4, 0, Math.PI);
+        ctx.fill();
+      }
+
+      // 4. Carved Stone Stairs (Passable Walkways)
+      if (ledge.stairs) {
+        for (const st of ledge.stairs) {
+          // Clear out the cliff face for the staircase
+          ctx.fillStyle = '#334155';
+          ctx.fillRect(st.x, ledge.y - 2, st.w, ledge.h + 8);
+
+          // 4 Tiers of Stone Steps
+          const stepCount = 4;
+          const stepH = (ledge.h + 8) / stepCount;
+          for (let i = 0; i < stepCount; i++) {
+            const sy = ledge.y - 2 + i * stepH;
+            // Step tread (top face)
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillRect(st.x + 3, sy, st.w - 6, stepH * 0.65);
+            // Step riser (front face)
+            ctx.fillStyle = '#64748b';
+            ctx.fillRect(st.x + 3, sy + stepH * 0.65, st.w - 6, stepH * 0.35);
+            // Highlight bevel
+            ctx.fillStyle = '#f1f5f9';
+            ctx.fillRect(st.x + 3, sy, st.w - 6, 1.2);
+          }
+
+          // Side Handrail Balustrades
+          ctx.fillStyle = '#475569';
+          ctx.fillRect(st.x, ledge.y - 4, 4, ledge.h + 10);
+          ctx.fillRect(st.x + st.w - 4, ledge.y - 4, 4, ledge.h + 10);
+          ctx.fillStyle = '#94a3b8';
+          ctx.fillRect(st.x, ledge.y - 4, 4, 2);
+          ctx.fillRect(st.x + st.w - 4, ledge.y - 4, 4, 2);
+        }
+      }
+
+      ctx.restore();
+    }
+  }
+
+  private renderSectionBanner(ctx: CanvasRenderingContext2D): void {
+    if (!this.activeSection || !this.canvas) return;
+    if (this.sectionBannerTimer <= 0) return;
+
+    ctx.save();
+
+    // Smooth entry/exit opacity
+    const alpha = Math.min(1.0, this.sectionBannerTimer * 1.5, (3.8 - this.sectionBannerTimer) * 2.0);
+    ctx.globalAlpha = Math.max(0, Math.min(1.0, alpha));
+
+    const s = this.activeSection;
+    const isRare = !!s.isRareZone;
+    const cW = this.canvas.width;
+    const badgeW = Math.min(cW - 32, isRare ? 420 : 330);
+    const badgeH = 46;
+    const bx = (cW - badgeW) / 2;
+    const by = Math.min(125, Math.max(72, this.canvas.height * 0.16));
+
+    // 1. Soft Glassmorphic Drop Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.beginPath();
+    ctx.roundRect(bx + 2, by + 4, badgeW, badgeH, 23);
+    ctx.fill();
+
+    // 2. High-Contrast Gradient Fill
+    const bgGrad = ctx.createLinearGradient(bx, by, bx + badgeW, by);
+    if (isRare) {
+      bgGrad.addColorStop(0, '#451a03');
+      bgGrad.addColorStop(0.5, '#78350f');
+      bgGrad.addColorStop(1, '#451a03');
+    } else {
+      bgGrad.addColorStop(0, '#0f172a');
+      bgGrad.addColorStop(0.5, '#1e293b');
+      bgGrad.addColorStop(1, '#0f172a');
+    }
+    ctx.fillStyle = bgGrad;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, badgeW, badgeH, 23);
+    ctx.fill();
+
+    // 3. Glowing Border
+    ctx.strokeStyle = isRare ? '#f59e0b' : '#38bdf8';
+    ctx.lineWidth = isRare ? 2.5 : 1.5;
+    ctx.stroke();
+
+    // 4. Section Icon Pill
+    ctx.fillStyle = isRare ? '#b45309' : '#0369a1';
+    ctx.beginPath();
+    ctx.arc(bx + 24, by + badgeH / 2, 16, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.font = '16px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(s.icon || '📍', bx + 24, by + badgeH / 2);
+
+    // 5. Section Title & Subtitle
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = '900 13px system-ui';
+    ctx.fillStyle = isRare ? '#fef08a' : '#f8fafc';
+    ctx.fillText(s.name, bx + 50, by + 19);
+
+    ctx.font = '600 10.5px system-ui';
+    ctx.fillStyle = isRare ? '#fed7aa' : '#94a3b8';
+    ctx.fillText(s.subtitle, bx + 50, by + 34);
+
+    if (isRare) {
+      // Pulsing Warning Tag on right side
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.roundRect(bx + badgeW - 100, by + 11, 88, 24, 12);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 9.5px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚡ Lv 8-14 MONS', bx + badgeW - 56, by + 26);
+    }
+
+    ctx.restore();
+  }
+
+  private drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number = 1.0, type: 'oak' | 'pine' | 'blossom' | 'mystic' = 'oak'): void {
     ctx.save();
 
     // Natural variation per tree so they aren't all identical clones
@@ -2463,6 +3166,58 @@ export class RouteExplorationEngine {
       this.drawPineTier(ctx, x, y + 2 + hOff, 26 * rScale, 18 * rScale);
       this.drawPineTier(ctx, x, y - 10 + hOff, 20 * rScale, 16 * rScale);
       this.drawPineTier(ctx, x, y - 22 + hOff, 14 * rScale, 16 * rScale);
+    } else if (type === 'blossom') {
+      const canopyWind = Math.sin(this.time * 2.2 + x * 0.05) * 1.5;
+
+      // Base Ambient Shadow Under-canopy (Radiant Cherry Blossom)
+      const baseGrad = ctx.createRadialGradient(x - 4, y - 6 + hOff, 4, x, y + hOff, 26 * rScale);
+      baseGrad.addColorStop(0, '#db2777');
+      baseGrad.addColorStop(0.65, '#9d174d');
+      baseGrad.addColorStop(1, '#500724');
+      ctx.fillStyle = baseGrad;
+      ctx.beginPath();
+      ctx.arc(x, y + hOff, 24 * rScale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Foliage Lobes (Pink Sakura)
+      this.drawFoliageLobe(ctx, x - 12 * rScale, y + 2 + hOff, 14 * rScale, '#f472b6', '#db2777', '#831843');
+      this.drawFoliageLobe(ctx, x + 11 * rScale, y + 3 + hOff, 13 * rScale, '#ec4899', '#be185d', '#831843');
+      this.drawFoliageLobe(ctx, x - 10 * rScale + canopyWind * 0.5, y - 8 + hOff, 16 * rScale, '#f9a8d4', '#f472b6', '#db2777');
+      this.drawFoliageLobe(ctx, x + 9 * rScale, y - 7 + hOff, 15 * rScale, '#f472b6', '#ec4899', '#be185d');
+      this.drawFoliageLobe(ctx, x + canopyWind * 0.8, y - 16 + hOff, 17 * rScale, '#fbcfe8', '#f472b6', '#db2777');
+
+      // Floating Pink Sakura Petals
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(x - 5 * rScale + canopyWind, y - 20 + hOff, 2.5 * rScale, 0, Math.PI * 2);
+      ctx.arc(x + 2 * rScale + canopyWind, y - 18 + hOff, 2.0 * rScale, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (type === 'mystic') {
+      const canopyWind = Math.sin(this.time * 2.2 + x * 0.05) * 1.5;
+
+      // Base Deep Ambient Shadow Under-canopy (Ancient Enchanted Oak)
+      const baseGrad = ctx.createRadialGradient(x - 4, y - 6 + hOff, 4, x, y + hOff, 26 * rScale);
+      baseGrad.addColorStop(0, '#047857');
+      baseGrad.addColorStop(0.65, '#064e3b');
+      baseGrad.addColorStop(1, '#022c22');
+      ctx.fillStyle = baseGrad;
+      ctx.beginPath();
+      ctx.arc(x, y + hOff, 24 * rScale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Enchanted Emerald Lobes
+      this.drawFoliageLobe(ctx, x - 12 * rScale, y + 2 + hOff, 14 * rScale, '#059669', '#047857', '#064e3b');
+      this.drawFoliageLobe(ctx, x + 11 * rScale, y + 3 + hOff, 13 * rScale, '#047857', '#064e3b', '#022c22');
+      this.drawFoliageLobe(ctx, x - 10 * rScale + canopyWind * 0.5, y - 8 + hOff, 16 * rScale, '#10b981', '#059669', '#047857');
+      this.drawFoliageLobe(ctx, x + 9 * rScale, y - 7 + hOff, 15 * rScale, '#059669', '#047857', '#064e3b');
+      this.drawFoliageLobe(ctx, x + canopyWind * 0.8, y - 16 + hOff, 17 * rScale, '#34d399', '#10b981', '#059669');
+
+      // Fairy Dust Catchlights
+      ctx.fillStyle = '#a7f3d0';
+      ctx.beginPath();
+      ctx.arc(x - 4 * rScale + canopyWind, y - 20 + hOff, 2.5 * rScale, 0, Math.PI * 2);
+      ctx.arc(x + 3 * rScale + canopyWind, y - 19 + hOff, 2.2 * rScale, 0, Math.PI * 2);
+      ctx.fill();
     } else {
       const canopyWind = Math.sin(this.time * 2.2 + x * 0.05) * 1.5;
 

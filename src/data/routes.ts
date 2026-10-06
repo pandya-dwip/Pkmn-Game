@@ -10,11 +10,11 @@
  * - Natural city plazas featuring Pokémon Centers, Poké Marts, Gyms, and gates
  */
 
-import { RouteDefinition } from '../systems/RouteExplorationEngine';
+import { RouteDefinition, RouteTree, RouteSignpost } from '../systems/RouteExplorationEngine';
 
 export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
   // ==========================================================================
-  // ROUTE 0: Pallet Town ➔ Route 1 ➔ Viridian City (Before Gym 1)
+  // ROUTE 0: Pallet Town ➔ Route 1 ➔ Viridian City (Structured 5-Section Map)
   // ==========================================================================
   {
     id: 0,
@@ -24,42 +24,179 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
     worldWidth: 2600,
     worldHeight: 920,
     theme: 'route',
-    startX: 80,
-    startY: 420,
+    startX: 90,
+    startY: 440,
+    sections: [
+      {
+        id: 'r0_sec1',
+        name: 'Pallet Valley',
+        subtitle: 'Route 1 Starter Trail (Lv 2-4)',
+        icon: '🌿',
+        x: 0,
+        y: 0,
+        w: 640,
+        h: 920,
+      },
+      {
+        id: 'r0_sec2',
+        name: 'Clear Creek Glade',
+        subtitle: 'Waterfront Pond & Fishing Dock',
+        icon: '🌊',
+        x: 640,
+        y: 440,
+        w: 700,
+        h: 480,
+      },
+      {
+        id: 'r0_sec3',
+        name: 'Blossom Terrace',
+        subtitle: 'Sakura Ridge & Flower Meadow',
+        icon: '🌸',
+        x: 640,
+        y: 0,
+        w: 700,
+        h: 440,
+      },
+      {
+        id: 'r0_sec4',
+        name: 'Deep Ancient Sanctuary',
+        subtitle: 'High-Level Wild Pokémon Zone (Lv 8-14)',
+        icon: '⚡',
+        x: 1340,
+        y: 0,
+        w: 600,
+        h: 480,
+        isRareZone: true,
+      },
+      {
+        id: 'r0_sec5',
+        name: 'Viridian City Plaza',
+        subtitle: 'Kanto League Gateway & Grand Plaza',
+        icon: '🏛️',
+        x: 1940,
+        y: 0,
+        w: 660,
+        h: 920,
+      },
+    ],
     path: [
-      // 1. Main Central Trail from Pallet to Viridian
-      { x: 40, y: 390, w: 1400, h: 80 },
-      // 2. Upper Meadow Path (branching north)
-      { x: 340, y: 220, w: 760, h: 64 },
-      { x: 340, y: 220, w: 64, h: 180 },
-      { x: 1040, y: 220, w: 64, h: 180 },
-      // 3. Lower Riverside Trail (branching south)
-      { x: 500, y: 580, w: 860, h: 64 },
-      { x: 500, y: 460, w: 64, h: 140 },
-      { x: 1300, y: 460, w: 64, h: 140 },
-      // 4. Connecting Avenue into Viridian City
-      { x: 1420, y: 320, w: 100, h: 220 },
-      // 5. Viridian City Grand Plaza
-      { x: 1500, y: 240, w: 980, h: 360 },
+      // 1. Pallet Valley Main Highway from Pallet Town Gate to Viridian City
+      { x: 50, y: 420, w: 590, h: 64 },
+      { x: 640, y: 420, w: 1300, h: 64 },
+      // 2. Clear Creek Waterfront Southern Promenade Loop
+      { x: 750, y: 440, w: 60, h: 170 },
+      { x: 720, y: 580, w: 460, h: 56 },
+      // 3. Sunlit Blossom Terrace Northern Trail
+      { x: 740, y: 240, w: 60, h: 180 },
+      { x: 740, y: 240, w: 580, h: 56 },
+      // 4. Secret Stairway into Deep Ancient Sanctuary
+      { x: 1440, y: 210, w: 60, h: 210 },
+      { x: 1440, y: 210, w: 440, h: 56 },
+      // 5. Viridian City Grand Flagstone Plaza
+      { x: 1940, y: 180, w: 640, h: 500 },
+    ],
+    ponds: [
+      {
+        x: 780,
+        y: 620,
+        w: 360,
+        h: 200,
+        pier: { x: 920, y: 570, w: 60, h: 80 },
+      },
+    ],
+    ledges: [
+      // Terrace 1: Blossom Ridge Cliff Ledge
+      {
+        x: 640,
+        y: 410,
+        w: 700,
+        h: 26,
+        stairs: [{ x: 738, w: 64 }],
+      },
+      // Terrace 2: Deep Ancient Sanctuary Cliff Ledge
+      {
+        x: 1340,
+        y: 410,
+        w: 600,
+        h: 26,
+        stairs: [{ x: 1438, w: 64 }],
+      },
     ],
     grassPatches: [
-      // Zone A: Field (Common starters & early route mons)
-      { x: 160, y: 260, w: 160, h: 110, zone: 'field' },
-      { x: 180, y: 490, w: 180, h: 120, zone: 'field' },
-      { x: 520, y: 300, w: 220, h: 80, zone: 'field' },
-      // Zone B: Deep Meadow (Nidoran, Spearow)
-      { x: 680, y: 130, w: 260, h: 80, zone: 'deep' },
-      { x: 800, y: 480, w: 240, h: 90, zone: 'deep' },
-      // Zone C: River Shoreline (Water-edge wild Pokémon)
-      { x: 620, y: 660, w: 320, h: 110, zone: 'water' },
-      { x: 1020, y: 660, w: 260, h: 100, zone: 'water' },
-      // Zone D: Rare Glade (Pikachu, Jigglypuff)
-      { x: 1160, y: 140, w: 220, h: 120, zone: 'rare' },
+      // Section 1: Pallet Valley Beginner Fields (Lv 2-4 mons: Pidgey, Rattata, Caterpie, Weedle)
+      { x: 160, y: 210, w: 260, h: 150, zone: 'field' },
+      { x: 160, y: 540, w: 260, h: 150, zone: 'field' },
+      // Section 2: Clear Creek Freshwater Shoreline (Poliwag, Psyduck, Magikarp, Goldeen)
+      { x: 1160, y: 620, w: 150, h: 170, zone: 'water' },
+      // Section 3: Blossom Terrace Upper Meadow (Spearow, Bellsprout, Nidoran♀, Nidoran♂)
+      { x: 860, y: 150, w: 280, h: 160, zone: 'deep' },
+      // Section 4: ⚡ THE DEEP ANCIENT SANCTUARY (Rare & High Level Lv 8-14: Pikachu, Eevee, Scyther, Electabuzz, Abra, Jigglypuff!)
+      { x: 1540, y: 120, w: 320, h: 160, zone: 'rare' },
+      { x: 1540, y: 310, w: 220, h: 90, zone: 'rare' },
+    ],
+    signposts: [
+      {
+        id: 'sp_pallet',
+        x: 130,
+        y: 380,
+        title: '🌿 Pallet Valley Signpost',
+        lines: [
+          'Route 1: Pallet Town ➔ Viridian City',
+          'Tip: Paved roads and open lawns are safe to walk on.',
+          'Wild Pokémon dwell only inside rustling tall grass!',
+        ],
+      },
+      {
+        id: 'sp_creek',
+        x: 740,
+        y: 530,
+        title: '🌊 Clear Creek Notice',
+        lines: [
+          'Clear Creek Glade & Fishing Promenade',
+          'Freshwater pond with aquatic Pokémon in the shoreline reeds.',
+          'Angler Ned: "Feel free to fish from the wooden dock!"',
+        ],
+      },
+      {
+        id: 'sp_blossom',
+        x: 820,
+        y: 370,
+        title: '🌸 Blossom Terrace Marker',
+        lines: [
+          'Blossom Terrace - Elevated Sakura Ridge',
+          'Climb the stone stairs to enjoy pink sakura blossoms and wild Oran Berries.',
+          'Habitat for graceful flying & grass Pokémon.',
+        ],
+      },
+      {
+        id: 'sp_sanctuary',
+        x: 1400,
+        y: 380,
+        title: '⚠️ Ancient Sanctuary Warning',
+        lines: [
+          '⚡ DEEP ANCIENT SANCTUARY',
+          '⚠️ DANGER: High-Level Wild Pokémon Zone (Lv 8–14)!',
+          'Rare Pikachu, Eevee, Scyther, and Electabuzz dwell within.',
+          'Only well-prepared Trainers should venture past the stone stairs!',
+        ],
+      },
+      {
+        id: 'sp_viridian',
+        x: 1980,
+        y: 380,
+        title: '🏛️ Viridian City Gateway',
+        lines: [
+          'Viridian City - The City of Evergreen Blossoms',
+          '• Pokémon Center: 24/7 Free Team Healing & Restoration',
+          '• Poké Mart: Potions, Poké Balls & Essential Trainer Gear',
+          '• North Gatehouse: Route 2 Gateway to Pewter City',
+        ],
+      },
     ],
     buildings: [
       {
         type: 'center',
-        x: 1680,
+        x: 2040,
         y: 220,
         w: 96,
         h: 76,
@@ -67,7 +204,7 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       },
       {
         type: 'mart',
-        x: 1880,
+        x: 2240,
         y: 220,
         w: 88,
         h: 74,
@@ -75,7 +212,7 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       },
       {
         type: 'gate',
-        x: 2460,
+        x: 2480,
         y: 350,
         w: 90,
         h: 86,
@@ -86,7 +223,7 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       {
         id: 'r0_ball1',
         x: 240,
-        y: 300,
+        y: 270,
         name: 'Poké Ball',
         type: 'ball',
         amount: 3,
@@ -94,126 +231,224 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       },
       {
         id: 'r0_berry1',
-        x: 740,
-        y: 160,
+        x: 980,
+        y: 210,
         name: 'Oran Berry',
         type: 'berry',
-        amount: 2,
+        amount: 3,
         collected: false,
       },
       {
         id: 'r0_money1',
-        x: 680,
-        y: 710,
+        x: 1180,
+        y: 690,
         name: 'Poké Dollars',
         type: 'money',
-        amount: 450,
+        amount: 650,
         collected: false,
       },
       {
-        id: 'r0_ball2',
-        x: 1220,
-        y: 180,
-        name: 'Great Ball',
+        id: 'r0_rare1',
+        x: 1720,
+        y: 190,
+        name: 'Ultra Ball',
         type: 'ball',
         amount: 2,
         collected: false,
       },
       {
         id: 'r0_money2',
-        x: 1120,
-        y: 700,
+        x: 2180,
+        y: 560,
         name: 'Poké Dollars',
         type: 'money',
-        amount: 600,
+        amount: 800,
         collected: false,
       },
     ],
     npcs: [
       {
         id: 'r0_npc1',
-        x: 200,
-        y: 370,
-        avatar: 'Trainer Red',
-        name: 'Trainer Red',
-        dialogue: 'Wild Pokémon inhabit the rustling tall grass! Weaken them first, then throw Poké Balls to catch them for your team.',
+        x: 190,
+        y: 390,
+        avatar: '🧢',
+        name: 'Guide Red',
+        dialogue: 'Welcome to Route 1! Stay on the paths or open lawn to travel safely, or step into the tall grass to train and catch wild Pokémon.',
         gift: { type: 'ball', name: 'Poké Ball', amount: 3 },
       },
       {
         id: 'r0_npc2',
-        x: 760,
+        x: 820,
         y: 200,
-        avatar: 'Botanist Clara',
+        avatar: '🌸',
         name: 'Botanist Clara',
-        dialogue: 'The upper meadow has different species than the main path. Take the optional trails to find rarer Pokémon!',
+        dialogue: 'The pink cherry blossom trees only bloom on this sunny upper terrace! Rare grass Pokémon thrive here.',
         gift: { type: 'berry', name: 'Oran Berry', amount: 2 },
       },
       {
+        id: 'r0_npc_ned',
+        x: 950,
+        y: 600,
+        avatar: '🎣',
+        name: 'Angler Ned',
+        dialogue: 'Clear Creek is home to lively water Pokémon! Poliwag and Psyduck love playing in the reeds by the dock.',
+        gift: { type: 'money', name: 'Poké Dollars', amount: 300 },
+      },
+      {
+        id: 'r0_npc_vance',
+        x: 1490,
+        y: 380,
+        avatar: '🌲',
+        name: 'Ranger Vance',
+        dialogue: '⚠️ Caution Trainer! Up those stone steps is the Deep Ancient Sanctuary. Rare, high-level Pokémon (Lv 8-14) like Pikachu, Eevee, and Scyther dwell within!',
+      },
+      {
         id: 'r0_npc3',
-        x: 1580,
-        y: 430,
-        avatar: 'Viridian Guide',
-        name: 'Viridian Guide',
+        x: 2040,
+        y: 340,
+        avatar: '👮‍♀️',
+        name: 'Officer Jenny',
         dialogue: 'Welcome to Viridian City! Stop by the Pokémon Center to heal your team anytime for free.',
       },
     ],
     targetEncounters: 5,
-    exitX: 2520,
+    exitX: 2540,
     fences: [
-      { x: 40, y: 378, w: 180, h: 16 },
-      { x: 420, y: 208, w: 220, h: 16 },
-      { x: 740, y: 208, w: 260, h: 16 },
-      { x: 580, y: 378, w: 220, h: 16 },
-      { x: 920, y: 378, w: 200, h: 16 },
-      { x: 620, y: 644, w: 320, h: 16 },
-      { x: 1040, y: 644, w: 240, h: 16 },
+      // Section 1: Pallet Valley Post-and-Rail Fences framing gardens and paths
+      { x: 50, y: 400, w: 220, h: 16 },
+      { x: 330, y: 400, w: 280, h: 16 },
+      { x: 50, y: 494, w: 220, h: 16 },
+      { x: 330, y: 494, w: 280, h: 16 },
+      // Section 2: Clear Creek lakeside promenade fence
+      { x: 680, y: 640, w: 16, h: 160 },
+      { x: 700, y: 780, w: 420, h: 16 },
+      // Section 4: Deep Ancient Sanctuary cliff fence
+      { x: 1360, y: 400, w: 70, h: 16 },
+      { x: 1510, y: 400, w: 320, h: 16 },
     ],
     stones: [
-      { x: 140, y: 170, radius: 18, variant: 'mossy' },
-      { x: 270, y: 150, radius: 15, variant: 'granite' },
-      { x: 480, y: 360, radius: 14, variant: 'slate' },
-      { x: 1020, y: 360, radius: 16, variant: 'granite' },
-      { x: 580, y: 670, radius: 18, variant: 'mossy' },
-      { x: 880, y: 680, radius: 16, variant: 'slate' },
-      { x: 1240, y: 660, radius: 15, variant: 'granite' },
-      { x: 1480, y: 210, radius: 16, variant: 'granite' },
-      { x: 1480, y: 610, radius: 16, variant: 'granite' },
+      { x: 150, y: 160, radius: 18, variant: 'mossy' },
+      { x: 420, y: 160, radius: 15, variant: 'granite' },
+      { x: 690, y: 640, radius: 16, variant: 'granite' },
+      { x: 1090, y: 630, radius: 18, variant: 'mossy' },
+      { x: 1380, y: 150, radius: 20, variant: 'slate' },
+      { x: 1840, y: 150, radius: 22, variant: 'slate' },
+      { x: 1940, y: 610, radius: 16, variant: 'granite' },
     ],
     trees: [
-      { x: 50, y: 70, scale: 1.1, type: 'oak' },
-      { x: 130, y: 65, scale: 1.0, type: 'oak' },
-      { x: 210, y: 72, scale: 1.15, type: 'oak' },
-      { x: 290, y: 68, scale: 1.05, type: 'oak' },
-      { x: 370, y: 70, scale: 1.2, type: 'oak' },
-      { x: 450, y: 66, scale: 1.0, type: 'oak' },
-      { x: 530, y: 74, scale: 1.15, type: 'oak' },
-      { x: 610, y: 68, scale: 1.05, type: 'oak' },
-      { x: 690, y: 70, scale: 1.2, type: 'oak' },
-      { x: 770, y: 65, scale: 1.0, type: 'oak' },
-      { x: 850, y: 72, scale: 1.15, type: 'oak' },
-      { x: 930, y: 68, scale: 1.05, type: 'oak' },
-      { x: 1010, y: 70, scale: 1.2, type: 'oak' },
-      { x: 1090, y: 66, scale: 1.0, type: 'oak' },
-      { x: 1170, y: 74, scale: 1.15, type: 'oak' },
-      { x: 1250, y: 68, scale: 1.05, type: 'oak' },
-      { x: 1330, y: 70, scale: 1.2, type: 'oak' },
-      { x: 1410, y: 65, scale: 1.0, type: 'oak' },
-      { x: 180, y: 190, scale: 1.2, type: 'oak' },
-      { x: 480, y: 145, scale: 1.1, type: 'oak' },
-      { x: 880, y: 155, scale: 1.25, type: 'oak' },
-      { x: 1220, y: 150, scale: 1.15, type: 'oak' },
-      { x: 390, y: 530, scale: 1.2, type: 'oak' },
-      { x: 760, y: 530, scale: 1.1, type: 'oak' },
-      { x: 1140, y: 530, scale: 1.25, type: 'oak' },
-      { x: 60, y: 840, scale: 1.1, type: 'oak' },
-      { x: 140, y: 845, scale: 1.05, type: 'oak' },
-      { x: 220, y: 838, scale: 1.15, type: 'oak' },
-      { x: 300, y: 842, scale: 1.0, type: 'oak' },
-      { x: 380, y: 840, scale: 1.2, type: 'oak' },
-      { x: 460, y: 846, scale: 1.05, type: 'oak' },
-      { x: 540, y: 838, scale: 1.15, type: 'oak' },
-      { x: 1360, y: 840, scale: 1.1, type: 'oak' },
-      { x: 1440, y: 845, scale: 1.2, type: 'oak' },
+      // ======================================================================
+      // 1. LEFT BOUNDARY DOUBLE ROW (Enclosing Pallet Town west edge)
+      // ======================================================================
+      ...Array.from({ length: 18 }, (_, i) => {
+        const y = 50 + i * 48;
+        if (y >= 400 && y <= 470) return null; // Opening for Pallet Town trail
+        return { x: 25, y, scale: 1.05, type: 'oak' as const };
+      }).filter(Boolean) as RouteTree[],
+      ...Array.from({ length: 18 }, (_, i) => {
+        const y = 72 + i * 48;
+        if (y >= 390 && y <= 480) return null; // Opening for Pallet Town trail
+        return { x: 60, y, scale: 1.0, type: 'oak' as const };
+      }).filter(Boolean) as RouteTree[],
+
+      // ======================================================================
+      // 2. TOP BOUNDARY DOUBLE ROW (Full width from X: 40 to 2560)
+      // ======================================================================
+      ...Array.from({ length: 58 }, (_, i) => {
+        const x = 40 + i * 44;
+        const type = (x >= 640 && x < 1340) ? 'blossom' : (x >= 1340 && x < 1940) ? 'mystic' : 'oak';
+        return { x, y: 45, scale: 1.05, type: type as 'oak' | 'pine' | 'blossom' | 'mystic' };
+      }),
+      ...Array.from({ length: 57 }, (_, i) => {
+        const x = 62 + i * 44;
+        const type = (x >= 660 && x < 1320) ? 'blossom' : (x >= 1360 && x < 1920) ? 'mystic' : 'oak';
+        return { x, y: 88, scale: 1.0, type: type as 'oak' | 'pine' | 'blossom' | 'mystic' };
+      }),
+
+      // ======================================================================
+      // 3. BOTTOM BOUNDARY DOUBLE ROW (Full width from X: 40 to 2560)
+      // ======================================================================
+      ...Array.from({ length: 58 }, (_, i) => ({
+        x: 40 + i * 44,
+        y: 840,
+        scale: 1.05,
+        type: 'oak' as const,
+      })),
+      ...Array.from({ length: 57 }, (_, i) => ({
+        x: 62 + i * 44,
+        y: 885,
+        scale: 1.0,
+        type: 'oak' as const,
+      })),
+
+      // ======================================================================
+      // 4. RIGHT BOUNDARY DOUBLE ROW (Framing Route 2 Gatehouse exit)
+      // ======================================================================
+      ...Array.from({ length: 18 }, (_, i) => {
+        const y = 50 + i * 48;
+        if (y >= 330 && y <= 450) return null; // Gatehouse portal
+        return { x: 2540, y, scale: 1.05, type: 'oak' as const };
+      }).filter(Boolean) as RouteTree[],
+      ...Array.from({ length: 18 }, (_, i) => {
+        const y = 72 + i * 48;
+        if (y >= 320 && y <= 460) return null; // Gatehouse portal
+        return { x: 2575, y, scale: 1.0, type: 'oak' as const };
+      }).filter(Boolean) as RouteTree[],
+
+      // ======================================================================
+      // 5. PALLET VALLEY SECTION INTERIOR FRAMING TREES
+      // ======================================================================
+      { x: 100, y: 150, scale: 1.1, type: 'oak' },
+      { x: 440, y: 150, scale: 1.15, type: 'oak' },
+      { x: 500, y: 220, scale: 1.1, type: 'oak' },
+      { x: 500, y: 300, scale: 1.15, type: 'oak' },
+      { x: 100, y: 730, scale: 1.1, type: 'oak' },
+      { x: 440, y: 730, scale: 1.15, type: 'oak' },
+      { x: 500, y: 640, scale: 1.1, type: 'oak' },
+
+      // ======================================================================
+      // 6. SECTION DIVIDER VERTICAL GROVES
+      // ======================================================================
+      // Section 1 ➔ Section 2/3 Divider (X: 620)
+      { x: 620, y: 140, scale: 1.15, type: 'oak' },
+      { x: 620, y: 190, scale: 1.1, type: 'oak' },
+      { x: 620, y: 240, scale: 1.15, type: 'oak' },
+      { x: 620, y: 290, scale: 1.1, type: 'oak' },
+      { x: 620, y: 340, scale: 1.15, type: 'oak' },
+      { x: 620, y: 720, scale: 1.15, type: 'oak' },
+      { x: 620, y: 780, scale: 1.1, type: 'oak' },
+
+      // Blossom Terrace Accent Trees (Pink Sakura!)
+      { x: 800, y: 140, scale: 1.25, type: 'blossom' },
+      { x: 970, y: 140, scale: 1.2, type: 'blossom' },
+      { x: 1160, y: 140, scale: 1.25, type: 'blossom' },
+      { x: 740, y: 360, scale: 1.15, type: 'blossom' },
+      { x: 1220, y: 360, scale: 1.2, type: 'blossom' },
+      { x: 1260, y: 220, scale: 1.15, type: 'blossom' },
+
+      // Clear Creek Waterfront Groves
+      { x: 720, y: 720, scale: 1.1, type: 'oak' },
+      { x: 1140, y: 760, scale: 1.15, type: 'oak' },
+      { x: 1260, y: 760, scale: 1.2, type: 'oak' },
+
+      // ======================================================================
+      // 7. DEEP ANCIENT SANCTUARY ENCLOSING GROVES (Mystic Oaks!)
+      // ======================================================================
+      // Western mystic tree wall (X: 1330)
+      { x: 1330, y: 140, scale: 1.25, type: 'mystic' },
+      { x: 1330, y: 190, scale: 1.2, type: 'mystic' },
+      { x: 1330, y: 240, scale: 1.25, type: 'mystic' },
+      { x: 1330, y: 290, scale: 1.2, type: 'mystic' },
+      { x: 1330, y: 340, scale: 1.25, type: 'mystic' },
+      // Eastern mystic tree wall (X: 1910)
+      { x: 1910, y: 140, scale: 1.25, type: 'mystic' },
+      { x: 1910, y: 190, scale: 1.2, type: 'mystic' },
+      { x: 1910, y: 240, scale: 1.25, type: 'mystic' },
+      { x: 1910, y: 290, scale: 1.2, type: 'mystic' },
+      { x: 1910, y: 340, scale: 1.25, type: 'mystic' },
+      { x: 1910, y: 390, scale: 1.2, type: 'mystic' },
+      // Interior sacred grove trees
+      { x: 1480, y: 140, scale: 1.15, type: 'mystic' },
+      { x: 1780, y: 320, scale: 1.2, type: 'mystic' },
     ],
   },
 
@@ -248,16 +483,24 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
     ],
     grassPatches: [
       // Zone A: Forest Canopy (Bug Pokémon)
+      { x: 90, y: 150, w: 180, h: 90, zone: 'forest' },
+      { x: 90, y: 670, w: 180, h: 100, zone: 'forest' },
       { x: 180, y: 270, w: 170, h: 120, zone: 'forest' },
       { x: 200, y: 510, w: 190, h: 130, zone: 'forest' },
+      { x: 400, y: 520, w: 140, h: 90, zone: 'forest' },
+      { x: 420, y: 130, w: 220, h: 80, zone: 'forest' },
       { x: 540, y: 290, w: 250, h: 100, zone: 'forest' },
       // Zone B: Rock Clearing (Geodude, Diglett, Zubat)
       { x: 720, y: 700, w: 320, h: 110, zone: 'rock' },
       { x: 1100, y: 690, w: 260, h: 110, zone: 'rock' },
       // Zone C: Field Meadows
+      { x: 800, y: 500, w: 220, h: 90, zone: 'field' },
       { x: 860, y: 290, w: 260, h: 100, zone: 'field' },
+      { x: 1080, y: 500, w: 240, h: 90, zone: 'field' },
       // Zone D: Rare Forest Glade (Pikachu, Scyther, Pinsir)
+      { x: 960, y: 130, w: 180, h: 80, zone: 'rare' },
       { x: 1280, y: 150, w: 240, h: 140, zone: 'rare' },
+      { x: 1440, y: 160, w: 120, h: 130, zone: 'rare' },
     ],
     buildings: [
       {

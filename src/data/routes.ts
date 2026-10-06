@@ -468,7 +468,7 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
     targetEncounters: 5,
     exitX: 3420,
     fountains: [
-      { x: 2360, y: 452, radius: 34, style: 'marble' },
+      { x: 2360, y: 452, radius: 34, style: 'clock', label: 'Viridian Floral Sun Clock' },
     ],
     streetlamps: [
       // Civic Center North
@@ -704,19 +704,23 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1400, y: 480, w: 64, h: 150, style: 'dirt' },
       // Approach to Pewter City
       { x: 1520, y: 390, w: 110, h: 80, style: 'dirt' },
-      // Pewter City Main Granite Avenue
-      { x: 1620, y: 418, w: 1540, h: 72, style: 'cobble' },
-      // Museum & Civic Center Promenade (North)
-      { x: 1720, y: 254, w: 680, h: 60, style: 'cobble' },
-      // Central Stone Monument Square
-      { x: 1960, y: 388, w: 200, h: 130, style: 'cobble' },
-      // Brock's Gym Boulevard & Forecourt
-      { x: 2360, y: 250, w: 76, h: 420, style: 'cobble' },
-      { x: 2320, y: 254, w: 220, h: 60, style: 'cobble' },
-      // Quarry Residential Row (South)
-      { x: 1720, y: 600, w: 720, h: 56, style: 'cobble' },
-      // Route 3 Gatehouse Approach
-      { x: 2640, y: 310, w: 560, h: 64, style: 'cobble' },
+      // Pewter City Granite Ring Road Network (Surrounding the Sunken Quarry Pit)
+      // West Quarry Avenue
+      { x: 1680, y: 220, w: 72, h: 484, style: 'cobble' },
+      // North Museum Promenade
+      { x: 1680, y: 220, w: 980, h: 64, style: 'cobble' },
+      // South Excavation Ring
+      { x: 1680, y: 640, w: 980, h: 64, style: 'cobble' },
+      // East Transit Avenue
+      { x: 2600, y: 220, w: 64, h: 484, style: 'cobble' },
+      // Central Meteorite Monolith Square
+      { x: 2060, y: 320, w: 220, h: 180, style: 'cobble' },
+      // West-to-Monolith Connector
+      { x: 1740, y: 380, w: 330, h: 64, style: 'cobble' },
+      // Monolith-to-East Connector
+      { x: 2270, y: 380, w: 340, h: 64, style: 'cobble' },
+      // Route 3 Gatehouse East Avenue
+      { x: 2660, y: 440, w: 560, h: 64, style: 'cobble' },
     ],
     grassPatches: [
       // Zone A: Forest Canopy (Bug Pokémon)
@@ -740,35 +744,31 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1440, y: 160, w: 120, h: 130, zone: 'rare' },
     ],
     buildings: [
+      // 1. Pewter Museum of Science (Dominating North-West Clifftop)
       {
-        type: 'center',
-        x: 1760,
-        y: 175,
-        w: 96,
-        h: 76,
-        label: 'Pokémon Center',
+        type: 'museum',
+        x: 1720,
+        y: 120,
+        w: 140,
+        h: 104,
+        label: 'Pewter Museum of Science',
+        occupant: 'Curator Fossilman',
+        dialogue: 'Welcome to the Pewter Museum of Science! We showcase prehistoric fossils from Mt. Moon, including the legendary Old Amber!',
       },
+      // 2. Quarry Mining Supply Mart (West Lane)
       {
         type: 'mart',
-        x: 2060,
-        y: 175,
+        x: 1700,
+        y: 450,
         w: 88,
         h: 74,
         label: 'Poké Mart',
       },
-      {
-        type: 'gym',
-        x: 2380,
-        y: 175,
-        w: 120,
-        h: 96,
-        label: 'Pewter Gym (Brock)',
-        gymIndex: 0,
-      },
+      // 3. Geologist Flint's Stone Cottage (South-West)
       {
         type: 'house',
-        x: 2580,
-        y: 175,
+        x: 1700,
+        y: 550,
         w: 84,
         h: 74,
         label: "Geologist's House",
@@ -778,36 +778,30 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
         occupant: 'Geologist Flint',
         dialogue: "Pewter City is famous for its dark granite stone! Brock uses sturdy Rock-type Pokémon like Geodude and Onix.",
       },
+      // 4. Pokémon Center (South-East Arrival Terrace)
       {
-        type: 'house',
-        x: 1760,
-        y: 520,
-        w: 92,
-        h: 74,
-        label: 'Fossil Research Lab',
-        roofStyle: 'slate',
-        wallColor: '#64748b',
-        chimney: false,
-        occupant: 'Researcher Dan',
-        dialogue: "The Pewter Museum is investigating prehistoric Pokémon revived from Mt. Moon amber and fossils!",
+        type: 'center',
+        x: 2480,
+        y: 550,
+        w: 96,
+        h: 76,
+        label: 'Pokémon Center',
       },
+      // 5. Brock's Sunken Granite Gym (South-Central Quarry Pit)
       {
-        type: 'house',
-        x: 1980,
-        y: 520,
-        w: 84,
-        h: 74,
-        label: 'Mining Cottage',
-        roofStyle: 'slate',
-        wallColor: '#94a3b8',
-        chimney: true,
-        occupant: 'Foreman Slate',
-        dialogue: "Mt. Moon has rich deposits of rare Moon Stones. They can make certain Pokémon like Clefairy and Nidorino evolve instantly!",
+        type: 'gym',
+        x: 2100,
+        y: 535,
+        w: 120,
+        h: 96,
+        label: 'Pewter Gym (Brock)',
+        gymIndex: 0,
       },
+      // 6. Sculptor's Studio (North-East)
       {
         type: 'house',
-        x: 2200,
-        y: 520,
+        x: 2360,
+        y: 130,
         w: 84,
         h: 74,
         label: "Sculptor's Studio",
@@ -817,36 +811,36 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
         occupant: 'Sculptor Rocky',
         dialogue: "I carve boulders into magnificent Pokémon statues! The secret is feeling the natural grain of the granite.",
       },
+      // 7. Route 3 Checkpoint Gatehouse (East)
       {
         type: 'gate',
-        x: 3140,
-        y: 300,
+        x: 3180,
+        y: 430,
         w: 90,
         h: 86,
         label: 'Route 3 Gate',
       },
     ],
     fountains: [
-      { x: 2060, y: 452, radius: 32, style: 'stone' },
+      { x: 2170, y: 410, radius: 34, style: 'monument', label: 'Mt. Moon Meteorite Monolith' },
     ],
     streetlamps: [
-      { x: 1730, y: 280 },
-      { x: 1930, y: 280 },
-      { x: 2180, y: 280 },
-      { x: 2540, y: 280 },
-      { x: 1970, y: 400 },
-      { x: 2150, y: 400 },
-      { x: 1970, y: 505 },
-      { x: 2150, y: 505 },
-      { x: 1730, y: 620 },
-      { x: 2070, y: 620 },
-      { x: 2360, y: 620 },
-      { x: 3100, y: 340 },
+      { x: 1700, y: 260 },
+      { x: 1920, y: 260 },
+      { x: 2320, y: 260 },
+      { x: 2580, y: 260 },
+      { x: 2040, y: 350 },
+      { x: 2300, y: 350 },
+      { x: 2040, y: 470 },
+      { x: 2300, y: 470 },
+      { x: 1700, y: 620 },
+      { x: 2460, y: 620 },
+      { x: 3140, y: 460 },
     ],
     benches: [
-      { x: 2000, y: 425 },
-      { x: 2090, y: 425 },
-      { x: 2260, y: 280 },
+      { x: 2080, y: 360 },
+      { x: 2220, y: 360 },
+      { x: 2440, y: 260 },
     ],
     items: [
       {
@@ -1040,27 +1034,42 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1440, y: 490, w: 64, h: 160, style: 'dirt' },
       // Cerulean City Canal Entrance
       { x: 1500, y: 410, w: 80, h: 80, style: 'dirt' },
-      // Cerulean City Azure Marine Stone Network
-      // Main West-East Avenue
-      { x: 1560, y: 418, w: 1660, h: 72, style: 'flagstone' },
-      // North Civic Canal Boulevard
-      { x: 1720, y: 254, w: 780, h: 60, style: 'flagstone' },
-      // Central Azure Cascade Square
-      { x: 2050, y: 388, w: 220, h: 130, style: 'flagstone' },
-      // Cerulean Gym Boulevard
-      { x: 2420, y: 250, w: 76, h: 420, style: 'flagstone' },
-      // South Residential Canal Lane
-      { x: 1720, y: 600, w: 760, h: 56, style: 'flagstone' },
-      // Route 5 Gate Approach
-      { x: 2700, y: 310, w: 580, h: 64, style: 'flagstone' },
+      // Cerulean City Azure Marine Canal Network & Bridges
+      // West Bank Civic Promenade
+      { x: 1650, y: 220, w: 700, h: 64, style: 'flagstone' },
+      // West Bank Commercial Pier (Mart & Bike Shop lane)
+      { x: 1650, y: 440, w: 700, h: 72, style: 'flagstone' },
+      // West Bank Connecting Avenue
+      { x: 1720, y: 220, w: 64, h: 480, style: 'flagstone' },
+      // South-West Bike Shop Quayside
+      { x: 1720, y: 640, w: 600, h: 64, style: 'flagstone' },
+      // North Canal Stone Bridge
+      { x: 2320, y: 220, w: 260, h: 64, style: 'flagstone' },
+      // Grand Central Marine Canal Bridge
+      { x: 2320, y: 440, w: 260, h: 72, style: 'flagstone' },
+      // East Bank Transit Avenue
+      { x: 2560, y: 220, w: 64, h: 484, style: 'flagstone' },
+      // East Bank Quayside Boulevard to Route 5 Gate
+      { x: 2560, y: 440, w: 680, h: 72, style: 'flagstone' },
+      // Misty's Gym Offshore Pier Boardwalk
+      { x: 2600, y: 620, w: 220, h: 64, style: 'flagstone' },
     ],
     ponds: [
+      // Major Flowing Canal River (Spanning north to south)
       {
-        x: 2180,
-        y: 620,
-        w: 340,
-        h: 190,
-        pier: { x: 2320, y: 570, w: 60, h: 80 },
+        x: 2360,
+        y: 120,
+        w: 180,
+        h: 740,
+        pier: { x: 2320, y: 440, w: 260, h: 70 },
+      },
+      // Misty's Offshore Water Gym Aquatic Lagoon
+      {
+        x: 2680,
+        y: 530,
+        w: 280,
+        h: 220,
+        pier: { x: 2680, y: 550, w: 70, h: 90 },
       },
     ],
     grassPatches: [
@@ -1074,62 +1083,68 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1340, y: 150, w: 250, h: 140, zone: 'rare' },
     ],
     buildings: [
+      // 1. Pokémon Center (North Bank Waterfront Promenade)
       {
         type: 'center',
-        x: 1760,
-        y: 175,
+        x: 1840,
+        y: 130,
         w: 96,
         h: 76,
         label: 'Pokémon Center',
       },
+      // 2. Poké Mart (West Canal Quayside)
       {
         type: 'mart',
-        x: 1940,
-        y: 175,
+        x: 1650,
+        y: 520,
         w: 88,
         h: 74,
         label: 'Poké Mart',
       },
-      {
-        type: 'gym',
-        x: 2360,
-        y: 160,
-        w: 120,
-        h: 96,
-        label: 'Cerulean Gym (Misty)',
-        gymIndex: 1,
-      },
+      // 3. Cerulean Bike Shop (South-West Waterfront Villa)
       {
         type: 'house',
-        x: 2560,
-        y: 175,
+        x: 1980,
+        y: 520,
         w: 88,
         h: 74,
-        label: 'Bike Shop Villa',
+        label: 'Cerulean Bike Shop',
         roofStyle: 'azure',
         wallColor: '#f0f9ff',
         chimney: true,
         occupant: 'Cycling Enthusiast',
         dialogue: 'Cerulean City is surrounded by glistening waterways! A bicycle is the speediest way to travel across Kanto.',
       },
+      // 4. Cerulean Gym (Misty) - Offshore Wooden Pier in South-East Lagoon
+      {
+        type: 'gym',
+        x: 2720,
+        y: 540,
+        w: 120,
+        h: 96,
+        label: 'Cerulean Gym (Misty)',
+        gymIndex: 1,
+      },
+      // 5. Water Lily Villa (North-East Bank)
       {
         type: 'house',
-        x: 1760,
-        y: 520,
-        w: 86,
+        x: 2700,
+        y: 130,
+        w: 84,
         h: 74,
-        label: 'Berry Herbalist',
-        roofStyle: 'emerald',
-        wallColor: '#ecfdf5',
+        label: 'Water Lily Villa',
+        roofStyle: 'azure',
+        wallColor: '#e0f2fe',
         chimney: true,
-        occupant: 'Herbalist Maya',
+        occupant: 'Swimmer Marina',
         dialogue: "Misty's Water Pokémon are tough, but Electric and Grass moves like Vine Whip and Thunder Shock will give you the edge!",
       },
+      // 6. Breeder's Lodge (West Bank)
       {
         type: 'house',
-        x: 1940,
-        y: 520,
-        w: 88,
+        x: 2100,
+        y: 130,
+        w: 86,
         h: 74,
         label: "Breeder's Lodge",
         roofStyle: 'wood',
@@ -1138,51 +1153,35 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
         occupant: 'Breeder Kyle',
         dialogue: 'Cerulean City is famous for its pure, crystal-clear water system fed straight from the mountains!',
       },
-      {
-        type: 'house',
-        x: 2560,
-        y: 520,
-        w: 86,
-        h: 74,
-        label: "Swimmer's Oasis",
-        roofStyle: 'azure',
-        wallColor: '#f8fafc',
-        chimney: true,
-        occupant: 'Swimmer Marina',
-        dialogue: "I train every morning in Misty's Gym pool! The gym's water is always pristine and heated.",
-      },
+      // 7. Route 5 Checkpoint Gatehouse (East)
       {
         type: 'gate',
         x: 3240,
-        y: 300,
+        y: 430,
         w: 90,
         h: 86,
         label: 'Route 5 Gate',
       },
     ],
     fountains: [
-      { x: 2160, y: 452, radius: 32, style: 'marble' },
+      { x: 2100, y: 340, radius: 36, style: 'marble', label: 'Cerulean Cascade Fountain' },
     ],
     streetlamps: [
-      { x: 1720, y: 275 },
-      { x: 1910, y: 275 },
-      { x: 2120, y: 275 },
-      { x: 2330, y: 275 },
-      { x: 2070, y: 400 },
-      { x: 2250, y: 400 },
-      { x: 2070, y: 505 },
-      { x: 2250, y: 505 },
-      { x: 1740, y: 620 },
-      { x: 1910, y: 620 },
-      { x: 2530, y: 620 },
-      { x: 2400, y: 565 },
-      { x: 3200, y: 330 },
+      { x: 1720, y: 260 },
+      { x: 2100, y: 260 },
+      { x: 1720, y: 480 },
+      { x: 2100, y: 480 },
+      { x: 2300, y: 260 },
+      { x: 2580, y: 260 },
+      { x: 2300, y: 480 },
+      { x: 2580, y: 480 },
+      { x: 2700, y: 640 },
+      { x: 3180, y: 460 },
     ],
     benches: [
-      { x: 2100, y: 425 },
-      { x: 2190, y: 425 },
-      { x: 2500, y: 275 },
-      { x: 1860, y: 620 },
+      { x: 2040, y: 360 },
+      { x: 2160, y: 360 },
+      { x: 2600, y: 260 },
     ],
     fences: [
       { x: 40, y: 408, w: 180, h: 16 },
@@ -1338,26 +1337,37 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       // Vermilion City Port Entry
       { x: 1540, y: 410, w: 80, h: 80, style: 'dirt' },
       // Vermilion City Terracotta Brickwork Network
-      // Main Commercial Highway
-      { x: 1600, y: 418, w: 1660, h: 72, style: 'brick' },
-      // North Civic Promenade
-      { x: 1740, y: 254, w: 780, h: 60, style: 'brick' },
-      // Central Anchor Piazza
-      { x: 2060, y: 388, w: 220, h: 130, style: 'brick' },
-      // Lt. Surge Gym Forecourt Boulevard
-      { x: 2420, y: 250, w: 76, h: 420, style: 'brick' },
-      // Waterfront Docks & Boardwalk Row
-      { x: 1740, y: 600, w: 760, h: 56, style: 'brick' },
-      // Route 7 Gate Approach
-      { x: 2700, y: 310, w: 580, h: 64, style: 'brick' },
+      // Vermilion Port Red Brickwork & Harbor Boardwalk Network
+      // North Highway Entry
+      { x: 1600, y: 220, w: 840, h: 64, style: 'brick' },
+      // Harbor Boardwalk along Southern Coastline
+      { x: 1680, y: 600, w: 1240, h: 72, style: 'brick' },
+      // Central Connecting Maritime Avenue
+      { x: 2000, y: 220, w: 72, h: 450, style: 'brick' },
+      // Central Port Plaza
+      { x: 2300, y: 380, w: 240, h: 160, style: 'brick' },
+      // Lt. Surge Fortified Access Road (North-East)
+      { x: 2700, y: 220, w: 480, h: 64, style: 'brick' },
+      { x: 2840, y: 150, w: 64, h: 130, style: 'brick' },
+      // Route 11 Gatehouse East Avenue
+      { x: 2800, y: 440, w: 500, h: 72, style: 'brick' },
     ],
     ponds: [
+      // Expansive South Ocean Bay & Harbor Quayside
       {
-        x: 2180,
-        y: 620,
-        w: 340,
-        h: 200,
-        pier: { x: 2320, y: 570, w: 60, h: 80 },
+        x: 1680,
+        y: 720,
+        w: 1540,
+        h: 260,
+        pier: { x: 2000, y: 660, w: 90, h: 100 },
+      },
+      // Second Cargo Pier Basin
+      {
+        x: 2380,
+        y: 720,
+        w: 160,
+        h: 220,
+        pier: { x: 2420, y: 660, w: 90, h: 100 },
       },
     ],
     grassPatches: [
@@ -1371,74 +1381,64 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1400, y: 150, w: 260, h: 140, zone: 'rare' },
     ],
     buildings: [
+      // 1. Pokémon Center (North-West Arrival Plaza)
       {
         type: 'center',
-        x: 1780,
-        y: 175,
+        x: 1680,
+        y: 130,
         w: 96,
         h: 76,
         label: 'Pokémon Center',
       },
+      // 2. Pokémon Fan Club (Victorian Cottage with Pikachu Weather Vane)
+      {
+        type: 'fan_club',
+        x: 2160,
+        y: 120,
+        w: 100,
+        h: 84,
+        label: 'Pokémon Fan Club',
+        occupant: 'Fan Club Chairman',
+        dialogue: 'I just adore cute Pokémon! Rapidash, Fearow, and Pikachu are so breathtaking! Treat all Pokémon with immense love!',
+      },
+      // 3. Port Shipping & Tackle Mart (Down on the Southern Harbor Quayside)
       {
         type: 'mart',
-        x: 1960,
-        y: 175,
+        x: 1720,
+        y: 500,
         w: 88,
         h: 74,
         label: 'Poké Mart',
       },
-      {
-        type: 'gym',
-        x: 2360,
-        y: 160,
-        w: 120,
-        h: 96,
-        label: 'Vermilion Gym (Lt. Surge)',
-        gymIndex: 2,
-      },
+      // 4. Sailor's Bunkhouse (South-Central Waterfront)
       {
         type: 'house',
-        x: 2560,
-        y: 175,
-        w: 92,
+        x: 2200,
+        y: 500,
+        w: 84,
         h: 74,
-        label: 'Pokémon Fan Club',
-        roofStyle: 'terracotta',
-        wallColor: '#fef3c7',
-        chimney: true,
-        occupant: 'Fan Club Chairman',
-        dialogue: 'I just adore cute Pokémon! Rapidash, Fearow, and Pikachu are so breathtaking! Treat all Pokémon with immense love!',
-      },
-      {
-        type: 'house',
-        x: 1780,
-        y: 520,
-        w: 86,
-        h: 74,
-        label: "Sailor's Quarters",
+        label: "Sailor's Bunkhouse",
         roofStyle: 'wood',
         wallColor: '#fed7aa',
         chimney: true,
         occupant: 'Sailor Pete',
         dialogue: 'The legendary luxury liner S.S. Anne docks right at our harbor! Sailors come from all corners of the world to trade tales.',
       },
+      // 5. Lt. Surge Fortified Electric Gym (Far North-East Fenced Compound)
       {
-        type: 'house',
-        x: 1960,
-        y: 520,
-        w: 86,
-        h: 74,
-        label: "Fishing Guru's Cottage",
-        roofStyle: 'wood',
-        wallColor: '#fef9c3',
-        chimney: true,
-        occupant: 'Old Rod Guru',
-        dialogue: 'The salty sea breeze carries the scent of wild water Pokémon! Drop a line off the docks and you might reel in something special.',
+        type: 'gym',
+        x: 2820,
+        y: 65,
+        w: 120,
+        h: 96,
+        label: 'Vermilion Gym (Lt. Surge)',
+        gymIndex: 2,
       },
+      // 6. Dockmaster's Office (East)
       {
         type: 'house',
-        x: 2560,
-        y: 520,
+        x: 2600,
+        y: 500,
         w: 88,
         h: 74,
         label: 'Dockmaster Office',
@@ -1448,38 +1448,36 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
         occupant: 'Dockmaster Hawkins',
         dialogue: 'Lt. Surge was an army pilot who fought in overseas battles! His electric traps protect the gym from careless challengers.',
       },
+      // 7. Route 11 Checkpoint Gatehouse (East)
       {
         type: 'gate',
         x: 3240,
-        y: 300,
+        y: 430,
         w: 90,
         h: 86,
-        label: 'Route 7 Gate',
+        label: 'Route 11 Gate',
       },
     ],
     fountains: [
-      { x: 2170, y: 452, radius: 30, style: 'stone' },
+      { x: 2420, y: 450, radius: 36, style: 'anchor', label: 'Grand Admiralty Naval Anchor' },
     ],
     streetlamps: [
-      { x: 1740, y: 275 },
-      { x: 1930, y: 275 },
-      { x: 2140, y: 275 },
-      { x: 2330, y: 275 },
-      { x: 2080, y: 400 },
-      { x: 2260, y: 400 },
-      { x: 2080, y: 505 },
-      { x: 2260, y: 505 },
-      { x: 1760, y: 620 },
-      { x: 1930, y: 620 },
-      { x: 2530, y: 620 },
-      { x: 2400, y: 565 },
-      { x: 3200, y: 330 },
+      { x: 1680, y: 260 },
+      { x: 2100, y: 260 },
+      { x: 2000, y: 440 },
+      { x: 2000, y: 580 },
+      { x: 2300, y: 360 },
+      { x: 2540, y: 360 },
+      { x: 2780, y: 260 },
+      { x: 1720, y: 590 },
+      { x: 2200, y: 590 },
+      { x: 2600, y: 590 },
+      { x: 3180, y: 460 },
     ],
     benches: [
-      { x: 2110, y: 425 },
-      { x: 2200, y: 425 },
-      { x: 2500, y: 275 },
-      { x: 1880, y: 620 },
+      { x: 2320, y: 400 },
+      { x: 2460, y: 400 },
+      { x: 2100, y: 600 },
     ],
     fences: [
       { x: 40, y: 418, w: 200, h: 16 },
@@ -1634,18 +1632,24 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       // Celadon City Main Entrance
       { x: 1620, y: 410, w: 80, h: 80, style: 'dirt' },
       // Celadon Metropolis Pastel Marble Network
-      // Grand Metropolitan Boulevard
-      { x: 1680, y: 418, w: 1680, h: 74, style: 'paved' },
-      // Department Store & Civic Center Promenade
-      { x: 1820, y: 254, w: 820, h: 64, style: 'paved' },
-      // Central Royal Floral Fountain Piazza
-      { x: 2180, y: 388, w: 240, h: 140, style: 'paved' },
-      // Erika's Greenhouse Gym Boulevard
-      { x: 2540, y: 250, w: 76, h: 420, style: 'paved' },
-      // Luxury Perfume Quarter Lane
-      { x: 1820, y: 600, w: 800, h: 56, style: 'paved' },
-      // Route 10 Gatehouse Approach
-      { x: 2800, y: 310, w: 580, h: 64, style: 'paved' },
+      // Celadon Metropolis Pastel Marble Avenue Grid
+      // West Department Store Commercial Avenue
+      { x: 1720, y: 140, w: 72, h: 660, style: 'paved' },
+      // West Department Store Forecourt
+      { x: 1720, y: 240, w: 600, h: 72, style: 'paved' },
+      // Grand Metropolitan Central Avenue
+      { x: 1720, y: 440, w: 1620, h: 80, style: 'paved' },
+      // Central Grand Crossroad Plaza
+      { x: 2260, y: 360, w: 240, h: 220, style: 'paved' },
+      // North Entertainment & Casino Avenue
+      { x: 2100, y: 150, w: 860, h: 64, style: 'paved' },
+      // North-to-South Transit Avenue
+      { x: 2560, y: 150, w: 72, h: 480, style: 'paved' },
+      // Secluded South-West Botanical Garden Trail
+      { x: 1840, y: 512, w: 64, h: 320, style: 'paved' },
+      { x: 1840, y: 760, w: 460, h: 64, style: 'paved' },
+      // Eastern Saffron/Route 10 Gate Avenue
+      { x: 2800, y: 440, w: 560, h: 72, style: 'paved' },
     ],
     grassPatches: [
       { x: 240, y: 310, w: 180, h: 120, zone: 'meadow' },
@@ -1658,115 +1662,102 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1480, y: 150, w: 260, h: 140, zone: 'rare' },
     ],
     buildings: [
+      // 1. Celadon Department Store (Towering Art Deco Multi-Story Hub in West)
+      {
+        type: 'dept_store',
+        x: 1780,
+        y: 120,
+        w: 140,
+        h: 110,
+        label: 'Celadon Dept Store',
+        occupant: 'Floor Manager Luxury',
+        dialogue: 'Welcome to the Celadon Department Store! 5 floors of premier items: TMs, Evolution Stones, and Battle Boosters!',
+      },
+      // 2. Pokémon Center (Grand Central Crossroad Plaza)
       {
         type: 'center',
-        x: 1860,
-        y: 175,
+        x: 2330,
+        y: 250,
         w: 96,
         h: 76,
         label: 'Pokémon Center',
       },
+      // 3. Boutique Tea & Herb Apothecary (Eastern Commercial District)
       {
         type: 'mart',
-        x: 2040,
-        y: 170,
-        w: 110,
-        h: 84,
-        label: 'Celadon Dept. Store',
+        x: 2840,
+        y: 320,
+        w: 88,
+        h: 74,
+        label: 'Boutique Mart',
       },
+      // 4. Erika's Gym (Secluded South-West Botanical Garden Sanctuary)
       {
         type: 'gym',
-        x: 2480,
-        y: 160,
+        x: 1950,
+        y: 650,
         w: 120,
         h: 96,
         label: 'Celadon Gym (Erika)',
         gymIndex: 3,
       },
+      // 5. Game Corner Suite (North Entertainment Quarter)
       {
         type: 'house',
         x: 2680,
-        y: 175,
-        w: 90,
-        h: 74,
-        label: 'Perfumery Villa',
+        y: 80,
+        w: 96,
+        h: 76,
+        label: 'Game Corner Hall',
         roofStyle: 'emerald',
-        wallColor: '#fdf4ff',
-        chimney: true,
-        occupant: 'Aroma Lady Violet',
-        dialogue: 'Celadon City is famed for its exquisite natural perfumes crafted from Bellsprout and Gloom blossoms. Erika is our pride and joy!',
-      },
-      {
-        type: 'house',
-        x: 1860,
-        y: 520,
-        w: 88,
-        h: 74,
-        label: 'Game Corner Suite',
-        roofStyle: 'terracotta',
-        wallColor: '#fae8ff',
-        chimney: true,
+        wallColor: '#fef3c7',
+        chimney: false,
         occupant: 'Lucky Gambler Jack',
         dialogue: 'The Celadon Game Corner is filled with thrills! But keep your wits sharp—there are rumors of suspicious characters in dark uniforms in the basement...',
       },
+      // 6. Celadon Luxury Hotel (South-East Quarter)
       {
         type: 'house',
-        x: 2040,
-        y: 520,
+        x: 2840,
+        y: 550,
         w: 92,
-        h: 74,
-        label: 'Botanist Manor',
-        roofStyle: 'emerald',
-        wallColor: '#ecfdf5',
-        chimney: true,
-        occupant: 'Florist Jasmine',
-        dialogue: "Erika's Gym is filled with rare tropical flowers and graceful Grass Pokémon. Bring Fire or Flying Pokémon to blaze through her defenses!",
-      },
-      {
-        type: 'house',
-        x: 2680,
-        y: 520,
-        w: 88,
-        h: 74,
-        label: 'Condo Residence',
-        roofStyle: 'azure',
+        h: 76,
+        label: 'Celadon Hotel',
+        roofStyle: 'terracotta',
         wallColor: '#f8fafc',
         chimney: true,
-        occupant: 'Developer Eric',
-        dialogue: "Welcome to Celadon Metropolis! The massive Celadon Department Store stocks battle items and evolutionary stones you won't find anywhere else.",
+        occupant: 'Concierge Jean',
+        dialogue: "Celadon City never sleeps! The night view of the neon signs from the roof garden is legendary!",
       },
+      // 7. Route 10 Checkpoint Gatehouse (East)
       {
         type: 'gate',
         x: 3340,
-        y: 300,
+        y: 430,
         w: 90,
         h: 86,
         label: 'Route 10 Gate',
       },
     ],
     fountains: [
-      { x: 2300, y: 458, radius: 36, style: 'marble' },
+      { x: 2380, y: 470, radius: 36, style: 'stone', label: 'Grand Obelisk Plaza Fountain' },
     ],
     streetlamps: [
-      { x: 1820, y: 275, style: 'ornate' },
-      { x: 2010, y: 275, style: 'ornate' },
-      { x: 2240, y: 275, style: 'ornate' },
-      { x: 2450, y: 275, style: 'ornate' },
-      { x: 2200, y: 400, style: 'ornate' },
-      { x: 2400, y: 400, style: 'ornate' },
-      { x: 2200, y: 515, style: 'ornate' },
-      { x: 2400, y: 515, style: 'ornate' },
-      { x: 1840, y: 620, style: 'ornate' },
-      { x: 2010, y: 620, style: 'ornate' },
-      { x: 2650, y: 620, style: 'ornate' },
-      { x: 2520, y: 565, style: 'ornate' },
-      { x: 3300, y: 330, style: 'ornate' },
+      { x: 1720, y: 260, style: 'ornate' },
+      { x: 2000, y: 260, style: 'ornate' },
+      { x: 2260, y: 350, style: 'ornate' },
+      { x: 2500, y: 350, style: 'ornate' },
+      { x: 2260, y: 570, style: 'ornate' },
+      { x: 2500, y: 570, style: 'ornate' },
+      { x: 1840, y: 640, style: 'ornate' },
+      { x: 2780, y: 430, style: 'ornate' },
+      { x: 3280, y: 430, style: 'ornate' },
     ],
     benches: [
-      { x: 2220, y: 425 },
-      { x: 2350, y: 425 },
-      { x: 2640, y: 275 },
-      { x: 1980, y: 620 },
+      { x: 2280, y: 410 },
+      { x: 2450, y: 410 },
+      { x: 1840, y: 260 },
+      { x: 2780, y: 360 },
     ],
     fences: [
       { x: 40, y: 428, w: 200, h: 16 },
@@ -1927,27 +1918,37 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1660, y: 520, w: 64, h: 190, style: 'dirt' },
       // Fuchsia City Entrance
       { x: 1640, y: 420, w: 80, h: 80, style: 'dirt' },
-      // Fuchsia City Earthen Amber Stone & Timber Network
-      // Imperial Pagoda Avenue
-      { x: 1700, y: 428, w: 1660, h: 72, style: 'flagstone' },
-      // Safari Warden Plaza Promenade
-      { x: 1840, y: 254, w: 800, h: 60, style: 'flagstone' },
-      // Central Stone Basin Zen Square
-      { x: 2180, y: 398, w: 230, h: 130, style: 'flagstone' },
-      // Koga's Ninja Dojo Forecourt
-      { x: 2540, y: 250, w: 76, h: 420, style: 'flagstone' },
-      // Historic Residence Lane
-      { x: 1840, y: 600, w: 800, h: 56, style: 'flagstone' },
-      // Route 19 Gatehouse Approach
-      { x: 2800, y: 310, w: 560, h: 64, style: 'flagstone' },
+      // Fuchsia City Organic Bamboo & Timber Trail Network
+      // North Safari Promenade
+      { x: 1740, y: 150, w: 1200, h: 70, style: 'flagstone' },
+      // Central Winding Bamboo Trail
+      { x: 1740, y: 430, w: 800, h: 64, style: 'flagstone' },
+      // Central Connecting Trail
+      { x: 2200, y: 220, w: 64, h: 480, style: 'flagstone' },
+      // South-West Bamboo Glade Road
+      { x: 1740, y: 700, w: 520, h: 64, style: 'flagstone' },
+      // South-East Shadow Forest Path to Koga's Gym
+      { x: 2600, y: 440, w: 64, h: 360, style: 'flagstone' },
+      { x: 2600, y: 740, w: 500, h: 64, style: 'flagstone' },
+      // South Route 19 Gatehouse Approach
+      { x: 2200, y: 700, w: 64, h: 240, style: 'flagstone' },
     ],
     ponds: [
+      // West Lotus Lily Koi Pond
       {
-        x: 2240,
-        y: 630,
-        w: 320,
-        h: 190,
-        pier: { x: 2380, y: 580, w: 60, h: 80 },
+        x: 1840,
+        y: 560,
+        w: 260,
+        h: 200,
+        pier: { x: 1940, y: 520, w: 60, h: 60 },
+      },
+      // East Wildlife Watering Hole
+      {
+        x: 2540,
+        y: 220,
+        w: 280,
+        h: 180,
+        pier: { x: 2640, y: 380, w: 60, h: 60 },
       },
     ],
     grassPatches: [
@@ -1961,115 +1962,101 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1540, y: 150, w: 260, h: 140, zone: 'rare' },
     ],
     buildings: [
+      // 1. Safari Zone Grand Pavilion (Occupying Northern Boundary)
+      {
+        type: 'safari_gate',
+        x: 2050,
+        y: 50,
+        w: 140,
+        h: 100,
+        label: 'Safari Zone Gate',
+        occupant: 'Warden Slowpoke',
+        dialogue: 'Welcome to the Safari Zone! Catch wild Pokémon with Safari Balls and Poké Bait across vast savanna habitats!',
+      },
+      // 2. Pokémon Center (South-West Bamboo Glade)
       {
         type: 'center',
-        x: 1880,
-        y: 175,
+        x: 1750,
+        y: 610,
         w: 96,
         h: 76,
         label: 'Pokémon Center',
       },
+      // 3. Central Market Poké Mart
       {
         type: 'mart',
-        x: 2060,
-        y: 175,
+        x: 2100,
+        y: 350,
         w: 88,
         h: 74,
         label: 'Poké Mart',
       },
+      // 4. Koga's Hidden Ninja Pagoda Dojo Gym (Far South-East Shadowed Forest)
       {
         type: 'gym',
-        x: 2480,
-        y: 160,
+        x: 2900,
+        y: 650,
         w: 120,
         h: 96,
         label: 'Fuchsia Gym (Koga)',
         gymIndex: 4,
       },
+      // 5. Safari Warden's Historic Villa (North-West)
       {
         type: 'house',
-        x: 2680,
-        y: 175,
-        w: 90,
+        x: 1750,
+        y: 240,
+        w: 84,
         h: 74,
-        label: 'Safari Warden Villa',
-        roofStyle: 'wood',
-        wallColor: '#fed7aa',
-        chimney: true,
-        occupant: 'Warden Slowpoke',
-        dialogue: 'Welcome to Fuchsia City! The Safari Zone protects wild Pokémon in expansive sanctuaries. Have you seen my gold teeth anywhere?',
-      },
-      {
-        type: 'house',
-        x: 1880,
-        y: 520,
-        w: 88,
-        h: 74,
-        label: 'Ninja Technique Dojo',
-        roofStyle: 'slate',
-        wallColor: '#f1f5f9',
-        chimney: true,
-        occupant: 'Shinobi Apprentice Raizo',
-        dialogue: "Koga's gym is shrouded in invisible glass walls! Only trainers with clear inner vision can strike past his poison traps.",
-      },
-      {
-        type: 'house',
-        x: 2060,
-        y: 520,
-        w: 86,
-        h: 74,
-        label: 'Poison Herbalist',
+        label: "Warden's House",
         roofStyle: 'wood',
         wallColor: '#fef3c7',
         chimney: true,
-        occupant: 'Alchemist Gary',
-        dialogue: 'Status effects like poison and sleep are deadly in battle. Always carry Pecha Berries and Antidotes when exploring!',
+        occupant: 'Safari Ranger',
+        dialogue: 'The Safari Warden lost his Gold Teeth! If you find them, he will teach you how to push boulders!',
       },
+      // 6. Ninja Herbalist's Pagoda (North-East)
       {
         type: 'house',
-        x: 2680,
-        y: 520,
-        w: 88,
+        x: 2900,
+        y: 130,
+        w: 84,
         h: 74,
-        label: 'Zoology House',
+        label: 'Ninja Herbalist',
         roofStyle: 'emerald',
-        wallColor: '#f0fdf4',
+        wallColor: '#ecfdf5',
         chimney: true,
-        occupant: 'Zoologist Karen',
-        dialogue: "Fuchsia's conservation pens nurture Chansey and Kangaskhan. Respecting wild habitats is the key to Pokémon trust.",
+        occupant: 'Ninja Janine',
+        dialogue: 'My father Koga masters Toxic and sleep powder! In darkness, a ninja strikes with absolute stealth.',
       },
+      // 7. Route 19 Sea Route Gatehouse (South)
       {
         type: 'gate',
-        x: 3320,
-        y: 300,
+        x: 2185,
+        y: 880,
         w: 90,
         h: 86,
         label: 'Route 19 Gate',
       },
     ],
     fountains: [
-      { x: 2295, y: 463, radius: 30, style: 'stone' },
+      { x: 2360, y: 430, radius: 34, style: 'zen', label: 'Ancient Zen Tsukubai Rock Basin' },
     ],
     streetlamps: [
-      { x: 1840, y: 275, style: 'lantern' },
-      { x: 2030, y: 275, style: 'lantern' },
-      { x: 2250, y: 275, style: 'lantern' },
-      { x: 2450, y: 275, style: 'lantern' },
-      { x: 2200, y: 410, style: 'lantern' },
-      { x: 2390, y: 410, style: 'lantern' },
-      { x: 2200, y: 515, style: 'lantern' },
-      { x: 2390, y: 515, style: 'lantern' },
-      { x: 1860, y: 620, style: 'lantern' },
-      { x: 2030, y: 620, style: 'lantern' },
-      { x: 2650, y: 620, style: 'lantern' },
-      { x: 2520, y: 565, style: 'lantern' },
-      { x: 3280, y: 330, style: 'lantern' },
+      { x: 1840, y: 220, style: 'lantern' },
+      { x: 2200, y: 220, style: 'lantern' },
+      { x: 2500, y: 220, style: 'lantern' },
+      { x: 1900, y: 430, style: 'lantern' },
+      { x: 2300, y: 430, style: 'lantern' },
+      { x: 1750, y: 690, style: 'lantern' },
+      { x: 2600, y: 600, style: 'lantern' },
+      { x: 2900, y: 600, style: 'lantern' },
+      { x: 2140, y: 840, style: 'lantern' },
     ],
     benches: [
-      { x: 2230, y: 435 },
-      { x: 2340, y: 435 },
-      { x: 2630, y: 275 },
-      { x: 2000, y: 620 },
+      { x: 2300, y: 450 },
+      { x: 2420, y: 450 },
+      { x: 1900, y: 680 },
     ],
     fences: [
       { x: 40, y: 438, w: 200, h: 16 },
@@ -2231,19 +2218,17 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1720, y: 530, w: 64, h: 200, style: 'dirt' },
       // Saffron City Gateway
       { x: 1720, y: 430, w: 80, h: 80, style: 'dirt' },
-      // Saffron Metropolis Platinum & Gold Network
-      // Silph Grand Boulevard
-      { x: 1780, y: 438, w: 1680, h: 76, style: 'flagstone' },
-      // Corporate Plaza & Civic Promenade
-      { x: 1940, y: 254, w: 820, h: 64, style: 'flagstone' },
-      // Central High-Tech Fountain Piazza
-      { x: 2280, y: 408, w: 240, h: 140, style: 'flagstone' },
-      // Sabrina's Psychic Gym & Fighting Dojo Avenue
-      { x: 2640, y: 250, w: 76, h: 420, style: 'flagstone' },
-      // Innovation District Lane
-      { x: 1940, y: 620, w: 820, h: 58, style: 'flagstone' },
-      // Route 21 Gate Approach
-      { x: 2900, y: 320, w: 580, h: 64, style: 'flagstone' },
+      // Saffron Metropolis Platinum & Gold 4-Way Avenue Network
+      // Grand East-West Main Boulevard
+      { x: 1780, y: 440, w: 1680, h: 80, style: 'flagstone' },
+      // Central Grand North-South Avenue
+      { x: 2360, y: 140, w: 80, h: 740, style: 'flagstone' },
+      // North Commercial Cross-Street (Mart & Dojo & Sabrina)
+      { x: 1850, y: 220, w: 1450, h: 64, style: 'flagstone' },
+      // South Innovation Cross-Street (Center & Residential)
+      { x: 1850, y: 680, w: 1450, h: 64, style: 'flagstone' },
+      // East Route 8 Gate Approach Avenue
+      { x: 3000, y: 440, w: 460, h: 72, style: 'flagstone' },
     ],
     grassPatches: [
       { x: 280, y: 330, w: 180, h: 120, zone: 'psychic' },
@@ -2256,62 +2241,76 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1600, y: 150, w: 260, h: 140, zone: 'rare' },
     ],
     buildings: [
+      // 1. Silph Co. Corporate Headquarters Skyscraper (Center-North Apex)
       {
-        type: 'center',
-        x: 1980,
-        y: 175,
-        w: 96,
-        h: 76,
-        label: 'Pokémon Center',
+        type: 'silph',
+        x: 2335,
+        y: 65,
+        w: 130,
+        h: 120,
+        label: 'Silph Co. HQ',
+        occupant: 'President Silph',
+        dialogue: 'Welcome to Silph Co.! We invented the Master Ball and the Silph Scope! Our technology powers all of Kanto.',
       },
+      // 2. High-Tech Electronics Poké Mart (North-West)
       {
         type: 'mart',
-        x: 2160,
-        y: 175,
+        x: 1900,
+        y: 130,
         w: 88,
         h: 74,
         label: 'Poké Mart',
       },
+      // 3. Pokémon Center (South-East Innovation District)
+      {
+        type: 'center',
+        x: 2780,
+        y: 580,
+        w: 96,
+        h: 76,
+        label: 'Pokémon Center',
+      },
+      // 4. Karate Fighting Dojo (North-East District)
+      {
+        type: 'dojo',
+        x: 2700,
+        y: 120,
+        w: 120,
+        h: 96,
+        label: 'Fighting Dojo',
+        occupant: 'Karate Master Koichi',
+        dialogue: 'Hoo-hah! We train Hitmonlee and Hitmonchan with unbreakable discipline and iron fists!',
+      },
+      // 5. Sabrina's Psychic Gym (North-East beside the Dojo)
       {
         type: 'gym',
-        x: 2580,
-        y: 160,
+        x: 2940,
+        y: 120,
         w: 120,
         h: 96,
         label: 'Saffron Gym (Sabrina)',
         gymIndex: 5,
       },
+      // 6. Mr. Psychic's Residence (South-West)
       {
         type: 'house',
-        x: 2780,
-        y: 175,
-        w: 92,
+        x: 1900,
+        y: 580,
+        w: 84,
         h: 74,
-        label: 'Silph Engineer Manor',
-        roofStyle: 'azure',
-        wallColor: '#f8fafc',
-        chimney: true,
-        occupant: 'Senior Engineer Rex',
-        dialogue: 'Silph Co. developed the Master Ball and the Silph Scope! Saffron City is the technological epicenter of the entire Pokémon world.',
+        label: "Mr. Psychic's Manor",
+        roofStyle: 'slate',
+        wallColor: '#e2e8f0',
+        chimney: false,
+        occupant: 'Mr. Psychic',
+        dialogue: 'I foresaw your arrival! Take this TM29 Psychic — it channels pure mental kinetic force!',
       },
+      // 7. Copycat's Villa (South-Central)
       {
         type: 'house',
-        x: 1980,
-        y: 540,
-        w: 90,
-        h: 74,
-        label: 'Fighting Dojo Hall',
-        roofStyle: 'wood',
-        wallColor: '#fffbeb',
-        chimney: true,
-        occupant: 'Karate Master Koichi',
-        dialogue: 'Our Fighting Dojo stood as the official city gym until Sabrina’s psychic power overwhelmed our black belts! Train hard and never surrender!',
-      },
-      {
-        type: 'house',
-        x: 2160,
-        y: 540,
-        w: 86,
+        x: 2180,
+        y: 580,
+        w: 84,
         h: 74,
         label: 'Copycat Villa',
         roofStyle: 'terracotta',
@@ -2320,51 +2319,36 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
         occupant: 'Copycat Doll Girl',
         dialogue: 'Hi! Do you like Pokémon? Yes, I like Pokémon too! ...Hehe, I love mimicking trainers and collecting rare Poké Dolls!',
       },
-      {
-        type: 'house',
-        x: 2780,
-        y: 540,
-        w: 88,
-        h: 74,
-        label: 'Teleporter Lab',
-        roofStyle: 'slate',
-        wallColor: '#f1f5f9',
-        chimney: true,
-        occupant: 'Telekinesis Researcher',
-        dialogue: 'Sabrina’s Gym is filled with warp tiles that bend space itself! Bug and Ghost Pokémon are the only forces capable of piercing psychic barriers.',
-      },
+      // 8. Route 8 East Gatehouse (East)
       {
         type: 'gate',
-        x: 3440,
-        y: 310,
+        x: 3420,
+        y: 430,
         w: 90,
         h: 86,
-        label: 'Route 21 Gate',
+        label: 'Route 8 Gate',
       },
     ],
     fountains: [
-      { x: 2400, y: 478, radius: 34, style: 'marble' },
+      { x: 2400, y: 340, radius: 36, style: 'tech', label: 'Silph Holographic Quantum Matrix' },
     ],
     streetlamps: [
-      { x: 1940, y: 275, style: 'modern' },
-      { x: 2130, y: 275, style: 'modern' },
-      { x: 2360, y: 275, style: 'modern' },
-      { x: 2550, y: 275, style: 'modern' },
-      { x: 2300, y: 420, style: 'modern' },
-      { x: 2500, y: 420, style: 'modern' },
-      { x: 2300, y: 535, style: 'modern' },
-      { x: 2500, y: 535, style: 'modern' },
-      { x: 1960, y: 640, style: 'modern' },
-      { x: 2130, y: 640, style: 'modern' },
-      { x: 2750, y: 640, style: 'modern' },
-      { x: 2620, y: 585, style: 'modern' },
-      { x: 3400, y: 340, style: 'modern' },
+      { x: 1940, y: 250, style: 'modern' },
+      { x: 2200, y: 250, style: 'modern' },
+      { x: 2600, y: 250, style: 'modern' },
+      { x: 2900, y: 250, style: 'modern' },
+      { x: 2360, y: 350, style: 'modern' },
+      { x: 2360, y: 550, style: 'modern' },
+      { x: 1940, y: 700, style: 'modern' },
+      { x: 2200, y: 700, style: 'modern' },
+      { x: 2700, y: 700, style: 'modern' },
+      { x: 3360, y: 440, style: 'modern' },
     ],
     benches: [
-      { x: 2320, y: 445 },
-      { x: 2450, y: 445 },
-      { x: 2740, y: 275 },
-      { x: 2080, y: 640 },
+      { x: 2320, y: 430 },
+      { x: 2460, y: 430 },
+      { x: 2700, y: 250 },
+      { x: 2000, y: 700 },
     ],
     fences: [
       { x: 40, y: 448, w: 200, h: 16 },
@@ -2526,27 +2510,29 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1800, y: 540, w: 64, h: 210, style: 'dirt' },
       // Cinnabar Island Wharf Entry
       { x: 1700, y: 440, w: 80, h: 80, style: 'dirt' },
-      // Cinnabar Volcanic Basalt & Obsidian Cobblestone Network
-      // Seafront Volcanic Highway
-      { x: 1760, y: 448, w: 1620, h: 72, style: 'cobble' },
-      // Research Lab & Mart Promenade
-      { x: 1900, y: 260, w: 780, h: 60, style: 'cobble' },
-      // Central Geothermal Caldera Square
-      { x: 2240, y: 418, w: 230, h: 130, style: 'cobble' },
-      // Blaine's Magma Gym Approach
-      { x: 2580, y: 260, w: 76, h: 420, style: 'cobble' },
-      // Beach Shack Coastal Lane
-      { x: 1900, y: 620, w: 780, h: 56, style: 'cobble' },
-      // Route 22 Gate Approach
-      { x: 2840, y: 320, w: 540, h: 64, style: 'cobble' },
+      // Cinnabar Volcanic Basalt & Obsidian Sand Network
+      // Ferry Arrival Wharf Lane
+      { x: 1840, y: 560, w: 72, h: 200, style: 'cobble' },
+      // Southern Coastline Ash Highway
+      { x: 1840, y: 560, w: 1300, h: 64, style: 'cobble' },
+      // Northern Fossil Research Clifftop Avenue
+      { x: 1900, y: 170, w: 800, h: 64, style: 'cobble' },
+      // Central Volcanic Caldera Avenue
+      { x: 2320, y: 170, w: 72, h: 460, style: 'cobble' },
+      // South-East Magma Gym Chasm Approach
+      { x: 2840, y: 400, w: 64, h: 220, style: 'cobble' },
+      { x: 2840, y: 400, w: 380, h: 64, style: 'cobble' },
+      // North-East Route 21 Gate Approach
+      { x: 2900, y: 170, w: 480, h: 64, style: 'cobble' },
     ],
     ponds: [
+      // Boundless Southern Ocean Shoreline
       {
-        x: 2280,
-        y: 640,
-        w: 320,
-        h: 190,
-        pier: { x: 2420, y: 590, w: 60, h: 80 },
+        x: 1760,
+        y: 760,
+        w: 1600,
+        h: 320,
+        pier: { x: 1840, y: 680, w: 120, h: 100 },
       },
     ],
     grassPatches: [
@@ -2560,49 +2546,65 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1680, y: 160, w: 260, h: 140, zone: 'rare' },
     ],
     buildings: [
+      // 1. Pokémon Center (South-West Ferry Arrival Wharf)
       {
         type: 'center',
-        x: 1940,
-        y: 180,
+        x: 1880,
+        y: 460,
         w: 96,
         h: 76,
         label: 'Pokémon Center',
       },
+      // 2. Pokémon Fossil Research Laboratory (North-West Volcanic Cliff)
+      {
+        type: 'lab',
+        x: 1940,
+        y: 70,
+        w: 130,
+        h: 100,
+        label: 'Fossil Research Lab',
+        occupant: 'Dr. Fuji',
+        dialogue: 'Our DNA extraction machines can bring ancient Helix and Dome fossils back to life! Cinnabar’s geothermal energy powers all our instruments.',
+      },
+      // 3. Volcanic Trading Post Poké Mart (Central Caldera Terrace)
       {
         type: 'mart',
-        x: 2120,
-        y: 180,
+        x: 2200,
+        y: 350,
         w: 88,
         h: 74,
         label: 'Poké Mart',
       },
+      // 4. Blaine's Volcano Gym (Carved Deep into South-East Basalt Crag)
       {
         type: 'gym',
-        x: 2520,
-        y: 165,
+        x: 2980,
+        y: 440,
         w: 120,
         h: 96,
         label: 'Cinnabar Gym (Blaine)',
         gymIndex: 6,
       },
+      // 5. Burned Mansion Ruins (North-East)
       {
         type: 'house',
-        x: 2720,
-        y: 180,
-        w: 92,
-        h: 74,
-        label: 'Fossil Lab',
+        x: 2740,
+        y: 70,
+        w: 96,
+        h: 80,
+        label: 'Burned Mansion',
         roofStyle: 'slate',
-        wallColor: '#f8fafc',
+        wallColor: '#334155',
         chimney: true,
-        occupant: 'Chief Geneticist Kane',
-        dialogue: 'Our DNA extraction machines can bring ancient Helix and Dome fossils back to life! Cinnabar’s geothermal energy powers all our instruments.',
+        occupant: 'Diary of Mew',
+        dialogue: 'A tattered journal lies on the burnt desk: "July 5. Deep in the jungle, we discovered a new Pokémon... We christened the newly discovered Pokémon Mew."',
       },
+      // 6. Volcanology Villa (South-Central)
       {
         type: 'house',
-        x: 1940,
-        y: 540,
-        w: 88,
+        x: 2460,
+        y: 550,
+        w: 86,
         h: 74,
         label: 'Volcanology Villa',
         roofStyle: 'terracotta',
@@ -2611,64 +2613,35 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
         occupant: 'Dr. Volcan',
         dialogue: 'The volcano beneath Cinnabar Island is active! Blaine constructed his Gym inside a natural magma chamber—his Fire Pokémon are searing hot!',
       },
-      {
-        type: 'house',
-        x: 2120,
-        y: 540,
-        w: 86,
-        h: 74,
-        label: 'Beach Shack',
-        roofStyle: 'wood',
-        wallColor: '#fef3c7',
-        chimney: true,
-        occupant: 'Surfer Brody',
-        dialogue: 'Surfing the warm currents of the south seas is unmatched! Water and Ground moves make quick work of Blaine’s fiery team.',
-      },
-      {
-        type: 'house',
-        x: 2720,
-        y: 540,
-        w: 88,
-        h: 74,
-        label: 'Mansion Lodge',
-        roofStyle: 'wood',
-        wallColor: '#f1f5f9',
-        chimney: true,
-        occupant: 'Historian Blair',
-        dialogue: 'The ruined mansion on the west coast holds dusty diaries about an enigmatic Pokémon discovered in South America named Mew...',
-      },
+      // 7. Route 21 Sea Route Gatehouse (North-East)
       {
         type: 'gate',
         x: 3340,
-        y: 310,
+        y: 160,
         w: 90,
         h: 86,
-        label: 'Route 22 Gate',
+        label: 'Route 21 Gate',
       },
     ],
     fountains: [
-      { x: 2355, y: 483, radius: 32, style: 'stone' },
+      { x: 2460, y: 380, radius: 36, style: 'fumarole', label: 'Active Volcanic Fumarole' },
     ],
     streetlamps: [
-      { x: 1900, y: 280, style: 'lantern' },
-      { x: 2090, y: 280, style: 'lantern' },
-      { x: 2310, y: 280, style: 'lantern' },
-      { x: 2500, y: 280, style: 'lantern' },
-      { x: 2260, y: 430, style: 'lantern' },
-      { x: 2450, y: 430, style: 'lantern' },
-      { x: 2260, y: 535, style: 'lantern' },
-      { x: 2450, y: 535, style: 'lantern' },
-      { x: 1920, y: 640, style: 'lantern' },
-      { x: 2090, y: 640, style: 'lantern' },
+      { x: 1900, y: 240, style: 'lantern' },
+      { x: 2260, y: 240, style: 'lantern' },
+      { x: 2600, y: 240, style: 'lantern' },
+      { x: 2320, y: 350, style: 'lantern' },
+      { x: 2320, y: 550, style: 'lantern' },
+      { x: 1840, y: 640, style: 'lantern' },
+      { x: 2100, y: 640, style: 'lantern' },
       { x: 2700, y: 640, style: 'lantern' },
-      { x: 2560, y: 585, style: 'lantern' },
-      { x: 3300, y: 340, style: 'lantern' },
+      { x: 2940, y: 520, style: 'lantern' },
+      { x: 3280, y: 170, style: 'lantern' },
     ],
     benches: [
-      { x: 2290, y: 455 },
-      { x: 2400, y: 455 },
-      { x: 2680, y: 280 },
-      { x: 2040, y: 640 },
+      { x: 2380, y: 400 },
+      { x: 2540, y: 400 },
+      { x: 1960, y: 540 },
     ],
     fences: [
       { x: 40, y: 458, w: 200, h: 16 },
@@ -2818,6 +2791,11 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
         h: 1100,
       },
     ],
+    ponds: [
+      // Twin Imperial Reflecting Pools flanking the grand processional plaza
+      { x: 2020, y: 540, w: 260, h: 140 },
+      { x: 2570, y: 540, w: 260, h: 140 },
+    ],
     path: [
       { x: 40, y: 480, w: 1800, h: 80, style: 'dirt' },
       // North Summit of Champions
@@ -2829,20 +2807,25 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 820, y: 550, w: 64, h: 220, style: 'dirt' },
       { x: 1880, y: 550, w: 64, h: 220, style: 'dirt' },
       // Indigo Grand Gateway Approach
-      { x: 1780, y: 450, w: 80, h: 80, style: 'dirt' },
-      // Indigo Plateau Imperial White Marble & Gold Network
-      // Champions Victory Boulevard
-      { x: 1840, y: 458, w: 1640, h: 80, style: 'paved' },
-      // Hall of Fame Civic Promenade
-      { x: 2000, y: 254, w: 820, h: 64, style: 'paved' },
-      // Central Victory Fountain Imperial Piazza
-      { x: 2340, y: 418, w: 260, h: 150, style: 'paved' },
-      // Giovanni's Final Arena Boulevard
-      { x: 2700, y: 250, w: 76, h: 440, style: 'paved' },
-      // Elite Champions Court Lane
-      { x: 2000, y: 640, w: 820, h: 60, style: 'paved' },
-      // Grand Citadel Gate Approach
-      { x: 2980, y: 330, w: 500, h: 64, style: 'paved' },
+      { x: 1780, y: 480, w: 100, h: 80, style: 'dirt' },
+
+      // Indigo Imperial Acropolis - Grand Marble Avenue Network
+      // Central North-South Champions Walk
+      { x: 2360, y: 150, w: 90, h: 750, style: 'paved' },
+      // Grand Forecourt Victory Plaza
+      { x: 2240, y: 430, w: 330, h: 180, style: 'paved' },
+      // West Entrance Approach
+      { x: 1840, y: 480, w: 520, h: 80, style: 'paved' },
+      // West Wing Medical & Lore Promenade
+      { x: 1950, y: 290, w: 450, h: 70, style: 'paved' },
+      { x: 1950, y: 720, w: 450, h: 64, style: 'paved' },
+      // East Wing Champions Arsenal Promenade
+      { x: 2410, y: 290, w: 480, h: 70, style: 'paved' },
+      { x: 2410, y: 720, w: 480, h: 64, style: 'paved' },
+      // Apex Colosseum Terrace (Giovanni's Summit Arena)
+      { x: 2160, y: 150, w: 490, h: 80, style: 'paved' },
+      // East Grand Avenue to Plateau Gate
+      { x: 2570, y: 480, w: 920, h: 80, style: 'paved' },
     ],
     grassPatches: [
       { x: 320, y: 350, w: 180, h: 120, zone: 'cavern' },
@@ -2855,50 +2838,41 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       { x: 1740, y: 160, w: 260, h: 140, zone: 'rare' },
     ],
     buildings: [
-      {
-        type: 'center',
-        x: 2040,
-        y: 175,
-        w: 96,
-        h: 76,
-        label: 'Pokémon Center',
-      },
-      {
-        type: 'mart',
-        x: 2220,
-        y: 175,
-        w: 88,
-        h: 74,
-        label: 'Poké Mart',
-      },
+      // Apex Summit: Viridian Final Gym (Giovanni's Colosseum Arena)
       {
         type: 'gym',
-        x: 2640,
-        y: 160,
+        x: 2340,
+        y: 55,
         w: 130,
-        h: 100,
+        h: 95,
         label: 'Viridian Gym (Giovanni)',
         gymIndex: 7,
       },
+      // West Wing: League Medical Recovery Center
       {
-        type: 'house',
-        x: 2860,
-        y: 175,
-        w: 94,
-        h: 74,
-        label: "Lance's Pavilion",
-        roofStyle: 'azure',
-        wallColor: '#f8fafc',
-        chimney: true,
-        occupant: 'Dragon Master Lance',
-        dialogue: 'You have scaled Victory Road and proven your valor across Kanto! Only true champions who share unbreakable bonds with their Pokémon stand here.',
+        type: 'center',
+        x: 1980,
+        y: 210,
+        w: 100,
+        h: 80,
+        label: 'League Recovery Center',
       },
+      // East Wing: Champions Poké Mart Arsenal
+      {
+        type: 'mart',
+        x: 2790,
+        y: 210,
+        w: 90,
+        h: 76,
+        label: 'Champions Poké Mart',
+      },
+      // West Wing Upper Manor: Lorelei's Elite Council
       {
         type: 'house',
-        x: 2040,
-        y: 560,
-        w: 92,
-        h: 74,
+        x: 1980,
+        y: 640,
+        w: 94,
+        h: 76,
         label: 'Elite Council Manor',
         roofStyle: 'emerald',
         wallColor: '#fdf4ff',
@@ -2906,73 +2880,89 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
         occupant: 'Lorelei of Elite Four',
         dialogue: 'Beyond Giovanni’s arena lies the Indigo Plateau Championship! Ice, Fighting, Ghost, and Dragon masters await those who claim all eight badges.',
       },
+      // West Wing Lower Pavilion: Hall of Fame Archive
       {
         type: 'house',
-        x: 2220,
-        y: 560,
-        w: 88,
+        x: 2180,
+        y: 780,
+        w: 92,
         h: 74,
-        label: 'League Quarters',
-        roofStyle: 'terracotta',
-        wallColor: '#fef3c7',
-        chimney: true,
-        occupant: 'League Scott',
-        dialogue: 'Every great trainer begins in Pallet Town with a single partner. Today, your name is recorded in the historic Kanto Hall of Fame ledger!',
-      },
-      {
-        type: 'house',
-        x: 2860,
-        y: 560,
-        w: 90,
-        h: 74,
-        label: 'Champion Sanctuary',
+        label: 'Hall of Fame Archive',
         roofStyle: 'slate',
         wallColor: '#f1f5f9',
+        chimney: true,
+        occupant: 'League Archivist Scott',
+        dialogue: 'Every great trainer begins in Pallet Town with a single partner. Today, your name is inscribed in the historic Kanto Hall of Fame ledger!',
+      },
+      // East Wing Upper Pavilion: Lance's Dragon Sanctum
+      {
+        type: 'house',
+        x: 2790,
+        y: 640,
+        w: 94,
+        h: 76,
+        label: "Lance's Dragon Pavilion",
+        roofStyle: 'azure',
+        wallColor: '#f8fafc',
+        chimney: true,
+        occupant: 'Dragon Master Lance',
+        dialogue: 'You have scaled Victory Road and proven your valor across Kanto! Only true champions who share unbreakable bonds with their Pokémon stand here.',
+      },
+      // East Wing Lower Pavilion: Champion Blue's Quarters
+      {
+        type: 'house',
+        x: 2590,
+        y: 780,
+        w: 92,
+        h: 74,
+        label: 'Champion Sanctuary',
+        roofStyle: 'terracotta',
+        wallColor: '#fef3c7',
         chimney: true,
         occupant: 'Veteran Blue',
         dialogue: 'Giovanni commands the ultimate Ground and Rock juggernauts. Bring your strongest, most balanced team to this final battle!',
       },
+      // East Gate: Indigo Plateau Gate
       {
         type: 'gate',
-        x: 3440,
-        y: 320,
+        x: 3420,
+        y: 475,
         w: 100,
         h: 90,
         label: 'Indigo Plateau Gate',
       },
     ],
     fountains: [
-      { x: 2470, y: 493, radius: 38, style: 'marble' },
+      { x: 2405, y: 520, radius: 42, style: 'marble', label: 'Victory Flame & Imperial Fountain' },
     ],
     streetlamps: [
-      { x: 2000, y: 275, style: 'ornate' },
-      { x: 2190, y: 275, style: 'ornate' },
-      { x: 2420, y: 275, style: 'ornate' },
-      { x: 2610, y: 275, style: 'ornate' },
-      { x: 2360, y: 430, style: 'ornate' },
-      { x: 2580, y: 430, style: 'ornate' },
-      { x: 2360, y: 550, style: 'ornate' },
-      { x: 2580, y: 550, style: 'ornate' },
-      { x: 2020, y: 660, style: 'ornate' },
-      { x: 2190, y: 660, style: 'ornate' },
-      { x: 2830, y: 660, style: 'ornate' },
-      { x: 2680, y: 605, style: 'ornate' },
-      { x: 3400, y: 350, style: 'ornate' },
+      { x: 1980, y: 310, style: 'ornate' },
+      { x: 2180, y: 310, style: 'ornate' },
+      { x: 2620, y: 310, style: 'ornate' },
+      { x: 2820, y: 310, style: 'ornate' },
+      { x: 2330, y: 460, style: 'ornate' },
+      { x: 2480, y: 460, style: 'ornate' },
+      { x: 2330, y: 580, style: 'ornate' },
+      { x: 2480, y: 580, style: 'ornate' },
+      { x: 2280, y: 170, style: 'ornate' },
+      { x: 2530, y: 170, style: 'ornate' },
+      { x: 3050, y: 500, style: 'ornate' },
+      { x: 3350, y: 500, style: 'ornate' },
     ],
     benches: [
-      { x: 2380, y: 455 },
-      { x: 2520, y: 455 },
-      { x: 2820, y: 280 },
-      { x: 2160, y: 660 },
+      { x: 2350, y: 450 },
+      { x: 2460, y: 450 },
+      { x: 2150, y: 520 },
+      { x: 2660, y: 520 },
     ],
     fences: [
       { x: 40, y: 468, w: 200, h: 16 },
       { x: 520, y: 228, w: 260, h: 16 },
       // Indigo golden wrought iron fences
-      { x: 2020, y: 540, w: 110, h: 16 },
-      { x: 2200, y: 540, w: 110, h: 16 },
-      { x: 2840, y: 540, w: 110, h: 16 },
-      { x: 2020, y: 710, w: 110, h: 16 },
+      { x: 1980, y: 620, w: 100, h: 16 },
+      { x: 2790, y: 620, w: 100, h: 16 },
+      { x: 2180, y: 760, w: 100, h: 16 },
+      { x: 2590, y: 760, w: 100, h: 16 },
     ],
     items: [
       {

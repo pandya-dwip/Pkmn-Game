@@ -230,6 +230,8 @@ export class RouteExplorationEngine {
   public onTalkNPC: ((npc: RouteNPC) => void) | null = null;
   public onReadSignpost: ((sp: RouteSignpost) => void) | null = null;
   public onRouteExit: ((nextRouteIndex: number) => void) | null = null;
+  public onRoutePreviousExit: ((prevRouteIndex: number) => void) | null = null;
+  public onOpenMap: (() => void) | null = null;
   public onOpenMenu: (() => void) | null = null;
 
   private handlePointerDown = (e: PointerEvent): void => {
@@ -365,7 +367,7 @@ export class RouteExplorationEngine {
       }
     }
 
-    // Check Route Exit Signpost
+    // Check Route Exit Signpost (Forward / East)
     if (this.currentRoute.exitX > 0) {
       const ex = this.currentRoute.exitX - 30;
       const ey = 200;
@@ -376,6 +378,15 @@ export class RouteExplorationEngine {
         }
         return;
       }
+    }
+
+    // Check Previous Route Entrance (Backward / West)
+    if (this.currentRoute.id > 0 && this.player.x <= 55) {
+      sound.beep(880, 0.15, 'sine');
+      if (this.onRoutePreviousExit) {
+        this.onRoutePreviousExit(this.currentRoute.id - 1);
+      }
+      return;
     }
 
     // Check Route Signposts
@@ -733,6 +744,11 @@ export class RouteExplorationEngine {
       }
     }
 
+    if (!promptTarget && this.currentRoute.id > 0 && this.player.x <= 55) {
+      promptTarget = 'Previous Route / Area';
+      promptAction = 'Return ⬅';
+    }
+
     const actBtn = document.getElementById('btn-interact');
     if (promptEl) {
       if (promptTarget) {
@@ -773,12 +789,22 @@ export class RouteExplorationEngine {
       }
     }
 
-    // Check Route Exit
+    // Check Route Exit (Forward / East)
     if (this.currentRoute.exitX > 0 && this.player.x >= this.currentRoute.exitX) {
       if (this.onRouteExit) {
         this.isPaused = true;
         sound.beep(780, 0.25, 'triangle');
         this.onRouteExit(this.currentRoute.id + 1);
+        return;
+      }
+    }
+
+    // Check Route Exit (Backward / West)
+    if (this.currentRoute.id > 0 && this.player.x <= 26) {
+      if (this.onRoutePreviousExit) {
+        this.isPaused = true;
+        sound.beep(780, 0.25, 'triangle');
+        this.onRoutePreviousExit(this.currentRoute.id - 1);
         return;
       }
     }

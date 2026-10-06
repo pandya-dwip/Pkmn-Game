@@ -28,6 +28,7 @@ import { showPokemonCaughtModal } from './systems/CaptureModal';
 import { modernPokedexView } from './ui/ModernPokedexView';
 import { pokedexManager } from './systems/PokedexManager';
 import { ICONS } from './ui/icons';
+import { KANTO_CITIES, KantoCityInfo, getFurthestUnlockedCityIndex } from './data/cities';
 
 // ============================================================================
 // GLOBAL CONFIGURATION & TYPES
@@ -139,6 +140,7 @@ export interface GameSaveState {
   defeated?: boolean;
   savedRoutePos?: { routeId: number; x: number; y: number } | null;
   currentRouteId?: number;
+  currentCityIndex?: number;
   wildBattlesCount?: number;
 }
 
@@ -327,6 +329,8 @@ export const load = (): GameSaveState | null => {
       if (g.eliteFour) {
         g.eliteFour.powerUpsRemaining = g.eliteFour.powerUpsRemaining ?? 3;
       }
+      const furthestCity = getFurthestUnlockedCityIndex(g.gymIndex, (g.badges || []).length >= 8);
+      g.currentCityIndex = g.currentCityIndex ?? furthestCity;
       g.team.forEach(m => {
         m.uid = m.uid || nu();
       });
@@ -801,6 +805,101 @@ export async function visitPokemonCenter(): Promise<void> {
   }
 }
 
+// ============================================================================
+// TOWN MAP & FAST TRAVEL SUBSYSTEM
+// ============================================================================
+export async function openTownMapModal(): Promise<void> {
+  const furthestIdx = getFurthestUnlockedCityIndex(G.gymIndex, (G.badges || []).length >= 8);
+  const currentCityIdx = G.currentCityIndex ?? furthestIdx;
+
+  const choices = KANTO_CITIES.slice(0, furthestIdx + 1).map((c) => {
+    const isCurrent = c.index === currentCityIdx;
+    const isFurthest = c.index === furthestIdx;
+    const gymDef = c.gymIndex !== undefined ? KANTO_GYMS[c.gymIndex] : null;
+    const hasBadge = gymDef ? G.badges.includes(gymDef.badgeName) : false;
+
+    let badgeStatus = '';
+    if (gymDef) {
+      badgeStatus = hasBadge
+        ? `<span style="color:#22c55e;font-weight:800">✓ ${gymDef.badgeName} (${gymDef.leader} Defeated)</span>`
+        : `<span style="color:#eab308;font-weight:800">⚔️ ${gymDef.city} Gym (${gymDef.leader})</span>`;
+    } else if (c.index === 0) {
+      badgeStatus = `<span style="color:#94a3b8">🌿 Starter Area & Professor's Lab</span>`;
+    } else if (c.index === 9) {
+      badgeStatus = `<span style="color:#facc15;font-weight:800">🏆 Championship & Elite Four</span>`;
+    }
+
+    const tag = isCurrent
+      ? `<span style="background:#22c55e;color:#0f172a;font-size:10px;font-weight:900;padding:2px 6px;border-radius:4px;margin-left:6px">CURRENT LOCATION</span>`
+      : isFurthest
+      ? `<span style="background:#38bdf8;color:#0f172a;font-size:10px;font-weight:900;padding:2px 6px;border-radius:4px;margin-left:6px">LATEST FRONTIER</span>`
+      : '';
+
+    return {
+      h: `
+        <div style="display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:24px">${c.icon}</span>
+            <div>
+              <div style="font-weight:900;font-size:13.5px;color:#f8fafc">${c.name} ${tag}</div>
+              <div style="font-size:11px;color:#94a3b8;margin-top:2px">${c.region} · ${badgeStatus}</div>
+            </div>
+          </div>
+          <span style="font-size:12px;font-weight:800;color:${isCurrent ? '#64748b' : '#38bdf8'};white-space:nowrap;margin-left:8px">
+            ${isCurrent ? '📍 HERE' : 'TRAVEL ➔'}
+          </span>
+        </div>
+      `,
+    };
+  });
+
+  const pickIdx = await pick(
+    `🗺️ <b>KANTO TOWN MAP & FAST TRAVEL</b><br><small style="color:#94a3b8">Travel instantly to any previously visited city or current frontier in Kanto:</small>`,
+    choices,
+    true,
+    'l'
+  );
+
+  if (pickIdx >= 0) {
+    const targetCity = KANTO_CITIES[pickIdx];
+    if (targetCity.index === currentCityIdx) {
+      await note([`You are already in <b>${targetCity.name}</b>!`]);
+      journeyHubScr();
+      return;
+    }
+
+    // Fast travel sound
+    sound.beep(523, 0.15, 'sine');
+    sound.beep(659, 0.15, 'sine', 0.1, 0.1);
+    sound.beep(784, 0.25, 'sine', 0.15, 0.2);
+
+    G.currentCityIndex = targetCity.index;
+    G.savedRoutePos = null; // Clear saved route position so exploration starts fresh at this city's route
+    G.currentRouteId = targetCity.routeId;
+    save();
+
+    await note([
+      `<h1>🗺️ ARRIVED IN ${targetCity.name.toUpperCase()}!</h1>`,
+      `<div style="font-size:32px;text-align:center;margin:8px 0">${targetCity.icon}</div>`,
+      `<p style="text-align:center;font-size:14px;color:#f8fafc"><b>${targetCity.region}</b></p>`,
+      `<p style="text-align:center;color:#94a3b8;margin-top:6px">${targetCity.desc}</p>`,
+      `<p style="text-align:center;color:#38bdf8;font-size:12px;margin-top:10px">You can heal at the Pokémon Center, shop at the Poké Mart, train, explore connecting routes, or travel to another city anytime!</p>`,
+    ]);
+
+    if (targetCity.index === 9 && G.gymIndex >= 8) {
+      if (G.phase === 'ELITE_FOUR_HUB' || G.phase === 'ELITE_FOUR_BATTLE') {
+        eliteFourHub();
+      } else {
+        championshipScr();
+      }
+    } else {
+      journeyHubScr();
+    }
+  } else {
+    journeyHubScr();
+  }
+}
+
 export function enterRouteExploration(routeId?: number, resumeX?: number, resumeY?: number): void {
   // Determine active route: explicit param > G.savedRoutePos.routeId > G.currentRouteId > G.gymIndex
   const rId =
@@ -895,19 +994,49 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
   routeExplorationEngine.onEnterGate = async (building) => {
     routeExplorationEngine.isPaused = true;
     sound.beep(880, 0.15, 'sine');
-    const nextRouteIdx = routeExplorationEngine.currentRoute ? routeExplorationEngine.currentRoute.id + 1 : 1;
+    const curRouteId = routeExplorationEngine.currentRoute ? routeExplorationEngine.currentRoute.id : 0;
+    const nextRouteIdx = curRouteId + 1;
     const nextRouteDef = KANTO_JOURNEY_ROUTES[nextRouteIdx];
-    const destination = nextRouteDef ? nextRouteDef.name : 'the next area';
-    const choice = await pick(
-      `<b>${building.label}</b><br><br>Officer Jenny: "Halt, Trainer! This checkpoint gate connects to <b>${destination}</b>.<br>Would you like to pass through the gatehouse?"`,
-      [
-        { h: `PROCEED TO ${destination.toUpperCase()} ➔` },
-        { h: `RETURN TO CITY HUB` },
-        { h: `CANCEL (Stay on current route)` },
-      ],
+    const prevRouteIdx = curRouteId - 1;
+    const prevRouteDef = prevRouteIdx >= 0 ? KANTO_JOURNEY_ROUTES[prevRouteIdx] : null;
+
+    type GateAction = 'next' | 'prev' | 'map' | 'hub' | 'cancel';
+    const gateOptions: { label: string; action: GateAction }[] = [];
+
+    if (nextRouteDef) {
+      gateOptions.push({
+        label: `PROCEED FORWARD TO ${nextRouteDef.name.toUpperCase()} ➔`,
+        action: 'next',
+      });
+    }
+    if (prevRouteDef) {
+      gateOptions.push({
+        label: `⬅ RETURN BACKWARD TO ${prevRouteDef.name.toUpperCase()}`,
+        action: 'prev',
+      });
+    }
+    gateOptions.push({
+      label: `🗺️ OPEN TOWN MAP & FAST TRAVEL`,
+      action: 'map',
+    });
+    gateOptions.push({
+      label: `RETURN TO CITY HUB`,
+      action: 'hub',
+    });
+    gateOptions.push({
+      label: `CANCEL (Stay on current route)`,
+      action: 'cancel',
+    });
+
+    const choiceIdx = await pick(
+      `<b>${building.label}</b><br><br>Officer Jenny: "Halt, Trainer! This checkpoint gatehouse connects routes and cities across Kanto.<br>Where would you like to travel?"`,
+      gateOptions.map((o) => ({ h: o.label })),
       false
     );
-    if (choice === 0) {
+
+    const chosen = choiceIdx >= 0 && choiceIdx < gateOptions.length ? gateOptions[choiceIdx].action : 'cancel';
+
+    if (chosen === 'next') {
       if (G) {
         G.currentRouteId = nextRouteIdx;
         G.savedRoutePos = {
@@ -915,6 +1044,9 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
           x: nextRouteDef ? nextRouteDef.startX : 70,
           y: nextRouteDef ? nextRouteDef.startY : 230,
         };
+        if (G.currentCityIndex !== undefined) {
+          G.currentCityIndex = Math.min(KANTO_CITIES.length - 1, nextRouteIdx);
+        }
         // Award 5 fresh training sessions for reaching a new area/city!
         G.tk = (G.tk || 0) + 5;
         G.tmax = Math.max(G.tmax || 5, G.tk);
@@ -924,8 +1056,8 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
       sound.beep(659, 0.15, 'sine');
       sound.beep(880, 0.25, 'sine', 0.1, 0.12);
       await note([
-        `<h1>ARRIVED AT ${destination.toUpperCase()}!</h1>`,
-        `You have successfully passed through the gatehouse and arrived at <b>${destination}</b>!`,
+        `<h1>ARRIVED AT ${nextRouteDef.name.toUpperCase()}!</h1>`,
+        `You have successfully passed through the gatehouse and arrived at <b>${nextRouteDef.name}</b>!`,
         `<b>+5 fresh training sessions have been granted for reaching a new area!</b> (Total: ${G?.tk || 5})`,
         `Explore the city, visit the Pokémon Center and Poké Mart, and prepare for the Gym challenge!`,
       ]);
@@ -934,7 +1066,36 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
       } else {
         journeyHubScr();
       }
-    } else if (choice === 1) {
+    } else if (chosen === 'prev') {
+      if (prevRouteDef) {
+        const spawnX = Math.max(80, (prevRouteDef.exitX > 0 ? prevRouteDef.exitX - 60 : prevRouteDef.worldWidth - 150));
+        const spawnY = prevRouteDef.startY;
+        if (G) {
+          G.currentRouteId = prevRouteIdx;
+          G.currentCityIndex = Math.min(KANTO_CITIES.length - 1, prevRouteIdx);
+          G.savedRoutePos = {
+            routeId: prevRouteIdx,
+            x: spawnX,
+            y: spawnY,
+          };
+          save();
+        }
+        routeExplorationEngine.stop();
+        sound.beep(784, 0.15, 'sine');
+        sound.beep(659, 0.2, 'sine', 0.08, 0.1);
+        await note([
+          `<h1>⬅ RETURNED TO ${prevRouteDef.name.toUpperCase()}</h1>`,
+          `You have passed backwards through the gatehouse to <b>${prevRouteDef.name}</b>!`,
+        ]);
+        enterRouteExploration(prevRouteIdx, spawnX, spawnY);
+      } else {
+        routeExplorationEngine.isPaused = false;
+      }
+    } else if (chosen === 'map') {
+      saveCurrentRoutePosition();
+      routeExplorationEngine.stop();
+      await openTownMapModal();
+    } else if (chosen === 'hub') {
       saveCurrentRoutePosition();
       routeExplorationEngine.stop();
       journeyHubScr();
@@ -1000,6 +1161,9 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
           x: nextRouteDef.startX,
           y: nextRouteDef.startY,
         };
+        if (G.currentCityIndex !== undefined) {
+          G.currentCityIndex = Math.min(KANTO_CITIES.length - 1, nextRouteId);
+        }
         G.tk = (G.tk || 0) + 5;
         G.tmax = Math.max(G.tmax || 5, G.tk);
         save();
@@ -1018,6 +1182,51 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
       journeyHubScr();
     }
   };
+
+  routeExplorationEngine.onRoutePreviousExit = async (prevRouteId) => {
+    if (prevRouteId >= 0 && prevRouteId < KANTO_JOURNEY_ROUTES.length) {
+      const prevRouteDef = KANTO_JOURNEY_ROUTES[prevRouteId];
+      const spawnX = Math.max(80, (prevRouteDef.exitX > 0 ? prevRouteDef.exitX - 60 : prevRouteDef.worldWidth - 150));
+      const spawnY = prevRouteDef.startY;
+      if (G) {
+        G.currentRouteId = prevRouteId;
+        G.currentCityIndex = Math.min(KANTO_CITIES.length - 1, prevRouteId);
+        G.savedRoutePos = {
+          routeId: prevRouteId,
+          x: spawnX,
+          y: spawnY,
+        };
+        save();
+      }
+      routeExplorationEngine.stop();
+      sound.beep(784, 0.15, 'sine');
+      sound.beep(659, 0.2, 'sine', 0.08, 0.1);
+      await note([
+        `<h1>⬅ RETURNED TO ${prevRouteDef.name.toUpperCase()}</h1>`,
+        `You traveled back to <b>${prevRouteDef.name}</b>!`,
+        `<p style="color:#94a3b8;font-size:12px;margin-top:6px">You can explore this route, catch Pokémon, visit the Pokémon Center, or continue back to earlier cities.</p>`,
+      ]);
+      enterRouteExploration(prevRouteId, spawnX, spawnY);
+    } else {
+      routeExplorationEngine.stop();
+      journeyHubScr();
+    }
+  };
+
+  routeExplorationEngine.onOpenMap = async () => {
+    saveCurrentRoutePosition();
+    routeExplorationEngine.stop();
+    await openTownMapModal();
+  };
+
+  const hudMapBtn = $('#hud-map-btn');
+  if (hudMapBtn) {
+    hudMapBtn.onclick = async () => {
+      saveCurrentRoutePosition();
+      routeExplorationEngine.stop();
+      await openTownMapModal();
+    };
+  }
 
   routeExplorationEngine.onOpenMenu = () => {
     saveCurrentRoutePosition();
@@ -1041,15 +1250,48 @@ export function journeyHubScr(): void {
   sound.music('menu');
   show('map');
 
+  const furthestIdx = getFurthestUnlockedCityIndex(G.gymIndex, (G.badges || []).length >= 8);
+  const currentCityIdx = G.currentCityIndex ?? furthestIdx;
+  const currentCity = KANTO_CITIES[currentCityIdx] || KANTO_CITIES[furthestIdx] || KANTO_CITIES[0];
+  const furthestCity = KANTO_CITIES[furthestIdx] || KANTO_CITIES[0];
+  const isVisitingPreviousCity = currentCityIdx < furthestIdx;
+
   const gymIdx = G.gymIndex;
   const currentGym = gymIdx < 8 ? KANTO_GYMS[gymIdx] : null;
-  const activeRouteId = G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? gymIdx;
-  const currentRouteDef = KANTO_JOURNEY_ROUTES[activeRouteId] || KANTO_JOURNEY_ROUTES[gymIdx];
-  const cityName = currentGym ? currentGym.city : 'Indigo Plateau';
+  const activeRouteId = G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? currentCity.routeId;
+  const currentRouteDef = KANTO_JOURNEY_ROUTES[activeRouteId] || KANTO_JOURNEY_ROUTES[currentCity.routeId] || KANTO_JOURNEY_ROUTES[0];
+  const cityName = currentCity.name;
 
   let heroCardHTML = '';
 
-  if (gymIdx < 8) {
+  if (isVisitingPreviousCity) {
+    heroCardHTML = `
+      <div class="journey-main-card" style="border: 2px solid #38bdf8; box-shadow: 0 0 25px rgba(56, 189, 248, 0.2);">
+        <div class="journey-card-header">
+          <span class="journey-step-badge" style="background:#0284c7;color:#fff">VISITING PREVIOUS CITY</span>
+          <span style="font-size:12px;font-weight:800;color:#38bdf8">${currentCity.region.toUpperCase()}</span>
+        </div>
+        <div class="journey-card-title">${currentCity.icon} ${currentCity.name.toUpperCase()}</div>
+        <div class="journey-card-desc">
+          ${currentCity.desc}<br>
+          <span style="color:#94a3b8;font-size:12.5px;display:inline-block;margin-top:6px">
+            Explore local routes and tall grass, visit the Pokémon Center & Poké Mart, or fast travel back to your active frontier (<b>${furthestCity.name}</b>).
+          </span>
+        </div>
+        <div class="col" style="gap:8px">
+          <button id="btn-explore-route" class="btn-primary" style="width:100%;text-align:center;font-size:14px;font-weight:900">
+            🌲 EXPLORE ${currentRouteDef.name.toUpperCase()} ➔
+          </button>
+          <button id="btn-return-frontier-city" class="btn-accent" style="width:100%;text-align:center;font-size:13px;font-weight:900;background:#0284c7;border-color:#0369a1">
+            ⚡ RETURN TO ACTIVE FRONTIER: ${furthestCity.name.toUpperCase()} ➔
+          </button>
+          <button id="btn-open-town-map" class="btn-secondary" style="width:100%;text-align:center;font-size:12.5px;font-weight:800">
+            🗺️ TOWN MAP & FAST TRAVEL
+          </button>
+        </div>
+      </div>
+    `;
+  } else if (gymIdx < 8) {
     heroCardHTML = `
       <div class="journey-main-card">
         <div class="journey-card-header">
@@ -1066,6 +1308,9 @@ export function journeyHubScr(): void {
           </button>
           <button id="btn-gym-battle" class="btn-accent" style="width:100%;text-align:center;font-size:13px;font-weight:900">
             CHALLENGE GYM LEADER ${currentGym!.leader.toUpperCase()} (${currentGym!.city} Gym)
+          </button>
+          <button id="btn-open-town-map" class="btn-secondary" style="width:100%;text-align:center;font-size:12.5px;font-weight:800">
+            🗺️ TRAVEL TO PREVIOUS CITIES (TOWN MAP)
           </button>
         </div>
       </div>
@@ -1090,9 +1335,14 @@ export function journeyHubScr(): void {
         ? `Tournament in progress! <b>${roundName}</b> is ready.<br>Next Opponent: <b>${oppName}</b>. Prepare your team and enter the arena.`
         : `All eight Kanto Gym Badges earned! 15 elite trainers await you in the Kanto Championship.`}
         </div>
-        <button id="btn-enter-championship" class="btn-accent" style="width:100%;text-align:center;font-size:14px;font-weight:900">
-          ${isStarted ? `RETURN TO TOURNAMENT (${roundName.toUpperCase()}) ➔` : 'ENTER 16-PLAYER CHAMPIONSHIP ➔'}
-        </button>
+        <div class="col" style="gap:8px">
+          <button id="btn-enter-championship" class="btn-accent" style="width:100%;text-align:center;font-size:14px;font-weight:900">
+            ${isStarted ? `RETURN TO TOURNAMENT (${roundName.toUpperCase()}) ➔` : 'ENTER 16-PLAYER CHAMPIONSHIP ➔'}
+          </button>
+          <button id="btn-open-town-map" class="btn-secondary" style="width:100%;text-align:center;font-size:12.5px;font-weight:800">
+            🗺️ TRAVEL TO PREVIOUS CITIES (TOWN MAP)
+          </button>
+        </div>
       </div>
     `;
   } else {
@@ -1107,9 +1357,14 @@ export function journeyHubScr(): void {
         <div class="journey-card-desc">
           Challenge Lorelei, Bruno, Agatha, and Lance in any chosen order! Complete team healing after each victory.
         </div>
-        <button id="btn-enter-elitefour" class="btn-primary" style="width:100%;text-align:center;font-size:14px;font-weight:900">
-          CHALLENGE THE ELITE FOUR ➔
-        </button>
+        <div class="col" style="gap:8px">
+          <button id="btn-enter-elitefour" class="btn-primary" style="width:100%;text-align:center;font-size:14px;font-weight:900">
+            CHALLENGE THE ELITE FOUR ➔
+          </button>
+          <button id="btn-open-town-map" class="btn-secondary" style="width:100%;text-align:center;font-size:12.5px;font-weight:800">
+            🗺️ TRAVEL TO PREVIOUS CITIES (TOWN MAP)
+          </button>
+        </div>
       </div>
     `;
   }
@@ -1123,6 +1378,9 @@ export function journeyHubScr(): void {
     ${heroCardHTML}
 
     <div class="quick-actions-bar" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button id="qh-map" class="qpm-btn" style="flex:1;min-width:130px;background:#0284c7;color:#fff;border-color:#0369a1;display:flex;align-items:center;justify-content:center;gap:6px" title="Town Map & Fast Travel">
+        🗺️ TOWN MAP
+      </button>
       <button id="qh-pokedex" class="qpm-btn" style="flex:1;min-width:130px;background:var(--md-sys-color-primary);color:#fff;border-color:var(--md-sys-color-primary-hover);display:flex;align-items:center;justify-content:center;gap:6px" title="Field research guide">
         ${ICONS.pokedex(16)} POKÉDEX
       </button>
@@ -1149,7 +1407,7 @@ export function journeyHubScr(): void {
 
   // Attach event handlers
   if ($('#btn-explore-route')) {
-    $('#btn-explore-route').onclick = () => enterRouteExploration(G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? G.gymIndex);
+    $('#btn-explore-route').onclick = () => enterRouteExploration(G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? currentCity.routeId);
   }
 
   if ($('#btn-gym-battle')) {
@@ -1157,7 +1415,7 @@ export function journeyHubScr(): void {
   }
 
   if ($('#btn-continue-journey')) {
-    $('#btn-continue-journey').onclick = () => enterRouteExploration(G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? G.gymIndex);
+    $('#btn-continue-journey').onclick = () => enterRouteExploration(G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? currentCity.routeId);
   }
 
   if ($('#btn-enter-championship')) {
@@ -1166,6 +1424,30 @@ export function journeyHubScr(): void {
 
   if ($('#btn-enter-elitefour')) {
     $('#btn-enter-elitefour').onclick = () => eliteFourHub();
+  }
+
+  const qhMap = $('#qh-map');
+  if (qhMap) {
+    qhMap.onclick = () => openTownMapModal();
+  }
+
+  const btnTownMap = $('#btn-open-town-map');
+  if (btnTownMap) {
+    btnTownMap.onclick = () => openTownMapModal();
+  }
+
+  const btnReturnFrontier = $('#btn-return-frontier-city');
+  if (btnReturnFrontier) {
+    btnReturnFrontier.onclick = () => {
+      G.currentCityIndex = furthestIdx;
+      G.savedRoutePos = null;
+      G.currentRouteId = furthestCity.routeId;
+      save();
+      sound.beep(523, 0.15, 'sine');
+      sound.beep(659, 0.15, 'sine', 0.1, 0.1);
+      sound.beep(784, 0.25, 'sine', 0.15, 0.2);
+      journeyHubScr();
+    };
   }
 
   const qhPokedex = $('#qh-pokedex');
@@ -1244,8 +1526,10 @@ export function shopScr(): void {
   sound.music('menu');
   show('map');
 
-  const currentGym = G.gymIndex < 8 ? KANTO_GYMS[G.gymIndex] : null;
-  const city = currentGym ? currentGym.city : 'Indigo Plateau';
+  const furthestIdx = getFurthestUnlockedCityIndex(G.gymIndex, (G.badges || []).length >= 8);
+  const currentCityIdx = G.currentCityIndex ?? furthestIdx;
+  const currentCity = KANTO_CITIES[currentCityIdx] || KANTO_CITIES[0];
+  const city = currentCity.name;
 
   $('#map').innerHTML = `
     <h1>POKÉ MART</h1>
@@ -4508,6 +4792,15 @@ document.addEventListener('DOMContentLoaded', () => {
       saveCurrentRoutePosition();
       routeExplorationEngine.stop();
       journeyHubScr();
+    };
+  }
+
+  const hudMapBtn = q('hud-map-btn');
+  if (hudMapBtn) {
+    hudMapBtn.onclick = () => {
+      saveCurrentRoutePosition();
+      routeExplorationEngine.stop();
+      openTownMapModal();
     };
   }
 

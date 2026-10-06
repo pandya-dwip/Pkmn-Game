@@ -878,6 +878,20 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
     shopScr();
   };
 
+  routeExplorationEngine.onEnterHouse = async (building) => {
+    routeExplorationEngine.isPaused = true;
+    sound.beep(659, 0.15, 'sine');
+    sound.beep(880, 0.2, 'sine', 0.08, 0.1);
+    await note([
+      `<h3>🏡 ${building.label}</h3>`,
+      building.occupant ? `<p style="font-weight:700;color:#38bdf8;margin:6px 0;">Resident: ${building.occupant}</p>` : '',
+      building.dialogue
+        ? `<p style="font-style:italic;line-height:1.5;margin-top:10px;">"${building.dialogue}"</p>`
+        : `<p style="line-height:1.5;margin-top:10px;">A cozy Kanto home with a warm hearth, bookshelf filled with Pokémon field guides, and fresh tea.</p>`,
+    ].filter(Boolean));
+    routeExplorationEngine.isPaused = false;
+  };
+
   routeExplorationEngine.onEnterGate = async (building) => {
     routeExplorationEngine.isPaused = true;
     sound.beep(880, 0.15, 'sine');

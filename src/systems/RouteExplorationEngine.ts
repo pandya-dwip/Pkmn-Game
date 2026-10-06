@@ -16,13 +16,28 @@ import { generateEncounterMon, EncounterMon } from './EncounterSystem';
 import { inputManager } from './InputManager';
 
 export interface RouteBuilding {
-  type: 'center' | 'mart' | 'gym' | 'gate';
+  type: 'center' | 'mart' | 'gym' | 'gate' | 'house';
   x: number;
   y: number;
   w: number;
   h: number;
+
   label: string;
   gymIndex?: number;
+  roofStyle?: 'terracotta' | 'emerald' | 'slate' | 'azure' | 'wood';
+  roofColor?: string;
+  wallColor?: string;
+  chimney?: boolean;
+  occupant?: string;
+  dialogue?: string;
+}
+
+export interface RoutePath {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  style?: 'dirt' | 'flagstone' | 'cobble' | 'brick' | 'paved';
 }
 
 export interface RouteItem {
@@ -112,6 +127,26 @@ export interface RouteSection {
   isRareZone?: boolean;
 }
 
+export interface RouteFountain {
+  x: number;
+  y: number;
+  radius: number;
+  style?: 'stone' | 'marble' | 'brick';
+}
+
+export interface RouteStreetlamp {
+  x: number;
+  y: number;
+  style?: 'ornate' | 'modern' | 'lantern';
+}
+
+export interface RouteBench {
+  x: number;
+  y: number;
+  w?: number;
+  facing?: 'up' | 'down' | 'left' | 'right';
+}
+
 export interface RouteDefinition {
   id: number;
   name: string;
@@ -122,7 +157,7 @@ export interface RouteDefinition {
   theme: 'forest' | 'route' | 'city' | 'rock' | 'water';
   startX: number;
   startY: number;
-  path: { x: number; y: number; w: number; h: number }[];
+  path: RoutePath[];
   grassPatches: GrassPatch[];
   buildings: RouteBuilding[];
   items: RouteItem[];
@@ -136,6 +171,9 @@ export interface RouteDefinition {
   ponds?: RoutePond[];
   sections?: RouteSection[];
   signposts?: RouteSignpost[];
+  fountains?: RouteFountain[];
+  streetlamps?: RouteStreetlamp[];
+  benches?: RouteBench[];
 }
 
 export class RouteExplorationEngine {
@@ -185,6 +223,7 @@ export class RouteExplorationEngine {
   public onEnterGym: ((gymIndex: number) => void) | null = null;
   public onEnterMart: (() => void) | null = null;
   public onEnterCenter: (() => void) | null = null;
+  public onEnterHouse: ((building: RouteBuilding) => void) | null = null;
   public onEnterGate: ((building: RouteBuilding) => void) | null = null;
   public onPickItem: ((item: RouteItem) => void) | null = null;
   public onTalkNPC: ((npc: RouteNPC) => void) | null = null;
@@ -291,12 +330,18 @@ export class RouteExplorationEngine {
 
       if (nearDoor) {
         sound.beep(880, 0.15, 'sine');
-        if (b.type === 'gym' && this.onEnterGym && b.gymIndex !== undefined) {
-          this.onEnterGym(b.gymIndex);
+        if (b.type === 'gym') {
+          if (b.gymIndex !== undefined && this.onEnterGym) {
+            this.onEnterGym(b.gymIndex);
+          } else if (this.onEnterHouse) {
+            this.onEnterHouse(b);
+          }
         } else if (b.type === 'mart' && this.onEnterMart) {
           this.onEnterMart();
         } else if (b.type === 'center' && this.onEnterCenter) {
           this.onEnterCenter();
+        } else if (b.type === 'house' && this.onEnterHouse) {
+          this.onEnterHouse(b);
         } else if (b.type === 'gate') {
           if (this.onEnterGate) {
             this.onEnterGate(b);
@@ -661,7 +706,7 @@ export class RouteExplorationEngine {
           this.player.y <= b.y + b.h + 45;
         if (nearDoor) {
           promptTarget = b.label;
-          promptAction = b.type === 'gym' ? 'Enter Gym' : 'Enter';
+          promptAction = b.type === 'gym' ? (b.gymIndex !== undefined ? 'Enter Gym' : 'Inspect') : b.type === 'house' ? 'Visit' : 'Enter';
           break;
         }
       }
@@ -802,6 +847,12 @@ export class RouteExplorationEngine {
     // 4. Paths & Cobblestone Avenues
     this.renderPaths(ctx, route);
 
+    // 4.5 City Fountains
+    this.renderFountains(ctx, route);
+
+    // 4.6 City Benches
+    this.renderBenches(ctx, route);
+
     // 5. Tall Grass with Wind Sway Animation & Wildflowers (Special mystical grass in Rare Sanctuary!)
     this.renderTallGrass(ctx, route);
 
@@ -814,10 +865,13 @@ export class RouteExplorationEngine {
     // 7. Wooden Post-and-Rail Fences
     this.renderFences(ctx, route);
 
-    // 8. Buildings (Pokémon Center, Poké Mart, Gym, Route Gate)
+    // 8. Buildings (Pokémon Center, Poké Mart, Gym, Route Gate, Houses)
     for (const b of route.buildings) {
       this.renderBuilding(ctx, b);
     }
+
+    // 8.5 Ornate City Streetlamps with Warm Radial Glow
+    this.renderStreetlamps(ctx, route);
 
     // 9. Ground Items (3D Poké Balls with Sparkle)
     for (const it of route.items) {
@@ -947,7 +1001,7 @@ export class RouteExplorationEngine {
   }
 
   private renderPaths(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
-    const isCity = route.theme === 'city';
+    const isCityTheme = route.theme === 'city';
 
     for (const p of route.path) {
       ctx.save();
@@ -958,19 +1012,84 @@ export class RouteExplorationEngine {
       ctx.roundRect(p.x - 2, p.y - 2, p.w + 4, p.h + 6, 8);
       ctx.fill();
 
-      if (isCity) {
+      // Determine if this path segment is paved flagstone / cobble / brick / city avenue
+      const isPaved =
+        p.style === 'flagstone' ||
+        p.style === 'cobble' ||
+        p.style === 'brick' ||
+        p.style === 'paved' ||
+        isCityTheme ||
+        (route.id === 0 && p.x >= 1900);
+
+      if (isPaved) {
         // ====================================================================
-        // CITY PLAZA: Real Ashlar Flagstones with 3D Bevels & Mortar Joints
+        // CITY PLAZA / PAVED STREETS: Ashlar Flagstones with City-Specific Tones
         // ====================================================================
+        let paverTones = ['#f8fafc', '#f1f5f9', '#e2e8f0', '#fed7aa', '#cbd5e1']; // Default / Viridian ivory
+        let subBaseColor = '#64748b';
+        let curbColor = '#475569';
+        let paverW = 32;
+        let paverH = 20;
+
+        if (p.style === 'brick' || route.id === 3) {
+          // Vermilion Port Brickwork & Harbor Boardwalk
+          paverTones = ['#ea580c', '#c2410c', '#9a3412', '#b45309', '#f97316'];
+          subBaseColor = '#7c2d12';
+          curbColor = '#431407';
+          paverW = 26;
+          paverH = 16;
+        } else if (p.style === 'cobble' || route.id === 1) {
+          // Pewter Stone / Mt. Moon Granite Chiseled Slate
+          paverTones = ['#475569', '#334155', '#64748b', '#1e293b', '#4b5563'];
+          subBaseColor = '#1e293b';
+          curbColor = '#0f172a';
+          paverW = 28;
+          paverH = 22;
+        } else if (route.id === 2) {
+          // Cerulean Floral Water City Cyan / Azure Stone
+          paverTones = ['#e0f2fe', '#bae6fd', '#cbd5e1', '#f1f5f9', '#93c5fd'];
+          subBaseColor = '#0284c7';
+          curbColor = '#0369a1';
+        } else if (route.id === 4) {
+          // Celadon City Rainbow & Pastel Marble Flagstones
+          paverTones = ['#fdf4ff', '#fae8ff', '#f3e8ff', '#f8fafc', '#fef3c7'];
+          subBaseColor = '#86198f';
+          curbColor = '#a21caf';
+          paverW = 34;
+          paverH = 22;
+        } else if (route.id === 5) {
+          // Fuchsia Ninja & Safari Timber/Earthen Stone
+          paverTones = ['#d97706', '#b45309', '#92400e', '#78350f', '#fed7aa'];
+          subBaseColor = '#451a03';
+          curbColor = '#78350f';
+          paverW = 30;
+          paverH = 18;
+        } else if (route.id === 6) {
+          // Saffron Tech Platinum & Gold Metropolis Pavers
+          paverTones = ['#f8fafc', '#f1f5f9', '#e2e8f0', '#fef08a', '#cbd5e1'];
+          subBaseColor = '#334155';
+          curbColor = '#eab308';
+          paverW = 36;
+          paverH = 24;
+        } else if (route.id === 7) {
+          // Cinnabar Volcanic Basalt & Obsidian Sand
+          paverTones = ['#1e293b', '#0f172a', '#334155', '#ea580c', '#475569'];
+          subBaseColor = '#450a0a';
+          curbColor = '#dc2626';
+          paverW = 28;
+          paverH = 20;
+        } else if (route.id === 8) {
+          // Indigo Plateau Champions Marble & Gold
+          paverTones = ['#ffffff', '#f8fafc', '#f1f5f9', '#fef9c3', '#e2e8f0'];
+          subBaseColor = '#713f12';
+          curbColor = '#facc15';
+          paverW = 38;
+          paverH = 24;
+        }
+
         // Sub-base foundation bed
-        ctx.fillStyle = '#64748b';
+        ctx.fillStyle = subBaseColor;
         ctx.fillRect(p.x, p.y, p.w, p.h);
-
-        // Stone paver block dimensions
-        const paverW = 32;
-        const paverH = 20;
-
-        const paverTones = ['#e2e8f0', '#cbd5e1', '#dbeafe', '#f1f5f9', '#94a3b8'];
 
         let rowIdx = 0;
         for (let py = p.y; py < p.y + p.h; py += paverH) {
@@ -1015,7 +1134,7 @@ export class RouteExplorationEngine {
         }
 
         // Heavy Chiseled Granite Curb Border
-        ctx.strokeStyle = '#475569';
+        ctx.strokeStyle = curbColor;
         ctx.lineWidth = 3;
         ctx.strokeRect(p.x, p.y, p.w, p.h);
 
@@ -1902,6 +2021,246 @@ export class RouteExplorationEngine {
       ctx.beginPath();
       ctx.arc(lanX, lanY, 22, 0, Math.PI * 2);
       ctx.fill();
+    } else if (b.type === 'house') {
+      // ======================================================================
+      // RESIDENTIAL HOUSE: Classic Pitched-Roof Cottage with Chimney & Flowerboxes
+      // ======================================================================
+      // 1. Foundation Plinth (Chiseled Ashlar Base)
+      ctx.fillStyle = '#64748b';
+      ctx.fillRect(b.x - 3, b.y + b.h - 6, b.w + 6, 8);
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillRect(b.x - 2, b.y + b.h - 5, b.w + 4, 2);
+
+      // 2. Wall Facade (Ivory / Stucco / Timber / Stone)
+      const wallColor = b.wallColor || '#f8fafc';
+      ctx.fillStyle = wallColor;
+      ctx.fillRect(b.x, b.y + 22, b.w, b.h - 26);
+
+      // Horizontal Wall Shiplap Siding or Stone Lines
+      ctx.strokeStyle = 'rgba(100, 116, 139, 0.25)';
+      ctx.lineWidth = 1;
+      for (let sy = b.y + 30; sy < b.y + b.h - 6; sy += 8) {
+        ctx.beginPath();
+        ctx.moveTo(b.x + 2, sy);
+        ctx.lineTo(b.x + b.w - 2, sy);
+        ctx.stroke();
+      }
+
+      // Vertical Corner Pilasters / Timber Posts
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillRect(b.x, b.y + 22, 5, b.h - 26);
+      ctx.fillRect(b.x + b.w - 5, b.y + 22, 5, b.h - 26);
+
+      // 3. Chimney with Animated Smoke Puffs
+      if (b.chimney !== false) {
+        const chimX = b.x + b.w - 18;
+        const chimY = b.y - 4;
+        const chimW = 12;
+        const chimH = 22;
+
+        // Red/Brown Brick Chimney Body
+        ctx.fillStyle = '#78350f';
+        ctx.fillRect(chimX, chimY, chimW, chimH);
+        ctx.fillStyle = '#991b1b';
+        ctx.fillRect(chimX + 1, chimY + 1, chimW - 2, chimH - 2);
+        // Chimney Cap
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(chimX - 2, chimY - 2, chimW + 4, 3);
+
+        // Animated Soft Smoke Puffs
+        for (let sIdx = 0; sIdx < 3; sIdx++) {
+          const sPhase = (this.time * 1.8 + sIdx * 0.7) % 2.1;
+          const sProg = sPhase / 2.1;
+          const sX = chimX + chimW / 2 + Math.sin(this.time * 2 + sIdx) * (6 * sProg);
+          const sY = chimY - 3 - sProg * 26;
+          const sRadius = 2.5 + sProg * 5;
+          const sAlpha = Math.max(0, (1 - sProg) * 0.45);
+
+          ctx.fillStyle = `rgba(241, 245, 249, ${sAlpha})`;
+          ctx.beginPath();
+          ctx.arc(sX, sY, sRadius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // 4. Roof Configuration by roofStyle
+      // Styles: terracotta (warm red/orange), emerald (evergreen Viridian), slate (Pewter gray), azure (Cerulean blue), wood (rustic brown)
+      const roofStyle = b.roofStyle || 'terracotta';
+      let rPrimary = '#c2410c'; // Terracotta
+      let rHighlight = '#ea580c';
+      let rShadow = '#7c2d12';
+      let rTrim = '#ffffff';
+
+      if (roofStyle === 'emerald') {
+        rPrimary = '#059669';
+        rHighlight = '#10b981';
+        rShadow = '#064e3b';
+        rTrim = '#ecfdf5';
+      } else if (roofStyle === 'slate') {
+        rPrimary = '#334155';
+        rHighlight = '#475569';
+        rShadow = '#0f172a';
+        rTrim = '#cbd5e1';
+      } else if (roofStyle === 'azure') {
+        rPrimary = '#0284c7';
+        rHighlight = '#38bdf8';
+        rShadow = '#0369a1';
+        rTrim = '#f0f9ff';
+      } else if (roofStyle === 'wood') {
+        rPrimary = '#78350f';
+        rHighlight = '#92400e';
+        rShadow = '#451a03';
+        rTrim = '#fef3c7';
+      }
+
+      if (b.roofColor) {
+        rPrimary = b.roofColor;
+        rHighlight = b.roofColor;
+      }
+
+      // Roof Overhang Shadow
+      ctx.fillStyle = rShadow;
+      ctx.fillRect(b.x - 7, b.y + 20, b.w + 14, 6);
+
+      // Pitched Gabled Roof Body
+      ctx.fillStyle = rPrimary;
+      ctx.beginPath();
+      ctx.moveTo(b.x - 8, b.y + 24);
+      ctx.lineTo(b.x + b.w / 2, b.y - 2);
+      ctx.lineTo(b.x + b.w + 8, b.y + 24);
+      ctx.closePath();
+      ctx.fill();
+
+      // Left-facing Sunlit Highlight Shingle Face
+      ctx.fillStyle = rHighlight;
+      ctx.beginPath();
+      ctx.moveTo(b.x - 6, b.y + 23);
+      ctx.lineTo(b.x + b.w / 2, b.y);
+      ctx.lineTo(b.x + b.w / 2, b.y + 23);
+      ctx.lineTo(b.x - 3, b.y + 23);
+      ctx.closePath();
+      ctx.fill();
+
+      // Shingle Tile Rows
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.22)';
+      ctx.lineWidth = 1;
+      for (let r = 0; r < 4; r++) {
+        const ry = b.y + 4 + r * 5;
+        const widthAtRy = (b.w + 12) * (1 - r * 0.22);
+        ctx.beginPath();
+        ctx.moveTo(b.x + b.w / 2 - widthAtRy / 2, ry);
+        ctx.lineTo(b.x + b.w / 2 + widthAtRy / 2, ry);
+        ctx.stroke();
+      }
+
+      // Roof Bargeboard Trim / Fascia
+      ctx.strokeStyle = rTrim;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(b.x - 8, b.y + 24);
+      ctx.lineTo(b.x + b.w / 2, b.y - 2);
+      ctx.lineTo(b.x + b.w + 8, b.y + 24);
+      ctx.stroke();
+
+      // 5. Cozy Glowing Windows with Cross Mullions & Flowerboxes
+      const winW = 15;
+      const winH = 17;
+      const winY = b.y + 30;
+
+      // Position windows symmetrically
+      const winPositions = [b.x + 9, b.x + b.w - 9 - winW];
+      winPositions.forEach(wx => {
+        // Window Frame
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(wx - 1.5, winY - 1.5, winW + 3, winH + 3);
+
+        // Warm Golden Amber Glowing Interior Light
+        ctx.fillStyle = '#fef08a';
+        ctx.fillRect(wx, winY, winW, winH);
+
+        // Glass Glint
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.4)';
+        ctx.beginPath();
+        ctx.moveTo(wx, winY + winH);
+        ctx.lineTo(wx + winW, winY);
+        ctx.lineTo(wx + winW - 4, winY);
+        ctx.lineTo(wx, winY + winH - 4);
+        ctx.closePath();
+        ctx.fill();
+
+        // Cross Mullions
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(wx + winW / 2, winY);
+        ctx.lineTo(wx + winW / 2, winY + winH);
+        ctx.moveTo(wx, winY + winH / 2);
+        ctx.lineTo(wx + winW, winY + winH / 2);
+        ctx.stroke();
+
+        // Wooden Window Flowerbox with Blooming Tulips
+        ctx.fillStyle = '#78350f';
+        ctx.fillRect(wx - 2, winY + winH + 1, winW + 4, 4);
+        ctx.fillStyle = '#16a34a';
+        ctx.fillRect(wx - 1, winY + winH - 1, winW + 2, 2);
+
+        const flColors = ['#ef4444', '#facc15', '#f472b6', '#38bdf8'];
+        for (let fx = wx; fx < wx + winW; fx += 4.5) {
+          ctx.fillStyle = flColors[Math.floor(fx * 3.7) % flColors.length];
+          ctx.beginPath();
+          ctx.arc(fx + 2, winY + winH - 2, 1.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      // 6. Charming Paneled Wooden Front Door
+      const doorW = 20;
+      const doorH = 26;
+      const doorX = b.x + b.w / 2 - doorW / 2;
+      const doorY = b.y + b.h - doorH;
+
+      // Door Frame
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(doorX - 2, doorY - 2, doorW + 4, doorH + 2);
+
+      // Wooden Door Face
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(doorX, doorY, doorW, doorH);
+
+      // Door Panels
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(doorX + 3, doorY + 3, 6, 8);
+      ctx.fillRect(doorX + doorW - 9, doorY + 3, 6, 8);
+      ctx.fillRect(doorX + 3, doorY + 14, 6, 9);
+      ctx.fillRect(doorX + doorW - 9, doorY + 14, 6, 9);
+
+      // Polished Brass Doorknob
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(doorX + doorW - 4, doorY + doorH / 2 + 1, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Stone Doorstep / Mat
+      ctx.fillStyle = '#64748b';
+      ctx.fillRect(doorX - 2, doorY + doorH - 2, doorW + 4, 3);
+
+      // 7. Porch Coach Lantern with Warm Light Pool
+      const porchLanternX = doorX - 6;
+      const porchLanternY = doorY + 6;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(porchLanternX - 1.5, porchLanternY - 3, 3, 6);
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.arc(porchLanternX, porchLanternY, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      const porchLight = ctx.createRadialGradient(porchLanternX, porchLanternY, 1, porchLanternX, porchLanternY, 18);
+      porchLight.addColorStop(0, 'rgba(254, 240, 138, 0.45)');
+      porchLight.addColorStop(1, 'rgba(254, 240, 138, 0)');
+      ctx.fillStyle = porchLight;
+      ctx.beginPath();
+      ctx.arc(porchLanternX, porchLanternY, 18, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     // High-Contrast Glassmorphic Building Label Badge
@@ -1910,6 +2269,7 @@ export class RouteExplorationEngine {
     const isGym = b.type === 'gym';
     const isMart = b.type === 'mart';
     const isCenter = b.type === 'center';
+    const isHouse = b.type === 'house';
 
     const tagBg = isGym
       ? 'rgba(113, 63, 18, 0.94)'
@@ -1917,10 +2277,12 @@ export class RouteExplorationEngine {
         ? 'rgba(30, 58, 138, 0.94)'
         : isCenter
           ? 'rgba(153, 27, 27, 0.94)'
-          : 'rgba(15, 23, 42, 0.9)';
+          : isHouse
+            ? 'rgba(22, 101, 52, 0.94)'
+            : 'rgba(15, 23, 42, 0.9)';
 
-    const tagBorder = isGym ? '#facc15' : isMart ? '#60a5fa' : isCenter ? '#fca5a5' : '#94a3b8';
-    const tagIcon = isGym ? '🏆' : isMart ? '🛒' : isCenter ? '🏥' : '🚪';
+    const tagBorder = isGym ? '#facc15' : isMart ? '#60a5fa' : isCenter ? '#fca5a5' : isHouse ? '#86efac' : '#94a3b8';
+    const tagIcon = isGym ? '🏆' : isMart ? '🛒' : isCenter ? '🏥' : isHouse ? '🏡' : '🚪';
 
     ctx.font = '800 11px system-ui';
     const textWidth = ctx.measureText(`${tagIcon} ${b.label}`).width;
@@ -2676,7 +3038,258 @@ export class RouteExplorationEngine {
       }
     }
 
+    // 9. Fountains (Solid Stone Basin)
+    if (route.fountains) {
+      for (const fn of route.fountains) {
+        if (Math.hypot(x - fn.x, footY - fn.y) < fn.radius + 6) {
+          return true;
+        }
+      }
+    }
+
+    // 10. Streetlamps (Solid Cast Iron Post)
+    if (route.streetlamps) {
+      for (const sl of route.streetlamps) {
+        if (Math.hypot(x - sl.x, footY - sl.y) < 10) {
+          return true;
+        }
+      }
+    }
+
+    // 11. Benches  
+    if (route.benches) {
+      for (const b of route.benches) {
+        const bw = b.w || 28;
+        if (
+          x >= b.x - 4 &&
+          x <= b.x + bw + 4 &&
+          footY >= b.y - 2 &&
+          footY <= b.y + 14 + 4
+        ) {
+          return true;
+        }
+      }
+    }
+
     return false;
+  }
+
+  private renderFountains(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    if (!route.fountains || route.fountains.length === 0) return;
+
+    for (const f of route.fountains) {
+      ctx.save();
+      const x = f.x;
+      const y = f.y;
+      const r = f.radius;
+
+      // 1. Soft Contact Drop Shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+      ctx.beginPath();
+      ctx.ellipse(x, y + r * 0.4, r + 6, r * 0.6 + 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2. Outer Stone Basin Curb
+      ctx.fillStyle = '#64748b';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Outer Bevel Highlight
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(x, y, r - 1, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Inner Basin Wall Shadow
+      ctx.fillStyle = '#334155';
+      ctx.beginPath();
+      ctx.arc(x, y, r - 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 3. Clear Blue Water Pool with Animated Ripples
+      const waterGrad = ctx.createRadialGradient(x, y, 2, x, y, r - 6);
+      waterGrad.addColorStop(0, '#38bdf8');
+      waterGrad.addColorStop(0.6, '#0284c7');
+      waterGrad.addColorStop(1, '#0369a1');
+      ctx.fillStyle = waterGrad;
+      ctx.beginPath();
+      ctx.arc(x, y, r - 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Animated Water Caustic Rings
+      for (let ri = 1; ri <= 3; ri++) {
+        const ringProg = ((this.time * 0.8 + ri * 0.33) % 1.0);
+        const ringR = (r - 8) * ringProg;
+        const ringAlpha = (1 - ringProg) * 0.5;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${ringAlpha})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(x, y, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // 4. Center Tiered Carved Stone Pedestal
+      const pedR = r * 0.36;
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath();
+      ctx.arc(x, y, pedR, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#e2e8f0';
+      ctx.beginPath();
+      ctx.arc(x, y - 2, pedR * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Center Spout Nozzle
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(x, y - 3, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 5. Animated Water Jet Sprays (Shooting upwards and splashing)
+      const jetH = 14 + Math.sin(this.time * 4) * 3;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 3);
+      ctx.lineTo(x, y - 3 - jetH);
+      ctx.stroke();
+
+      // Splashing droplets falling in radial arcs
+      const dropletCount = 6;
+      for (let di = 0; di < dropletCount; di++) {
+        const angle = (di / dropletCount) * Math.PI * 2 + (this.time * 1.5);
+        const sprayDist = (r * 0.5) * ((Math.sin(this.time * 3 + di) + 1.2) * 0.5);
+        const dropX = x + Math.cos(angle) * sprayDist;
+        const dropY = y - 2 + Math.sin(angle) * (sprayDist * 0.6);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.beginPath();
+        ctx.arc(dropX, dropY, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+  }
+
+  private renderStreetlamps(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    if (!route.streetlamps || route.streetlamps.length === 0) return;
+
+    for (const lamp of route.streetlamps) {
+      ctx.save();
+      const lx = lamp.x;
+      const ly = lamp.y;
+
+      const isTech = lamp.style === 'modern' || route.id === 6;
+      const isGold = lamp.style === 'ornate' || route.id === 8 || route.id === 4;
+      const isFire = route.id === 7;
+      const isLantern = lamp.style === 'lantern' || route.id === 5;
+
+      const postColor = isGold ? '#ca8a04' : isTech ? '#64748b' : isLantern ? '#78350f' : isFire ? '#450a0a' : '#0f172a';
+      const glowColor1 = isTech ? 'rgba(56, 189, 248, 0.35)' : isFire ? 'rgba(249, 115, 22, 0.4)' : isGold ? 'rgba(250, 204, 21, 0.38)' : 'rgba(254, 240, 138, 0.32)';
+      const glowColor2 = isTech ? 'rgba(56, 189, 248, 0.12)' : isFire ? 'rgba(249, 115, 22, 0.16)' : isGold ? 'rgba(250, 204, 21, 0.15)' : 'rgba(253, 224, 71, 0.14)';
+      const glassColor = isTech ? '#7dd3fc' : isFire ? '#fb923c' : '#fef08a';
+
+      // 1. Warm Radial Light Cast on Ground
+      const lightPool = ctx.createRadialGradient(lx, ly - 22, 4, lx, ly - 10, 65);
+      lightPool.addColorStop(0, glowColor1);
+      lightPool.addColorStop(0.5, glowColor2);
+      lightPool.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = lightPool;
+      ctx.beginPath();
+      ctx.ellipse(lx, ly, 65, 34, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2. Base Contact Shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(lx, ly + 2, 7, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 3. Ornate Post Base & Shaft
+      ctx.fillStyle = postColor;
+      ctx.fillRect(lx - 4, ly - 3, 8, 4);
+      ctx.fillRect(lx - 2.5, ly - 8, 5, 5);
+      ctx.fillRect(lx - 1.5, ly - 26, 3, 18);
+
+      // Bracket Arms
+      ctx.strokeStyle = postColor;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(lx - 5, ly - 20);
+      ctx.lineTo(lx, ly - 25);
+      ctx.lineTo(lx + 5, ly - 20);
+      ctx.stroke();
+
+      // 4. Lantern Housing
+      ctx.fillStyle = postColor;
+      ctx.fillRect(lx - 5, ly - 32, 10, 2);
+      ctx.fillRect(lx - 4, ly - 24, 8, 2);
+
+      // Glowing Glass Core
+      ctx.fillStyle = glassColor;
+      ctx.fillRect(lx - 3.5, ly - 30, 7, 7);
+
+      // Core Filament Highlight
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(lx, ly - 26.5, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Finial Spike on top
+      ctx.strokeStyle = postColor;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(lx, ly - 32);
+      ctx.lineTo(lx, ly - 36);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+  }
+
+  private renderBenches(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    if (!route.benches || route.benches.length === 0) return;
+
+    for (const b of route.benches) {
+      ctx.save();
+      const bx = b.x;
+      const by = b.y;
+      const bw = b.w || 28;
+      const bh = 14;
+
+      // Drop shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.beginPath();
+      ctx.roundRect(bx - 2, by + bh - 2, bw + 4, 4, 2);
+      ctx.fill();
+
+      // Wrought Iron Frame / Legs
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(bx, by + 4, 3, bh - 4);
+      ctx.fillRect(bx + bw - 3, by + 4, 3, bh - 4);
+
+      // Wooden Slats (Backrest & Seat)
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(bx - 1, by, bw + 2, 4);
+      ctx.fillStyle = '#b45309';
+      ctx.fillRect(bx - 1, by + 6, bw + 2, 4);
+
+      // Slat Highlights
+      ctx.fillStyle = '#d97706';
+      ctx.fillRect(bx, by, bw, 1.2);
+      ctx.fillRect(bx, by + 6, bw, 1.2);
+
+      // Iron Armrests
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(bx - 2, by + 2, 2, 6);
+      ctx.fillRect(bx + bw, by + 2, 2, 6);
+
+      ctx.restore();
+    }
   }
 
   private renderStones(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {

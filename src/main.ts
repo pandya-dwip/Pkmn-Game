@@ -29,6 +29,9 @@ import { modernPokedexView } from './ui/ModernPokedexView';
 import { pokedexManager } from './systems/PokedexManager';
 import { ICONS } from './ui/icons';
 import { KANTO_CITIES, KantoCityInfo, getFurthestUnlockedCityIndex } from './data/cities';
+import { characterSelectionView } from './ui/CharacterSelectionView';
+import { kantoWorldMapView } from './ui/KantoWorldMapView';
+import { getTrainerCharacter } from './data/characters';
 
 // ============================================================================
 // GLOBAL CONFIGURATION & TYPES
@@ -110,6 +113,7 @@ export const BALL_CONFIG = {
 export interface GameSaveState {
   trainerName: string;
   starterId: number;
+  selectedTrainerId?: string;
   phase: GamePhase;
   gymIndex: number;            // 0 to 7 (Gyms 1 to 8), 8 = Qualified for Championship
   badges: string[];            // Names of earned badges: e.g. ['Boulder Badge', 'Cascade Badge', ...]
@@ -308,6 +312,7 @@ export const load = (): GameSaveState | null => {
     const g: GameSaveState = JSON.parse(raw);
     if (g && !g.defeated && g.team && g.team.length > 0) {
       g.trainerName = g.trainerName || 'TRAINER';
+      g.selectedTrainerId = g.selectedTrainerId || 'male_red';
       g.gymIndex = g.gymIndex ?? 0;
       g.badges = g.badges || [];
       g.money = g.money ?? 1000;
@@ -510,8 +515,9 @@ export function titleScr(): void {
 
   $('#bc').onclick = () => {
     G = load()!;
-    if (G.phase === 'INTRO' || G.phase === 'NAMING') namingScr();
-    else if (G.phase === 'STARTER_SELECTION') starterScr();
+    routeExplorationEngine.selectedTrainerId = G.selectedTrainerId || 'male_red';
+    if (G.phase === 'INTRO' || G.phase === 'NAMING') characterSelectionScr(G.trainerName);
+    else if (G.phase === 'STARTER_SELECTION') starterScr(G.trainerName, G.selectedTrainerId);
     else if (G.phase === 'ROUTE_ENCOUNTER') routeEncounterScr();
     else if (G.phase === 'POST_GYM_INTERACTION') postGymInteractionScr();
     else if (G.phase === 'CHAMPIONSHIP_BRACKET') championshipScr();
@@ -595,16 +601,16 @@ export async function introScr(): Promise<void> {
           <p style="margin:0;line-height:1.5;font-size:13.5px;color:#f8fafc">
             "Welcome to the world of Pokémon! My name is Professor Oak.<br><br>
             This world is inhabited far and wide by creatures called Pokémon. For some people, Pokémon are pets. Others use them for battles.<br><br>
-            Before you set out on your quest across Kanto, please tell me your name."
+            Before you set out on your quest across Kanto, please customize your trainer persona and tell me your name."
           </p>
         </div>
         <div class="col" style="max-width:320px;margin:0 auto">
-          <button id="intro-step2" style="text-align:center">TELL PROFESSOR YOUR NAME ➔</button>
+          <button id="intro-step2" style="text-align:center">CHOOSE YOUR TRAINER ➔</button>
         </div>
       </div>
     `;
 
-    $('#intro-step2').onclick = () => namingScr();
+    $('#intro-step2').onclick = () => characterSelectionScr('DWIP');
   };
 }
 
@@ -638,7 +644,7 @@ export function namingScr(): void {
       return;
     }
     sound.beep(880, 0.15, 'triangle');
-    starterScr(raw);
+    characterSelectionScr(raw);
   };
 
   $('#name-submit').onclick = handleConfirm;
@@ -648,9 +654,26 @@ export function namingScr(): void {
 }
 
 // ============================================================================
+// SCREEN 3.5: TRAINER SELECTION & CUSTOMIZATION
+// ============================================================================
+export function characterSelectionScr(initialName: string = 'DWIP'): void {
+  sound.music('menu');
+  show('map');
+
+  characterSelectionView.render(
+    $('#map'),
+    initialName,
+    (chosenTrainerId: string, finalName: string) => {
+      sound.beep(880, 0.18, 'triangle');
+      starterScr(finalName, chosenTrainerId);
+    }
+  );
+}
+
+// ============================================================================
 // SCREEN 4: STARTER SELECTION (5 Starters: Bulbasaur, Charmander, Squirtle, Pikachu, Eevee)
 // ============================================================================
-export function starterScr(trainerName: string = 'DWIP'): void {
+export function starterScr(trainerName: string = 'DWIP', selectedTrainerId: string = 'male_red'): void {
   sound.music('select');
   show('map');
 
@@ -720,6 +743,7 @@ export function starterScr(trainerName: string = 'DWIP'): void {
         G = {
           trainerName: trainerName.trim() || 'TRAINER',
           starterId: chosen.id,
+          selectedTrainerId: selectedTrainerId || 'male_red',
           phase: 'ROUTE_ENCOUNTER',
           gymIndex: 0,
           badges: [],
@@ -742,6 +766,7 @@ export function starterScr(trainerName: string = 'DWIP'): void {
           defeated: false,
         };
 
+        routeExplorationEngine.selectedTrainerId = G.selectedTrainerId || 'male_red';
         pokedexManager.recordCaught(chosen.id);
         save();
 
@@ -808,96 +833,56 @@ export async function visitPokemonCenter(): Promise<void> {
 // ============================================================================
 // TOWN MAP & FAST TRAVEL SUBSYSTEM
 // ============================================================================
-export async function openTownMapModal(): Promise<void> {
+export function openTownMapModal(): void {
   const furthestIdx = getFurthestUnlockedCityIndex(G.gymIndex, (G.badges || []).length >= 8);
   const currentCityIdx = G.currentCityIndex ?? furthestIdx;
 
-  const choices = KANTO_CITIES.slice(0, furthestIdx + 1).map((c) => {
-    const isCurrent = c.index === currentCityIdx;
-    const isFurthest = c.index === furthestIdx;
-    const gymDef = c.gymIndex !== undefined ? KANTO_GYMS[c.gymIndex] : null;
-    const hasBadge = gymDef ? G.badges.includes(gymDef.badgeName) : false;
-
-    let badgeStatus = '';
-    if (gymDef) {
-      badgeStatus = hasBadge
-        ? `<span style="color:#22c55e;font-weight:800">✓ ${gymDef.badgeName} (${gymDef.leader} Defeated)</span>`
-        : `<span style="color:#eab308;font-weight:800">⚔️ ${gymDef.city} Gym (${gymDef.leader})</span>`;
-    } else if (c.index === 0) {
-      badgeStatus = `<span style="color:#94a3b8">🌿 Starter Area & Professor's Lab</span>`;
-    } else if (c.index === 9) {
-      badgeStatus = `<span style="color:#facc15;font-weight:800">🏆 Championship & Elite Four</span>`;
-    }
-
-    const tag = isCurrent
-      ? `<span style="background:#22c55e;color:#0f172a;font-size:10px;font-weight:900;padding:2px 6px;border-radius:4px;margin-left:6px">CURRENT LOCATION</span>`
-      : isFurthest
-      ? `<span style="background:#38bdf8;color:#0f172a;font-size:10px;font-weight:900;padding:2px 6px;border-radius:4px;margin-left:6px">LATEST FRONTIER</span>`
-      : '';
-
-    return {
-      h: `
-        <div style="display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left">
-          <div style="display:flex;align-items:center;gap:10px">
-            <span style="font-size:24px">${c.icon}</span>
-            <div>
-              <div style="font-weight:900;font-size:13.5px;color:#f8fafc">${c.name} ${tag}</div>
-              <div style="font-size:11px;color:#94a3b8;margin-top:2px">${c.region} · ${badgeStatus}</div>
-            </div>
-          </div>
-          <span style="font-size:12px;font-weight:800;color:${isCurrent ? '#64748b' : '#38bdf8'};white-space:nowrap;margin-left:8px">
-            ${isCurrent ? '📍 HERE' : 'TRAVEL ➔'}
-          </span>
-        </div>
-      `,
-    };
-  });
-
-  const pickIdx = await pick(
-    `🗺️ <b>KANTO TOWN MAP & FAST TRAVEL</b><br><small style="color:#94a3b8">Travel instantly to any previously visited city or current frontier in Kanto:</small>`,
-    choices,
-    true,
-    'l'
-  );
-
-  if (pickIdx >= 0) {
-    const targetCity = KANTO_CITIES[pickIdx];
-    if (targetCity.index === currentCityIdx) {
-      await note([`You are already in <b>${targetCity.name}</b>!`]);
-      journeyHubScr();
-      return;
-    }
-
-    // Fast travel sound
-    sound.beep(523, 0.15, 'sine');
-    sound.beep(659, 0.15, 'sine', 0.1, 0.1);
-    sound.beep(784, 0.25, 'sine', 0.15, 0.2);
-
-    G.currentCityIndex = targetCity.index;
-    G.savedRoutePos = null; // Clear saved route position so exploration starts fresh at this city's route
-    G.currentRouteId = targetCity.routeId;
-    save();
-
-    await note([
-      `<h1>🗺️ ARRIVED IN ${targetCity.name.toUpperCase()}!</h1>`,
-      `<div style="font-size:32px;text-align:center;margin:8px 0">${targetCity.icon}</div>`,
-      `<p style="text-align:center;font-size:14px;color:#f8fafc"><b>${targetCity.region}</b></p>`,
-      `<p style="text-align:center;color:#94a3b8;margin-top:6px">${targetCity.desc}</p>`,
-      `<p style="text-align:center;color:#38bdf8;font-size:12px;margin-top:10px">You can heal at the Pokémon Center, shop at the Poké Mart, train, explore connecting routes, or travel to another city anytime!</p>`,
-    ]);
-
-    if (targetCity.index === 9 && G.gymIndex >= 8) {
-      if (G.phase === 'ELITE_FOUR_HUB' || G.phase === 'ELITE_FOUR_BATTLE') {
-        eliteFourHub();
-      } else {
-        championshipScr();
+  kantoWorldMapView.open({
+    currentCityIndex: currentCityIdx,
+    gymIndex: G.gymIndex,
+    has8Badges: (G.badges || []).length >= 8,
+    onTravel: async (targetCityIdx: number) => {
+      const targetCity = KANTO_CITIES[targetCityIdx];
+      if (targetCity.index === currentCityIdx) {
+        await note([`You are already in <b>${targetCity.name}</b>!`]);
+        return;
       }
-    } else {
-      journeyHubScr();
-    }
-  } else {
-    journeyHubScr();
-  }
+
+      sound.beep(523, 0.15, 'sine');
+      sound.beep(659, 0.15, 'sine', 0.1, 0.1);
+      sound.beep(784, 0.25, 'sine', 0.15, 0.2);
+
+      G.currentCityIndex = targetCity.index;
+      G.savedRoutePos = null;
+      G.currentRouteId = targetCity.routeId;
+      save();
+
+      await note([
+        `<h1>🗺️ ARRIVED IN ${targetCity.name.toUpperCase()}!</h1>`,
+        `<div style="font-size:32px;text-align:center;margin:8px 0">${targetCity.icon}</div>`,
+        `<p style="text-align:center;font-size:14px;color:#f8fafc"><b>${targetCity.region}</b></p>`,
+        `<p style="text-align:center;color:#94a3b8;margin-top:6px">${targetCity.desc}</p>`,
+        `<p style="text-align:center;color:#38bdf8;font-size:12px;margin-top:10px">You can heal at the Pokémon Center, shop at the Poké Mart, train, explore connecting routes, or travel to another city anytime!</p>`,
+      ]);
+
+      if (targetCity.index === 9 && G.gymIndex >= 8) {
+        if (G.phase === 'ELITE_FOUR_HUB' || G.phase === 'ELITE_FOUR_BATTLE') {
+          eliteFourHub();
+        } else {
+          championshipScr();
+        }
+      } else {
+        journeyHubScr();
+      }
+    },
+    onClose: () => {
+      // If closed while previously exploring a route canvas, seamlessly resume exploration
+      if ($('#route-canvas')) {
+        const rPos = G?.savedRoutePos;
+        enterRouteExploration(rPos?.routeId, rPos?.x, rPos?.y);
+      }
+    },
+  });
 }
 
 export function enterRouteExploration(routeId?: number, resumeX?: number, resumeY?: number): void {
@@ -948,6 +933,7 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
   const canvas = $('#route-canvas') as HTMLCanvasElement;
   if (canvas) {
     routeExplorationEngine.init(canvas);
+    routeExplorationEngine.selectedTrainerId = G?.selectedTrainerId || 'male_red';
     routeExplorationEngine.loadRoute(routeDef, resumeX, resumeY);
     routeExplorationEngine.start();
   }
@@ -1261,6 +1247,7 @@ export function journeyHubScr(): void {
   const activeRouteId = G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? currentCity.routeId;
   const currentRouteDef = KANTO_JOURNEY_ROUTES[activeRouteId] || KANTO_JOURNEY_ROUTES[currentCity.routeId] || KANTO_JOURNEY_ROUTES[0];
   const cityName = currentCity.name;
+  const trainerChar = getTrainerCharacter(G.selectedTrainerId);
 
   let heroCardHTML = '';
 
@@ -1371,7 +1358,11 @@ export function journeyHubScr(): void {
 
   $('#map').innerHTML = `
     <h1>${cityName.toUpperCase()}</h1>
-    <p style="text-align:center">Trainer: <b>${G.trainerName.toUpperCase()}</b> · Party: ${G.team.length}/6</p>
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <span style="font-size:13px;color:#cbd5e1">Trainer: <b>${G.trainerName.toUpperCase()}</b></span>
+      <span style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);padding:2px 8px;border-radius:12px;font-size:11.5px;font-weight:700;color:${trainerChar.gender === 'male' ? '#38bdf8' : '#f472b6'}">${trainerChar.gender === 'male' ? '♂' : '♀'} ${trainerChar.name} · ${trainerChar.title}</span>
+      <span style="font-size:13px;color:#94a3b8">· Party: ${G.team.length}/6</span>
+    </div>
     ${renderBadgesBar(G.badges)}
     ${renderResourcesBar()}
 
@@ -3040,11 +3031,18 @@ export async function hallOfFameScr(): Promise<void> {
     localStorage.setItem('kantoEliteFourRecord', JSON.stringify(record));
   } catch { }
 
+  const trainerChar = getTrainerCharacter(G.selectedTrainerId);
+
   $('#map').innerHTML = `
     <div class="hof-container">
       <div class="hof-trophy">${ICONS.crown(44)}</div>
       <div class="hof-header">HALL OF FAME</div>
-      <div class="hof-trainer-title">GRAND CHAMPION: <b>${G.trainerName.toUpperCase()}</b></div>
+      <div class="hof-trainer-title">
+        GRAND CHAMPION: <b>${G.trainerName.toUpperCase()}</b>
+        <div style="font-size:13px;font-weight:700;color:${trainerChar.gender === 'male' ? '#38bdf8' : '#f472b6'};margin-top:4px">
+          ${trainerChar.gender === 'male' ? '♂' : '♀'} ${trainerChar.name} · ${trainerChar.title}
+        </div>
+      </div>
       <p style="font-size:12.5px;color:#cbd5e1;line-height:1.5;max-width:440px;margin:0 auto 12px">
         Having conquered all eight Kanto Gyms, emerged victorious from the 16-Player Championship, and vanquished the Elite Four, your name is permanently inscribed in the Pokémon League Hall of Fame!
       </p>

@@ -14,6 +14,7 @@ import { POKEMON_SPECIES_MAP } from '../data/pokemon';
 import { sound } from '../audio/SoundSynthesizer';
 import { generateEncounterMon, EncounterMon } from './EncounterSystem';
 import { inputManager } from './InputManager';
+import { drawCustomTrainerSprite } from '../data/characters';
 
 export interface RouteBuilding {
   type: 'center' | 'mart' | 'gym' | 'gate' | 'house' | 'museum' | 'dept_store' | 'silph' | 'safari_gate' | 'lab' | 'fan_club' | 'dojo';
@@ -87,7 +88,7 @@ export interface RouteTree {
   x: number;
   y: number;
   scale?: number;
-  type?: 'oak' | 'pine' | 'blossom' | 'mystic';
+  type?: 'oak' | 'pine' | 'blossom' | 'mystic' | 'palm' | 'autumn' | 'city';
 }
 
 export interface RouteLedge {
@@ -205,6 +206,8 @@ export class RouteExplorationEngine {
     grassSteps: 0,
     cooldownTimer: 0,
   };
+
+  public selectedTrainerId: string = 'male_red';
 
   // Active Route
   public currentRoute: RouteDefinition | null = null;
@@ -857,6 +860,63 @@ export class RouteExplorationEngine {
     }
   }
 
+  private renderParallaxBackdrop(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    const isWater = route.theme === 'water' || route.id === 3 || route.id === 7;
+    const isForest = route.theme === 'forest' || route.id === 1;
+    const isCity = route.theme === 'city' || route.id === 4 || route.id === 6;
+
+    // Distant parallax shift (slow camera factor)
+    const pX = -Math.floor(this.camX * 0.12);
+    const pY = -Math.floor(this.camY * 0.08);
+
+    ctx.save();
+    // Sky / Horizon gradient
+    const skyGrad = ctx.createLinearGradient(0, pY - 80, 0, pY + 140);
+    if (isWater) {
+      skyGrad.addColorStop(0, '#0369a1');
+      skyGrad.addColorStop(0.6, '#38bdf8');
+      skyGrad.addColorStop(1, '#bae6fd');
+    } else if (isCity) {
+      skyGrad.addColorStop(0, '#1e1b4b');
+      skyGrad.addColorStop(0.6, '#312e81');
+      skyGrad.addColorStop(1, '#6366f1');
+    } else {
+      skyGrad.addColorStop(0, '#14532d');
+      skyGrad.addColorStop(0.6, '#15803d');
+      skyGrad.addColorStop(1, '#86efac');
+    }
+
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, route.worldWidth, 80);
+
+    // Subtle distant hills
+    ctx.fillStyle = isWater ? 'rgba(7, 89, 133, 0.45)' : isCity ? 'rgba(30, 41, 59, 0.5)' : 'rgba(20, 83, 45, 0.45)';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for (let x = 0; x <= route.worldWidth; x += 120) {
+      const hillH = 35 + Math.sin(x * 0.02 + pX * 0.05) * 18;
+      ctx.lineTo(x, hillH);
+    }
+    ctx.lineTo(route.worldWidth, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  private getDefaultTreeType(route: RouteDefinition): 'oak' | 'pine' | 'blossom' | 'mystic' | 'palm' | 'autumn' | 'city' {
+    if (route.id === 1) return 'pine'; // Viridian Forest
+    if (route.id === 3 || route.id === 7) return 'palm'; // Vermilion Harbor, Cinnabar Island
+    if (route.id === 4) return 'blossom'; // Celadon
+    if (route.id === 5) return 'mystic'; // Fuchsia / Safari
+    if (route.id === 6) return 'city'; // Saffron
+    if (route.theme === 'forest') return 'pine';
+    if (route.theme === 'city') return 'city';
+    if (route.theme === 'water') return 'palm';
+    if (route.theme === 'rock') return 'autumn';
+    return 'oak';
+  }
+
   private render(): void {
     const ctx = this.ctx;
     const canvas = this.canvas;
@@ -873,6 +933,9 @@ export class RouteExplorationEngine {
     // Apply Camera Translation
     ctx.translate(-Math.floor(this.camX), -Math.floor(this.camY));
 
+    // 0. Distant Parallax Horizon Layer
+    this.renderParallaxBackdrop(ctx, route);
+
     // 1. Terrain Grass Base
     this.renderTerrain(ctx, route);
 
@@ -885,65 +948,135 @@ export class RouteExplorationEngine {
     // 4. Paths & Cobblestone Avenues
     this.renderPaths(ctx, route);
 
-    // 4.5 City Fountains
-    this.renderFountains(ctx, route);
-
-    // 4.6 City Benches
-    this.renderBenches(ctx, route);
-
-    // 5. Tall Grass with Wind Sway Animation & Wildflowers (Special mystical grass in Rare Sanctuary!)
+    // 5. Tall Grass with Wind Sway Animation & Wildflowers
     this.renderTallGrass(ctx, route);
 
-    // 6. Natural Stones & Boulders
-    this.renderStones(ctx, route);
-
-    // 6.5 Carved Wooden Signposts
-    this.renderSignposts(ctx, route);
-
-    // 7. Wooden Post-and-Rail Fences
-    this.renderFences(ctx, route);
-
-    // 8. Buildings (Pokémon Center, Poké Mart, Gym, Route Gate, Houses)
-    for (const b of route.buildings) {
-      this.renderBuilding(ctx, b);
+    // 6. 2.5D Unified Y-Sorted Depth Entities Layer
+    interface DepthEntity {
+      baseY: number;
+      draw: () => void;
     }
+    const depthEntities: DepthEntity[] = [];
 
-    // 8.5 Ornate City Streetlamps with Warm Radial Glow
-    this.renderStreetlamps(ctx, route);
-
-    // 9. Ground Items (3D Poké Balls with Sparkle)
-    for (const it of route.items) {
-      if (!it.collected) {
-        this.renderGroundItem(ctx, it);
+    // Fountains
+    if (route.fountains) {
+      for (const ft of route.fountains) {
+        depthEntities.push({
+          baseY: ft.y + ft.radius,
+          draw: () => this.drawSingleFountain(ctx, ft),
+        });
       }
     }
 
-    // 10. Trees BEHIND Player
-    this.renderTreesLayer(ctx, route, 'behind');
-
-    // 11. NPCs with Animated Interaction Prompts
-    for (const npc of route.npcs) {
-      this.renderNPC(ctx, npc);
+    // Benches
+    if (route.benches) {
+      for (const b of route.benches) {
+        depthEntities.push({
+          baseY: b.y + 14,
+          draw: () => this.drawSingleBench(ctx, b),
+        });
+      }
     }
 
-    // 12. Grass Particles
+    // Stones / Boulders
+    const stones = this.getRouteStones(route);
+    for (const s of stones) {
+      depthEntities.push({
+        baseY: s.y + s.radius * 0.8,
+        draw: () => this.drawStone(ctx, s),
+      });
+    }
+
+    // Signposts
+    if (route.signposts) {
+      for (const sp of route.signposts) {
+        depthEntities.push({
+          baseY: sp.y + 16,
+          draw: () => this.drawSingleSignpost(ctx, sp),
+        });
+      }
+    }
+
+    // Fences
+    const fences = this.getRouteFences(route);
+    for (const f of fences) {
+      depthEntities.push({
+        baseY: f.y + 16,
+        draw: () => this.drawSingleFence(ctx, f),
+      });
+    }
+
+    // Buildings
+    for (const b of route.buildings) {
+      depthEntities.push({
+        baseY: b.y + b.h,
+        draw: () => this.renderBuilding(ctx, b),
+      });
+    }
+
+    // Streetlamps
+    if (route.streetlamps) {
+      for (const l of route.streetlamps) {
+        depthEntities.push({
+          baseY: l.y + 4,
+          draw: () => this.drawSingleStreetlamp(ctx, l, route.id),
+        });
+      }
+    }
+
+    // Ground Items
+    for (const it of route.items) {
+      if (!it.collected) {
+        depthEntities.push({
+          baseY: it.y + 6,
+          draw: () => this.renderGroundItem(ctx, it),
+        });
+      }
+    }
+
+    // NPCs
+    for (const npc of route.npcs) {
+      depthEntities.push({
+        baseY: npc.y + 14,
+        draw: () => this.renderNPC(ctx, npc),
+      });
+    }
+
+    // Trees
+    const trees = this.getRouteTrees(route);
+    const defaultTreeType = this.getDefaultTreeType(route);
+    for (const t of trees) {
+      depthEntities.push({
+        baseY: t.y + 16,
+        draw: () => this.drawTree(ctx, t.x, t.y, t.scale || 1.0, t.type || defaultTreeType),
+      });
+    }
+
+    // Player Character
+    depthEntities.push({
+      baseY: this.player.y + 10,
+      draw: () => this.renderPlayer(ctx),
+    });
+
+    // Sort by baseline Y (higher Y = visually closer / in front)
+    depthEntities.sort((a, b) => a.baseY - b.baseY);
+
+    for (const entity of depthEntities) {
+      entity.draw();
+    }
+
+    // 7. Grass Particles
     this.renderGrassParticles(ctx);
 
-    // 13. Player Character (Detailed Red/Ash with Animated Walking Cycle)
-    this.renderPlayer(ctx);
-
-    // 14. Trees IN FRONT OF Player
-    this.renderTreesLayer(ctx, route, 'front');
-
-    // 15. Overhead Exit Signpost & Scenery
+    // 8. Overhead Exit Signpost & Scenery
     this.renderOverheadScenery(ctx, route);
 
-    // 16. Ambient Atmospheric Particles (Leaves & Pollen in the Breeze)
+    // 9. Ambient Atmospheric Particles (Leaves & Pollen in the Breeze)
     this.renderAtmosphere(ctx, route);
 
     ctx.restore();
 
-    // 17. Active Map Section HUD Badge & Rare Area Warning Banner (Screen Space)
+    // 10. Active Map Section HUD Badge & Rare Area Warning Banner (Screen Space)
     this.renderSectionBanner(ctx);
   }
 
@@ -3335,44 +3468,48 @@ export class RouteExplorationEngine {
     }
   }
 
+  public drawSingleSignpost(ctx: CanvasRenderingContext2D, sp: RouteSignpost): void {
+    ctx.save();
+
+    // 1. Contact Drop Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.beginPath();
+    ctx.ellipse(sp.x, sp.y + 16, 10, 4.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. Wooden Post
+    ctx.fillStyle = '#58240c';
+    ctx.fillRect(sp.x - 2.5, sp.y - 2, 5, 18);
+
+    // 3. Wooden Signboard with Bevel
+    ctx.fillStyle = '#78350f';
+    ctx.fillRect(sp.x - 17, sp.y - 18, 34, 18);
+    ctx.fillStyle = '#fef3c7';
+    ctx.fillRect(sp.x - 15, sp.y - 16, 30, 14);
+
+    // Board Text Lines
+    ctx.fillStyle = '#92400e';
+    ctx.fillRect(sp.x - 11, sp.y - 13, 22, 1.8);
+    ctx.fillRect(sp.x - 11, sp.y - 9.5, 18, 1.8);
+    ctx.fillRect(sp.x - 11, sp.y - 6, 14, 1.8);
+
+    // 4. Proximity Interactive Indicator (📋 Read bubble)
+    const dist = Math.hypot(this.player.x - sp.x, this.player.y - sp.y);
+    if (dist < 50) {
+      const bob = Math.sin(this.time * 5) * 3;
+      ctx.font = '13px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('📋', sp.x, sp.y - 24 + bob);
+    }
+
+    ctx.restore();
+  }
+
   private renderSignposts(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     if (!route.signposts || route.signposts.length === 0) return;
 
     for (const sp of route.signposts) {
-      ctx.save();
-
-      // 1. Contact Drop Shadow
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-      ctx.beginPath();
-      ctx.ellipse(sp.x, sp.y + 16, 10, 4.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 2. Wooden Post
-      ctx.fillStyle = '#58240c';
-      ctx.fillRect(sp.x - 2.5, sp.y - 2, 5, 18);
-
-      // 3. Wooden Signboard with Bevel
-      ctx.fillStyle = '#78350f';
-      ctx.fillRect(sp.x - 17, sp.y - 18, 34, 18);
-      ctx.fillStyle = '#fef3c7';
-      ctx.fillRect(sp.x - 15, sp.y - 16, 30, 14);
-
-      // Board Text Lines
-      ctx.fillStyle = '#92400e';
-      ctx.fillRect(sp.x - 11, sp.y - 13, 22, 1.8);
-      ctx.fillRect(sp.x - 11, sp.y - 9.5, 18, 1.8);
-      ctx.fillRect(sp.x - 11, sp.y - 6, 14, 1.8);
-
-      // 4. Proximity Interactive Indicator (📋 Read bubble)
-      const dist = Math.hypot(this.player.x - sp.x, this.player.y - sp.y);
-      if (dist < 50) {
-        const bob = Math.sin(this.time * 5) * 3;
-        ctx.font = '13px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText('📋', sp.x, sp.y - 24 + bob);
-      }
-
-      ctx.restore();
+      this.drawSingleSignpost(ctx, sp);
     }
   }
 
@@ -3390,170 +3527,17 @@ export class RouteExplorationEngine {
   }
 
   private renderPlayer(ctx: CanvasRenderingContext2D): void {
-    const px = this.player.x;
-    const py = this.player.y;
-    const dir = this.player.dir;
-    const anim = this.player.animFrame;
-    const bob = anim === 1 ? -2 : anim === 3 ? 2 : 0;
-    const legSwing = anim === 1 ? -3.5 : anim === 3 ? 3.5 : 0;
-
-    ctx.save();
-
-    // 1. Realistic Elliptical Ground Drop Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
-    ctx.beginPath();
-    ctx.ellipse(px, py + 13, 12, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 2. Denim Jeans (Indigo with crease shading)
-    ctx.fillStyle = '#1e3a8a';
-    if (dir === 'down' || dir === 'up') {
-      ctx.fillRect(px - 6, py + 3 + bob + (dir === 'down' ? legSwing : -legSwing), 5, 9);
-      ctx.fillRect(px + 1, py + 3 + bob + (dir === 'down' ? -legSwing : legSwing), 5, 9);
-      // Knee highlight
-      ctx.fillStyle = '#2563eb';
-      ctx.fillRect(px - 5, py + 6 + bob + (dir === 'down' ? legSwing : -legSwing), 3, 2);
-      ctx.fillRect(px + 2, py + 6 + bob + (dir === 'down' ? -legSwing : legSwing), 3, 2);
-    } else {
-      ctx.fillRect(px - 5 + legSwing, py + 3 + bob, 10, 9);
-      ctx.fillStyle = '#2563eb';
-      ctx.fillRect(px - 3 + legSwing, py + 6 + bob, 6, 2);
-    }
-
-    // 3. Running Sneakers (Red with White Rubber Midsoles)
-    ctx.fillStyle = '#dc2626';
-    if (dir === 'down' || dir === 'up') {
-      ctx.fillRect(px - 7, py + 10 + bob, 6, 4);
-      ctx.fillRect(px + 1, py + 10 + bob, 6, 4);
-      ctx.fillStyle = '#ffffff'; // White soles
-      ctx.fillRect(px - 7, py + 13 + bob, 6, 2);
-      ctx.fillRect(px + 1, py + 13 + bob, 6, 2);
-    } else {
-      const shoeDir = dir === 'right' ? 1 : -1;
-      ctx.fillRect(px - 6 + legSwing, py + 10 + bob, 11, 4);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(px - 6 + legSwing + (shoeDir > 0 ? 2 : 0), py + 13 + bob, 9, 2);
-    }
-
-    // 4. Green Explorer Backpack (Behind player when facing up or side)
-    if (dir === 'up' || dir === 'left' || dir === 'right') {
-      ctx.fillStyle = '#15803d';
-      const bpX = dir === 'up' ? px - 6 : dir === 'left' ? px + 2 : px - 8;
-      ctx.fillRect(bpX, py - 6 + bob, 6, 11);
-      ctx.fillStyle = '#166534';
-      ctx.fillRect(bpX + 1, py - 3 + bob, 4, 6);
-      // Backpack buckle
-      ctx.fillStyle = '#facc15';
-      ctx.fillRect(bpX + 2, py - 1 + bob, 2, 2);
-    }
-
-    // 5. Red Trainer Vest / Jacket
-    ctx.fillStyle = '#dc2626';
-    ctx.fillRect(px - 7, py - 7 + bob, 14, 12);
-
-    // White Undershirt with Collar & Zipper
-    ctx.fillStyle = '#ffffff';
-    if (dir === 'down') {
-      ctx.fillRect(px - 3, py - 7 + bob, 6, 5);
-      // Vest center zipper
-      ctx.fillStyle = '#f8fafc';
-      ctx.fillRect(px - 1, py - 3 + bob, 2, 8);
-    } else if (dir === 'left' || dir === 'right') {
-      const colX = dir === 'left' ? px - 4 : px + 1;
-      ctx.fillRect(colX, py - 7 + bob, 3, 4);
-    }
-
-    // Arm Swings with Skin Hands
-    ctx.fillStyle = '#dc2626';
-    if (dir === 'down' || dir === 'up') {
-      ctx.fillRect(px - 9, py - 6 + bob - legSwing, 3, 7);
-      ctx.fillRect(px + 6, py - 6 + bob + legSwing, 3, 7);
-      // Skin hands
-      ctx.fillStyle = '#fed7aa';
-      ctx.fillRect(px - 9, py + 1 + bob - legSwing, 3, 3);
-      ctx.fillRect(px + 6, py + 1 + bob + legSwing, 3, 3);
-    }
-
-    // 6. Head / Face & Anime Eyes
-    ctx.fillStyle = '#fed7aa';
-    ctx.fillRect(px - 5, py - 17 + bob, 10, 10);
-
-    // Spiky Hair bangs peeking out
-    ctx.fillStyle = '#292524';
-    ctx.fillRect(px - 6, py - 18 + bob, 12, 3);
-    if (dir === 'down') {
-      ctx.fillRect(px - 5, py - 15 + bob, 2, 3);
-      ctx.fillRect(px + 3, py - 15 + bob, 2, 3);
-
-      // Expressive Anime Eyes with Catchlights
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(px - 3, py - 13 + bob, 2, 3);
-      ctx.fillRect(px + 1, py - 13 + bob, 2, 3);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(px - 3, py - 13 + bob, 1, 1);
-      ctx.fillRect(px + 1, py - 13 + bob, 1, 1);
-    } else if (dir === 'left') {
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(px - 4, py - 13 + bob, 2, 3);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(px - 4, py - 13 + bob, 1, 1);
-    } else if (dir === 'right') {
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(px + 2, py - 13 + bob, 2, 3);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(px + 3, py - 13 + bob, 1, 1);
-    }
-
-    // 7. Iconic Red Trainer Baseball Cap
-    ctx.fillStyle = '#dc2626';
-    ctx.fillRect(px - 6, py - 21 + bob, 12, 6);
-
-    // White Half-Circle Emblem on Cap
-    ctx.fillStyle = '#ffffff';
-    if (dir === 'down' || dir === 'left' || dir === 'right') {
-      ctx.fillRect(px - 2, py - 20 + bob, 4, 3);
-    }
-
-    // Curved Visor / Brim
-    ctx.fillStyle = '#ffffff';
-    const visorOffset = dir === 'left' ? -9 : dir === 'right' ? 3 : -5;
-    const visorW = dir === 'down' ? 10 : 7;
-    ctx.fillRect(px + visorOffset, py - 16 + bob, visorW, 2.5);
-
-    // Dark Under-Visor Shadow over Eyes
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(px + visorOffset, py - 14 + bob, visorW, 1.2);
-
-    // 8. Tall Grass Immersion: Overlapping grass blades covering legs when wading in grass
-    if (this.player.inGrass) {
-      const gSway = Math.sin(this.time * 3 + px * 0.1) * 2.5;
-      ctx.fillStyle = '#40916c';
-      ctx.beginPath();
-      ctx.moveTo(px - 9, py + 14);
-      ctx.lineTo(px - 7 + gSway, py + 3);
-      ctx.lineTo(px - 4, py + 14);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#52b788';
-      ctx.beginPath();
-      ctx.moveTo(px - 3, py + 14);
-      ctx.lineTo(px + gSway, py + 1);
-      ctx.lineTo(px + 3, py + 14);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#40916c';
-      ctx.beginPath();
-      ctx.moveTo(px + 4, py + 14);
-      ctx.lineTo(px + 7 + gSway, py + 4);
-      ctx.lineTo(px + 9, py + 14);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    ctx.restore();
+    drawCustomTrainerSprite(
+      ctx,
+      this.player.x,
+      this.player.y,
+      this.player.dir,
+      this.player.animFrame,
+      this.selectedTrainerId,
+      this.player.inGrass,
+      this.time,
+      1.0
+    );
   }
 
   public isPointOnRoad(x: number, y: number, route: RouteDefinition): boolean {
@@ -3627,50 +3611,92 @@ export class RouteExplorationEngine {
       return route.trees;
     }
     const trees: RouteTree[] = [];
-    // Top boundary dense tree line
-    for (let x = 30; x < route.worldWidth - 20; x += 44) {
-      const tHash = Math.abs(Math.sin(x * 31.7 + route.id));
-      const ty = 60 + ((tHash - 0.5) * 16);
-      trees.push({
-        x,
-        y: ty,
-        scale: 0.95 + tHash * 0.15,
-        type: route.theme === 'forest' ? 'pine' : 'oak',
-      });
-    }
-    // Bottom boundary dense tree line
-    for (let x = 30; x < route.worldWidth - 20; x += 44) {
-      const tHash = Math.abs(Math.cos(x * 29.3 + route.id));
-      const ty = route.worldHeight - 50 + ((tHash - 0.5) * 16);
-      trees.push({
-        x,
-        y: ty,
-        scale: 0.95 + tHash * 0.15,
-        type: route.theme === 'forest' ? 'pine' : 'oak',
-      });
-    }
-    // Scattered meadow shade trees
-    for (let x = 180; x < route.worldWidth - 400; x += 280) {
-      const tHash = Math.abs(Math.sin(x * 47.1));
-      const ty = 170 + tHash * 40;
-      if (!this.isPointOnRoad(x, ty, route)) {
-        trees.push({
-          x,
-          y: ty,
-          scale: 1.1 + tHash * 0.2,
-          type: route.theme === 'forest' ? 'pine' : 'oak',
-        });
-      }
-      const ty2 = route.worldHeight - 240 - tHash * 40;
-      if (!this.isPointOnRoad(x + 100, ty2, route)) {
-        trees.push({
-          x: x + 100,
-          y: ty2,
-          scale: 1.05 + tHash * 0.2,
-          type: route.theme === 'forest' ? 'pine' : 'oak',
-        });
+    const rId = route.id;
+
+    // Determine regional tree palette for this location
+    const getTreeTypeForPos = (x: number, y: number, isBorder: boolean): 'oak' | 'pine' | 'blossom' | 'mystic' | 'palm' | 'autumn' | 'city' => {
+      if (rId === 3 || rId === 7) return 'palm'; // Vermilion & Cinnabar coastal
+      if (rId === 4) return (x > 1800 && (Math.round(x / 50) % 2 === 0)) ? 'city' : 'blossom'; // Celadon gardens & urban
+      if (rId === 6) return (x % 3 === 0) ? 'autumn' : 'city'; // Saffron metropolis & Silph plaza
+      if (rId === 5) return (Math.round(x / 40) % 2 === 0) ? 'mystic' : 'pine'; // Fuchsia safari & ninja groves
+      if (rId === 1) return (x > 1600) ? 'autumn' : 'pine'; // Pewter granite vs Viridian Forest
+      if (rId === 2) return (x < 1200) ? 'pine' : (x > 2000 ? 'blossom' : 'oak'); // Mt Moon vs Cerulean
+      if (rId === 8) return (Math.round(x / 60) % 2 === 0) ? 'autumn' : 'pine'; // Victory Road
+      if (rId === 0) return (y < 400 && x > 700 && x < 1400) ? 'blossom' : 'oak'; // Blossom Terrace
+      return route.theme === 'forest' ? 'pine' : route.theme === 'water' ? 'palm' : route.theme === 'rock' ? 'autumn' : 'oak';
+    };
+
+    // 1. Organic Northern Boundary Forest Line with Cluster Copses
+    for (let x = 36; x < route.worldWidth - 24; x += 52) {
+      const h1 = Math.abs(Math.sin(x * 13.7 + rId * 7.9));
+      const h2 = Math.abs(Math.cos(x * 29.3 + rId * 3.1));
+      const ty = 54 + (h1 - 0.5) * 26;
+      const tScale = 0.88 + h2 * 0.32;
+      const tType = getTreeTypeForPos(x, ty, true);
+      trees.push({ x, y: ty, scale: tScale, type: tType });
+
+      // Organic secondary tree depth in cluster
+      if (h1 > 0.45 && !this.isPointOnRoad(x + 18, ty + 24, route) && !this.isInsideBuilding(x + 18, ty + 24, route)) {
+        trees.push({ x: x + 18, y: ty + 24, scale: tScale * 0.92, type: tType });
       }
     }
+
+    // 2. Organic Southern Boundary Forest Line with Cluster Copses
+    for (let x = 36; x < route.worldWidth - 24; x += 52) {
+      const h1 = Math.abs(Math.cos(x * 17.3 + rId * 5.3));
+      const h2 = Math.abs(Math.sin(x * 31.1 + rId * 11.7));
+      const ty = route.worldHeight - 48 + (h1 - 0.5) * 24;
+      const tScale = 0.88 + h2 * 0.32;
+      const tType = getTreeTypeForPos(x, ty, true);
+      trees.push({ x, y: ty, scale: tScale, type: tType });
+
+      // Organic secondary tree depth in cluster
+      if (h1 > 0.48 && !this.isPointOnRoad(x - 16, ty - 22, route) && !this.isInsideBuilding(x - 16, ty - 22, route)) {
+        trees.push({ x: x - 16, y: ty - 22, scale: tScale * 0.92, type: tType });
+      }
+    }
+
+    // 3. Natural Interior Groves & Shade Clusters (Non-linear, cluster formations)
+    const groveSpacing = (route.theme === 'forest' || rId === 5) ? 140 : 210;
+    for (let gx = 140; gx < route.worldWidth - 160; gx += groveSpacing) {
+      const gHash = Math.abs(Math.sin(gx * 37.3 + rId * 41.9));
+      const gHash2 = Math.abs(Math.cos(gx * 19.1 + rId * 13.7));
+
+      // Northern interior copse
+      const ny = 145 + gHash * 90;
+      if (!this.isPointOnRoad(gx, ny, route) && !this.isInsideBuilding(gx, ny, route)) {
+        const mainScale = 0.95 + gHash2 * 0.35;
+        const mainType = getTreeTypeForPos(gx, ny, false);
+        trees.push({ x: gx, y: ny, scale: mainScale, type: mainType });
+
+        // Companion tree to create realistic natural cluster
+        if (gHash > 0.38) {
+          const compX = gx + (gHash2 > 0.5 ? 34 : -32);
+          const compY = ny + (gHash > 0.6 ? 22 : -18);
+          if (!this.isPointOnRoad(compX, compY, route) && !this.isInsideBuilding(compX, compY, route)) {
+            trees.push({ x: compX, y: compY, scale: mainScale * 0.86, type: mainType });
+          }
+        }
+      }
+
+      // Southern interior copse
+      const sy = route.worldHeight - 160 - gHash2 * 90;
+      if (!this.isPointOnRoad(gx + 60, sy, route) && !this.isInsideBuilding(gx + 60, sy, route)) {
+        const mainScale = 0.95 + gHash * 0.35;
+        const mainType = getTreeTypeForPos(gx + 60, sy, false);
+        trees.push({ x: gx + 60, y: sy, scale: mainScale, type: mainType });
+
+        // Companion tree in southern cluster
+        if (gHash2 > 0.35) {
+          const compX = gx + 60 + (gHash > 0.5 ? 30 : -28);
+          const compY = sy + (gHash2 > 0.6 ? -20 : 18);
+          if (!this.isPointOnRoad(compX, compY, route) && !this.isInsideBuilding(compX, compY, route)) {
+            trees.push({ x: compX, y: compY, scale: mainScale * 0.88, type: mainType });
+          }
+        }
+      }
+    }
+
     return trees;
   }
 
@@ -3823,541 +3849,553 @@ export class RouteExplorationEngine {
     return false;
   }
 
+  public drawSingleFountain(ctx: CanvasRenderingContext2D, f: RouteFountain): void {
+    ctx.save();
+    const x = f.x;
+    const y = f.y;
+    const r = f.radius;
+
+    // 1. Soft Contact Drop Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + r * 0.4, r + 6, r * 0.6 + 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (f.style === 'monument') {
+      // ====================================================================
+      // PEWTER METEORITE OBELISK / MT. MOON STONE MONUMENT
+      // ====================================================================
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.strokeStyle = '#facc15';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, r - 6, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(x - 14, y - 14, 28, 28);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(x - 10, y - 10, 20, 20);
+
+      const floatY = y - 6 + Math.sin(this.time * 2.5) * 4;
+      const glow = ctx.createRadialGradient(x, floatY, 2, x, floatY, 26);
+      glow.addColorStop(0, 'rgba(192, 132, 252, 0.6)');
+      glow.addColorStop(0.5, 'rgba(147, 197, 253, 0.3)');
+      glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, floatY, 26, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#c084fc';
+      ctx.beginPath();
+      ctx.moveTo(x, floatY - 14);
+      ctx.lineTo(x + 10, floatY);
+      ctx.lineTo(x, floatY + 14);
+      ctx.lineTo(x - 10, floatY);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#f3e8ff';
+      ctx.beginPath();
+      ctx.moveTo(x, floatY - 14);
+      ctx.lineTo(x, floatY + 14);
+      ctx.lineTo(x - 10, floatY);
+      ctx.closePath();
+      ctx.fill();
+
+      for (let si = 0; si < 3; si++) {
+        const sAngle = this.time * 1.5 + si * 2.1;
+        const sDist = 14 + Math.sin(this.time * 3 + si) * 4;
+        const sx = x + Math.cos(sAngle) * sDist;
+        const sy = floatY + Math.sin(sAngle) * sDist;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(sx, sy, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+    } else if (f.style === 'anchor') {
+      // ====================================================================
+      // VERMILION PORT GRAND ADMIRALTY ANCHOR
+      // ====================================================================
+      ctx.fillStyle = '#78350f';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#451a03';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(254, 243, 199, 0.25)';
+      ctx.lineWidth = 1;
+      for (let py = y - r + 6; py < y + r - 6; py += 8) {
+        ctx.beginPath();
+        ctx.moveTo(x - r + 8, py);
+        ctx.lineTo(x + r - 8, py);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(x - 3.5, y - r + 8, 7, r * 1.4);
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(x - r * 0.55, y - r + 16, r * 1.1, 6);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(x - r * 0.55, y - r + 15, 3, 8);
+      ctx.fillRect(x + r * 0.55 - 3, y - r + 15, 3, 8);
+
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.arc(x, y + r * 0.2, r * 0.5, 0.2, Math.PI - 0.2, false);
+      ctx.stroke();
+
+      ctx.fillStyle = '#334155';
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.5 - 2, y + r * 0.2);
+      ctx.lineTo(x - r * 0.5 + 8, y + r * 0.1);
+      ctx.lineTo(x - r * 0.5 + 4, y + r * 0.35);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x + r * 0.5 + 2, y + r * 0.2);
+      ctx.lineTo(x + r * 0.5 - 8, y + r * 0.1);
+      ctx.lineTo(x + r * 0.5 - 4, y + r * 0.35);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x, y - r + 8, 6, 0, Math.PI * 2);
+      ctx.stroke();
+
+    } else if (f.style === 'clock') {
+      // ====================================================================
+      // VIRIDIAN FLORAL SUN CLOCK
+      // ====================================================================
+      ctx.fillStyle = '#475569';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.fillStyle = '#166534';
+      ctx.beginPath();
+      ctx.arc(x, y, r - 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      const flCount = 12;
+      const flColors = ['#ef4444', '#facc15', '#f472b6', '#38bdf8', '#fb923c'];
+      for (let i = 0; i < flCount; i++) {
+        const angle = (i / flCount) * Math.PI * 2;
+        const fx = x + Math.cos(angle) * (r - 9);
+        const fy = y + Math.sin(angle) * (r - 9);
+        ctx.fillStyle = flColors[i % flColors.length];
+        ctx.beginPath();
+        ctx.arc(fx, fy, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.52, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      for (let h = 0; h < 12; h++) {
+        const hAngle = (h / 12) * Math.PI * 2;
+        const hx1 = x + Math.cos(hAngle) * (r * 0.44);
+        const hy1 = y + Math.sin(hAngle) * (r * 0.44);
+        const hx2 = x + Math.cos(hAngle) * (r * 0.36);
+        const hy2 = y + Math.sin(hAngle) * (r * 0.36);
+        ctx.strokeStyle = '#78350f';
+        ctx.lineWidth = (h % 3 === 0) ? 2 : 1;
+        ctx.beginPath();
+        ctx.moveTo(hx1, hy1);
+        ctx.lineTo(hx2, hy2);
+        ctx.stroke();
+      }
+
+      const minuteAngle = this.time * 0.5;
+      const hourAngle = this.time * 0.04;
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(minuteAngle) * (r * 0.36), y + Math.sin(minuteAngle) * (r * 0.36));
+      ctx.stroke();
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(hourAngle) * (r * 0.24), y + Math.sin(hourAngle) * (r * 0.24));
+      ctx.stroke();
+
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (f.style === 'fumarole') {
+      // ====================================================================
+      // CINNABAR VOLCANIC GEOTHERMAL FUMAROLE
+      // ====================================================================
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#7f1d1d';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      const lavaGrad = ctx.createRadialGradient(x, y, 2, x, y, r - 6);
+      lavaGrad.addColorStop(0, '#fef08a');
+      lavaGrad.addColorStop(0.3, '#f97316');
+      lavaGrad.addColorStop(0.8, '#dc2626');
+      lavaGrad.addColorStop(1, '#450a0a');
+      ctx.fillStyle = lavaGrad;
+      ctx.beginPath();
+      ctx.arc(x, y, r - 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      const heatAlpha = 0.3 + Math.sin(this.time * 3) * 0.2;
+      ctx.fillStyle = `rgba(249, 115, 22, ${heatAlpha})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      for (let pi = 0; pi < 5; pi++) {
+        const pPhase = (this.time * 2.2 + pi * 0.6) % 2.0;
+        const pProg = pPhase / 2.0;
+        const px = x + Math.sin(this.time * 3 + pi) * (r * 0.4);
+        const py = y - pProg * 35;
+        const pAlpha = (1 - pProg) * 0.6;
+        ctx.fillStyle = pi % 2 === 0 ? `rgba(254, 215, 170, ${pAlpha})` : `rgba(239, 68, 68, ${pAlpha})`;
+        ctx.beginPath();
+        ctx.arc(px, py, 2.5 + pProg * 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+    } else if (f.style === 'zen') {
+      // ====================================================================
+      // FUCHSIA ZEN ROCK GARDEN & TSUKUBAI BASIN
+      // ====================================================================
+      ctx.fillStyle = '#f1f5f9';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
+      ctx.lineWidth = 1.2;
+      for (let ring = 8; ring < r - 4; ring += 7) {
+        ctx.beginPath();
+        ctx.arc(x, y, ring, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      const riverStones = [
+        { ox: -r * 0.45, oy: r * 0.2, sr: 6 },
+        { ox: r * 0.4, oy: -r * 0.3, sr: 5 },
+        { ox: r * 0.3, oy: r * 0.4, sr: 7 },
+      ];
+      riverStones.forEach(st => {
+        ctx.fillStyle = '#475569';
+        ctx.beginPath();
+        ctx.ellipse(x + st.ox, y + st.oy, st.sr, st.sr * 0.7, 0.4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      ctx.fillStyle = '#334155';
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#65a30d';
+      ctx.fillRect(x - r * 0.45, y - 5, r * 0.45, 5);
+      const dropProg = (this.time * 2) % 1.0;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.beginPath();
+      ctx.arc(x, y - 2 + dropProg * 4, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (f.style === 'tech') {
+      // ====================================================================
+      // SAFFRON SILPH QUANTUM HOLOGRAPHIC MATRIX
+      // ====================================================================
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#0284c7';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = 1.5;
+      for (let ring = 6; ring < r - 4; ring += 8) {
+        ctx.beginPath();
+        ctx.arc(x, y, ring, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      const holoAlpha = 0.4 + Math.sin(this.time * 5) * 0.3;
+      const holoGrad = ctx.createRadialGradient(x, y, 2, x, y, r - 4);
+      holoGrad.addColorStop(0, `rgba(56, 189, 248, ${holoAlpha})`);
+      holoGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = holoGrad;
+      ctx.beginPath();
+      ctx.arc(x, y, r - 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      const rot1 = this.time * 2.2;
+      const rot2 = -this.time * 1.8;
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(x, y - 6, r * 0.42, r * 0.18, rot1, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = '#a855f7';
+      ctx.beginPath();
+      ctx.ellipse(x, y - 6, r * 0.38, r * 0.15, rot2, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(x, y - 6, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else {
+      // ====================================================================
+      // CLASSIC ARCHITECTURAL WATER FOUNTAIN (STONE / MARBLE / BRICK)
+      // ====================================================================
+      const basinBorder = f.style === 'marble' ? '#f8fafc' : f.style === 'brick' ? '#ea580c' : '#64748b';
+      const innerBorder = f.style === 'marble' ? '#cbd5e1' : f.style === 'brick' ? '#7c2d12' : '#334155';
+
+      ctx.fillStyle = basinBorder;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = f.style === 'marble' ? '#fef08a' : '#cbd5e1';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(x, y, r - 1, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = innerBorder;
+      ctx.beginPath();
+      ctx.arc(x, y, r - 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      const waterGrad = ctx.createRadialGradient(x, y, 2, x, y, r - 6);
+      waterGrad.addColorStop(0, '#38bdf8');
+      waterGrad.addColorStop(0.6, '#0284c7');
+      waterGrad.addColorStop(1, '#0369a1');
+      ctx.fillStyle = waterGrad;
+      ctx.beginPath();
+      ctx.arc(x, y, r - 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      for (let ri = 1; ri <= 3; ri++) {
+        const ringProg = ((this.time * 0.8 + ri * 0.33) % 1.0);
+        const ringR = (r - 8) * ringProg;
+        const ringAlpha = (1 - ringProg) * 0.5;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${ringAlpha})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(x, y, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      const pedR = r * 0.36;
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath();
+      ctx.arc(x, y, pedR, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#e2e8f0';
+      ctx.beginPath();
+      ctx.arc(x, y - 2, pedR * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(x, y - 3, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      const jetH = 14 + Math.sin(this.time * 4) * 3;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 3);
+      ctx.lineTo(x, y - 3 - jetH);
+      ctx.stroke();
+
+      const dropletCount = 6;
+      for (let di = 0; di < dropletCount; di++) {
+        const angle = (di / dropletCount) * Math.PI * 2 + (this.time * 1.5);
+        const sprayDist = (r * 0.5) * ((Math.sin(this.time * 3 + di) + 1.2) * 0.5);
+        const dropX = x + Math.cos(angle) * sprayDist;
+        const dropY = y - 2 + Math.sin(angle) * (sprayDist * 0.6);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.beginPath();
+        ctx.arc(dropX, dropY, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  }
+
   private renderFountains(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     if (!route.fountains || route.fountains.length === 0) return;
 
     for (const f of route.fountains) {
-      ctx.save();
-      const x = f.x;
-      const y = f.y;
-      const r = f.radius;
-
-      // 1. Soft Contact Drop Shadow
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
-      ctx.beginPath();
-      ctx.ellipse(x, y + r * 0.4, r + 6, r * 0.6 + 4, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      if (f.style === 'monument') {
-        // ====================================================================
-        // PEWTER METEORITE OBELISK / MT. MOON STONE MONUMENT
-        // ====================================================================
-        ctx.fillStyle = '#1e293b';
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#475569';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        ctx.strokeStyle = '#facc15';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(x, y, r - 6, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(x - 14, y - 14, 28, 28);
-        ctx.fillStyle = '#334155';
-        ctx.fillRect(x - 10, y - 10, 20, 20);
-
-        const floatY = y - 6 + Math.sin(this.time * 2.5) * 4;
-        const glow = ctx.createRadialGradient(x, floatY, 2, x, floatY, 26);
-        glow.addColorStop(0, 'rgba(192, 132, 252, 0.6)');
-        glow.addColorStop(0.5, 'rgba(147, 197, 253, 0.3)');
-        glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.arc(x, floatY, 26, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#c084fc';
-        ctx.beginPath();
-        ctx.moveTo(x, floatY - 14);
-        ctx.lineTo(x + 10, floatY);
-        ctx.lineTo(x, floatY + 14);
-        ctx.lineTo(x - 10, floatY);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.fillStyle = '#f3e8ff';
-        ctx.beginPath();
-        ctx.moveTo(x, floatY - 14);
-        ctx.lineTo(x, floatY + 14);
-        ctx.lineTo(x - 10, floatY);
-        ctx.closePath();
-        ctx.fill();
-
-        for (let si = 0; si < 3; si++) {
-          const sAngle = this.time * 1.5 + si * 2.1;
-          const sDist = 14 + Math.sin(this.time * 3 + si) * 4;
-          const sx = x + Math.cos(sAngle) * sDist;
-          const sy = floatY + Math.sin(sAngle) * sDist;
-          ctx.fillStyle = '#ffffff';
-          ctx.beginPath();
-          ctx.arc(sx, sy, 1.8, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-      } else if (f.style === 'anchor') {
-        // ====================================================================
-        // VERMILION PORT GRAND ADMIRALTY ANCHOR
-        // ====================================================================
-        ctx.fillStyle = '#78350f';
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#451a03';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        ctx.strokeStyle = 'rgba(254, 243, 199, 0.25)';
-        ctx.lineWidth = 1;
-        for (let py = y - r + 6; py < y + r - 6; py += 8) {
-          ctx.beginPath();
-          ctx.moveTo(x - r + 8, py);
-          ctx.lineTo(x + r - 8, py);
-          ctx.stroke();
-        }
-
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(x - 3.5, y - r + 8, 7, r * 1.4);
-        ctx.fillStyle = '#78350f';
-        ctx.fillRect(x - r * 0.55, y - r + 16, r * 1.1, 6);
-        ctx.fillStyle = '#f59e0b';
-        ctx.fillRect(x - r * 0.55, y - r + 15, 3, 8);
-        ctx.fillRect(x + r * 0.55 - 3, y - r + 15, 3, 8);
-
-        ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 7;
-        ctx.beginPath();
-        ctx.arc(x, y + r * 0.2, r * 0.5, 0.2, Math.PI - 0.2, false);
-        ctx.stroke();
-
-        ctx.fillStyle = '#334155';
-        ctx.beginPath();
-        ctx.moveTo(x - r * 0.5 - 2, y + r * 0.2);
-        ctx.lineTo(x - r * 0.5 + 8, y + r * 0.1);
-        ctx.lineTo(x - r * 0.5 + 4, y + r * 0.35);
-        ctx.closePath();
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(x + r * 0.5 + 2, y + r * 0.2);
-        ctx.lineTo(x + r * 0.5 - 8, y + r * 0.1);
-        ctx.lineTo(x + r * 0.5 - 4, y + r * 0.35);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.strokeStyle = '#94a3b8';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(x, y - r + 8, 6, 0, Math.PI * 2);
-        ctx.stroke();
-
-      } else if (f.style === 'clock') {
-        // ====================================================================
-        // VIRIDIAN FLORAL SUN CLOCK
-        // ====================================================================
-        ctx.fillStyle = '#475569';
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#cbd5e1';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        ctx.fillStyle = '#166534';
-        ctx.beginPath();
-        ctx.arc(x, y, r - 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        const flCount = 12;
-        const flColors = ['#ef4444', '#facc15', '#f472b6', '#38bdf8', '#fb923c'];
-        for (let i = 0; i < flCount; i++) {
-          const angle = (i / flCount) * Math.PI * 2;
-          const fx = x + Math.cos(angle) * (r - 9);
-          const fy = y + Math.sin(angle) * (r - 9);
-          ctx.fillStyle = flColors[i % flColors.length];
-          ctx.beginPath();
-          ctx.arc(fx, fy, 3.2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        ctx.fillStyle = '#f8fafc';
-        ctx.beginPath();
-        ctx.arc(x, y, r * 0.52, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#d97706';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        for (let h = 0; h < 12; h++) {
-          const hAngle = (h / 12) * Math.PI * 2;
-          const hx1 = x + Math.cos(hAngle) * (r * 0.44);
-          const hy1 = y + Math.sin(hAngle) * (r * 0.44);
-          const hx2 = x + Math.cos(hAngle) * (r * 0.36);
-          const hy2 = y + Math.sin(hAngle) * (r * 0.36);
-          ctx.strokeStyle = '#78350f';
-          ctx.lineWidth = (h % 3 === 0) ? 2 : 1;
-          ctx.beginPath();
-          ctx.moveTo(hx1, hy1);
-          ctx.lineTo(hx2, hy2);
-          ctx.stroke();
-        }
-
-        const minuteAngle = this.time * 0.5;
-        const hourAngle = this.time * 0.04;
-        ctx.strokeStyle = '#1e293b';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + Math.cos(minuteAngle) * (r * 0.36), y + Math.sin(minuteAngle) * (r * 0.36));
-        ctx.stroke();
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + Math.cos(hourAngle) * (r * 0.24), y + Math.sin(hourAngle) * (r * 0.24));
-        ctx.stroke();
-
-        ctx.fillStyle = '#facc15';
-        ctx.beginPath();
-        ctx.arc(x, y, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-
-      } else if (f.style === 'fumarole') {
-        // ====================================================================
-        // CINNABAR VOLCANIC GEOTHERMAL FUMAROLE
-        // ====================================================================
-        ctx.fillStyle = '#1e293b';
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#7f1d1d';
-        ctx.lineWidth = 4;
-        ctx.stroke();
-
-        const lavaGrad = ctx.createRadialGradient(x, y, 2, x, y, r - 6);
-        lavaGrad.addColorStop(0, '#fef08a');
-        lavaGrad.addColorStop(0.3, '#f97316');
-        lavaGrad.addColorStop(0.8, '#dc2626');
-        lavaGrad.addColorStop(1, '#450a0a');
-        ctx.fillStyle = lavaGrad;
-        ctx.beginPath();
-        ctx.arc(x, y, r - 6, 0, Math.PI * 2);
-        ctx.fill();
-
-        const heatAlpha = 0.3 + Math.sin(this.time * 3) * 0.2;
-        ctx.fillStyle = `rgba(249, 115, 22, ${heatAlpha})`;
-        ctx.beginPath();
-        ctx.arc(x, y, r + 8, 0, Math.PI * 2);
-        ctx.fill();
-
-        for (let pi = 0; pi < 5; pi++) {
-          const pPhase = (this.time * 2.2 + pi * 0.6) % 2.0;
-          const pProg = pPhase / 2.0;
-          const px = x + Math.sin(this.time * 3 + pi) * (r * 0.4);
-          const py = y - pProg * 35;
-          const pAlpha = (1 - pProg) * 0.6;
-          ctx.fillStyle = pi % 2 === 0 ? `rgba(254, 215, 170, ${pAlpha})` : `rgba(239, 68, 68, ${pAlpha})`;
-          ctx.beginPath();
-          ctx.arc(px, py, 2.5 + pProg * 4, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-      } else if (f.style === 'zen') {
-        // ====================================================================
-        // FUCHSIA ZEN ROCK GARDEN & TSUKUBAI BASIN
-        // ====================================================================
-        ctx.fillStyle = '#f1f5f9';
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#cbd5e1';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
-        ctx.lineWidth = 1.2;
-        for (let ring = 8; ring < r - 4; ring += 7) {
-          ctx.beginPath();
-          ctx.arc(x, y, ring, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-
-        const riverStones = [
-          { ox: -r * 0.45, oy: r * 0.2, sr: 6 },
-          { ox: r * 0.4, oy: -r * 0.3, sr: 5 },
-          { ox: r * 0.3, oy: r * 0.4, sr: 7 },
-        ];
-        riverStones.forEach(st => {
-          ctx.fillStyle = '#475569';
-          ctx.beginPath();
-          ctx.ellipse(x + st.ox, y + st.oy, st.sr, st.sr * 0.7, 0.4, 0, Math.PI * 2);
-          ctx.fill();
-        });
-
-        ctx.fillStyle = '#334155';
-        ctx.beginPath();
-        ctx.arc(x, y, r * 0.4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#38bdf8';
-        ctx.beginPath();
-        ctx.arc(x, y, r * 0.28, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#65a30d';
-        ctx.fillRect(x - r * 0.45, y - 5, r * 0.45, 5);
-        const dropProg = (this.time * 2) % 1.0;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-        ctx.beginPath();
-        ctx.arc(x, y - 2 + dropProg * 4, 1.8, 0, Math.PI * 2);
-        ctx.fill();
-
-      } else if (f.style === 'tech') {
-        // ====================================================================
-        // SAFFRON SILPH QUANTUM HOLOGRAPHIC MATRIX
-        // ====================================================================
-        ctx.fillStyle = '#0f172a';
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#0284c7';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        ctx.strokeStyle = '#06b6d4';
-        ctx.lineWidth = 1.5;
-        for (let ring = 6; ring < r - 4; ring += 8) {
-          ctx.beginPath();
-          ctx.arc(x, y, ring, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-
-        const holoAlpha = 0.4 + Math.sin(this.time * 5) * 0.3;
-        const holoGrad = ctx.createRadialGradient(x, y, 2, x, y, r - 4);
-        holoGrad.addColorStop(0, `rgba(56, 189, 248, ${holoAlpha})`);
-        holoGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        ctx.fillStyle = holoGrad;
-        ctx.beginPath();
-        ctx.arc(x, y, r - 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        const rot1 = this.time * 2.2;
-        const rot2 = -this.time * 1.8;
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(x, y - 6, r * 0.42, r * 0.18, rot1, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.strokeStyle = '#a855f7';
-        ctx.beginPath();
-        ctx.ellipse(x, y - 6, r * 0.38, r * 0.15, rot2, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(x, y - 6, 4.5, 0, Math.PI * 2);
-        ctx.fill();
-
-      } else {
-        // ====================================================================
-        // CLASSIC ARCHITECTURAL WATER FOUNTAIN (STONE / MARBLE / BRICK)
-        // ====================================================================
-        const basinBorder = f.style === 'marble' ? '#f8fafc' : f.style === 'brick' ? '#ea580c' : '#64748b';
-        const innerBorder = f.style === 'marble' ? '#cbd5e1' : f.style === 'brick' ? '#7c2d12' : '#334155';
-
-        ctx.fillStyle = basinBorder;
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = f.style === 'marble' ? '#fef08a' : '#cbd5e1';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.arc(x, y, r - 1, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.fillStyle = innerBorder;
-        ctx.beginPath();
-        ctx.arc(x, y, r - 5, 0, Math.PI * 2);
-        ctx.fill();
-
-        const waterGrad = ctx.createRadialGradient(x, y, 2, x, y, r - 6);
-        waterGrad.addColorStop(0, '#38bdf8');
-        waterGrad.addColorStop(0.6, '#0284c7');
-        waterGrad.addColorStop(1, '#0369a1');
-        ctx.fillStyle = waterGrad;
-        ctx.beginPath();
-        ctx.arc(x, y, r - 6, 0, Math.PI * 2);
-        ctx.fill();
-
-        for (let ri = 1; ri <= 3; ri++) {
-          const ringProg = ((this.time * 0.8 + ri * 0.33) % 1.0);
-          const ringR = (r - 8) * ringProg;
-          const ringAlpha = (1 - ringProg) * 0.5;
-          ctx.strokeStyle = `rgba(255, 255, 255, ${ringAlpha})`;
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(x, y, ringR, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-
-        const pedR = r * 0.36;
-        ctx.fillStyle = '#94a3b8';
-        ctx.beginPath();
-        ctx.arc(x, y, pedR, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#e2e8f0';
-        ctx.beginPath();
-        ctx.arc(x, y - 2, pedR * 0.7, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#facc15';
-        ctx.beginPath();
-        ctx.arc(x, y - 3, 3, 0, Math.PI * 2);
-        ctx.fill();
-
-        const jetH = 14 + Math.sin(this.time * 4) * 3;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        ctx.moveTo(x, y - 3);
-        ctx.lineTo(x, y - 3 - jetH);
-        ctx.stroke();
-
-        const dropletCount = 6;
-        for (let di = 0; di < dropletCount; di++) {
-          const angle = (di / dropletCount) * Math.PI * 2 + (this.time * 1.5);
-          const sprayDist = (r * 0.5) * ((Math.sin(this.time * 3 + di) + 1.2) * 0.5);
-          const dropX = x + Math.cos(angle) * sprayDist;
-          const dropY = y - 2 + Math.sin(angle) * (sprayDist * 0.6);
-
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-          ctx.beginPath();
-          ctx.arc(dropX, dropY, 1.8, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-
-      ctx.restore();
+      this.drawSingleFountain(ctx, f);
     }
+  }
+
+  public drawSingleStreetlamp(ctx: CanvasRenderingContext2D, lamp: RouteStreetlamp, routeId: number = 0): void {
+    ctx.save();
+    const lx = lamp.x;
+    const ly = lamp.y;
+
+    const isTech = lamp.style === 'modern' || routeId === 6;
+    const isGold = lamp.style === 'ornate' || routeId === 8 || routeId === 4;
+    const isFire = routeId === 7;
+    const isLantern = lamp.style === 'lantern' || routeId === 5;
+
+    const postColor = isGold ? '#ca8a04' : isTech ? '#64748b' : isLantern ? '#78350f' : isFire ? '#450a0a' : '#0f172a';
+    const glowColor1 = isTech ? 'rgba(56, 189, 248, 0.35)' : isFire ? 'rgba(249, 115, 22, 0.4)' : isGold ? 'rgba(250, 204, 21, 0.38)' : 'rgba(254, 240, 138, 0.32)';
+    const glowColor2 = isTech ? 'rgba(56, 189, 248, 0.12)' : isFire ? 'rgba(249, 115, 22, 0.16)' : isGold ? 'rgba(250, 204, 21, 0.15)' : 'rgba(253, 224, 71, 0.14)';
+    const glassColor = isTech ? '#7dd3fc' : isFire ? '#fb923c' : '#fef08a';
+
+    // 1. Warm Radial Light Cast on Ground
+    const lightPool = ctx.createRadialGradient(lx, ly - 22, 4, lx, ly - 10, 65);
+    lightPool.addColorStop(0, glowColor1);
+    lightPool.addColorStop(0.5, glowColor2);
+    lightPool.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = lightPool;
+    ctx.beginPath();
+    ctx.ellipse(lx, ly, 65, 34, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. Base Contact Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.beginPath();
+    ctx.ellipse(lx, ly + 2, 7, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 3. Ornate Post Base & Shaft
+    ctx.fillStyle = postColor;
+    ctx.fillRect(lx - 4, ly - 3, 8, 4);
+    ctx.fillRect(lx - 2.5, ly - 8, 5, 5);
+    ctx.fillRect(lx - 1.5, ly - 26, 3, 18);
+
+    // Bracket Arms
+    ctx.strokeStyle = postColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(lx - 5, ly - 20);
+    ctx.lineTo(lx, ly - 25);
+    ctx.lineTo(lx + 5, ly - 20);
+    ctx.stroke();
+
+    // 4. Lantern Housing
+    ctx.fillStyle = postColor;
+    ctx.fillRect(lx - 5, ly - 32, 10, 2);
+    ctx.fillRect(lx - 4, ly - 24, 8, 2);
+
+    // Glowing Glass Core
+    ctx.fillStyle = glassColor;
+    ctx.fillRect(lx - 3.5, ly - 30, 7, 7);
+
+    // Core Filament Highlight
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(lx, ly - 26.5, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Finial Spike on top
+    ctx.strokeStyle = postColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(lx, ly - 32);
+    ctx.lineTo(lx, ly - 36);
+    ctx.stroke();
+
+    ctx.restore();
   }
 
   private renderStreetlamps(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     if (!route.streetlamps || route.streetlamps.length === 0) return;
 
     for (const lamp of route.streetlamps) {
-      ctx.save();
-      const lx = lamp.x;
-      const ly = lamp.y;
-
-      const isTech = lamp.style === 'modern' || route.id === 6;
-      const isGold = lamp.style === 'ornate' || route.id === 8 || route.id === 4;
-      const isFire = route.id === 7;
-      const isLantern = lamp.style === 'lantern' || route.id === 5;
-
-      const postColor = isGold ? '#ca8a04' : isTech ? '#64748b' : isLantern ? '#78350f' : isFire ? '#450a0a' : '#0f172a';
-      const glowColor1 = isTech ? 'rgba(56, 189, 248, 0.35)' : isFire ? 'rgba(249, 115, 22, 0.4)' : isGold ? 'rgba(250, 204, 21, 0.38)' : 'rgba(254, 240, 138, 0.32)';
-      const glowColor2 = isTech ? 'rgba(56, 189, 248, 0.12)' : isFire ? 'rgba(249, 115, 22, 0.16)' : isGold ? 'rgba(250, 204, 21, 0.15)' : 'rgba(253, 224, 71, 0.14)';
-      const glassColor = isTech ? '#7dd3fc' : isFire ? '#fb923c' : '#fef08a';
-
-      // 1. Warm Radial Light Cast on Ground
-      const lightPool = ctx.createRadialGradient(lx, ly - 22, 4, lx, ly - 10, 65);
-      lightPool.addColorStop(0, glowColor1);
-      lightPool.addColorStop(0.5, glowColor2);
-      lightPool.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = lightPool;
-      ctx.beginPath();
-      ctx.ellipse(lx, ly, 65, 34, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 2. Base Contact Shadow
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-      ctx.beginPath();
-      ctx.ellipse(lx, ly + 2, 7, 3, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 3. Ornate Post Base & Shaft
-      ctx.fillStyle = postColor;
-      ctx.fillRect(lx - 4, ly - 3, 8, 4);
-      ctx.fillRect(lx - 2.5, ly - 8, 5, 5);
-      ctx.fillRect(lx - 1.5, ly - 26, 3, 18);
-
-      // Bracket Arms
-      ctx.strokeStyle = postColor;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(lx - 5, ly - 20);
-      ctx.lineTo(lx, ly - 25);
-      ctx.lineTo(lx + 5, ly - 20);
-      ctx.stroke();
-
-      // 4. Lantern Housing
-      ctx.fillStyle = postColor;
-      ctx.fillRect(lx - 5, ly - 32, 10, 2);
-      ctx.fillRect(lx - 4, ly - 24, 8, 2);
-
-      // Glowing Glass Core
-      ctx.fillStyle = glassColor;
-      ctx.fillRect(lx - 3.5, ly - 30, 7, 7);
-
-      // Core Filament Highlight
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(lx, ly - 26.5, 1.8, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Finial Spike on top
-      ctx.strokeStyle = postColor;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(lx, ly - 32);
-      ctx.lineTo(lx, ly - 36);
-      ctx.stroke();
-
-      ctx.restore();
+      this.drawSingleStreetlamp(ctx, lamp, route.id);
     }
+  }
+
+  public drawSingleBench(ctx: CanvasRenderingContext2D, b: RouteBench): void {
+    ctx.save();
+    const bx = b.x;
+    const by = b.y;
+    const bw = b.w || 28;
+    const bh = 14;
+
+    // Drop shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.roundRect(bx - 2, by + bh - 2, bw + 4, 4, 2);
+    ctx.fill();
+
+    // Wrought Iron Frame / Legs
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(bx, by + 4, 3, bh - 4);
+    ctx.fillRect(bx + bw - 3, by + 4, 3, bh - 4);
+
+    // Wooden Slats (Backrest & Seat)
+    ctx.fillStyle = '#92400e';
+    ctx.fillRect(bx - 1, by, bw + 2, 4);
+    ctx.fillStyle = '#b45309';
+    ctx.fillRect(bx - 1, by + 6, bw + 2, 4);
+
+    // Slat Highlights
+    ctx.fillStyle = '#d97706';
+    ctx.fillRect(bx, by, bw, 1.2);
+    ctx.fillRect(bx, by + 6, bw, 1.2);
+
+    // Iron Armrests
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(bx - 2, by + 2, 2, 6);
+    ctx.fillRect(bx + bw, by + 2, 2, 6);
+
+    ctx.restore();
   }
 
   private renderBenches(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     if (!route.benches || route.benches.length === 0) return;
 
     for (const b of route.benches) {
-      ctx.save();
-      const bx = b.x;
-      const by = b.y;
-      const bw = b.w || 28;
-      const bh = 14;
-
-      // Drop shadow
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-      ctx.beginPath();
-      ctx.roundRect(bx - 2, by + bh - 2, bw + 4, 4, 2);
-      ctx.fill();
-
-      // Wrought Iron Frame / Legs
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(bx, by + 4, 3, bh - 4);
-      ctx.fillRect(bx + bw - 3, by + 4, 3, bh - 4);
-
-      // Wooden Slats (Backrest & Seat)
-      ctx.fillStyle = '#92400e';
-      ctx.fillRect(bx - 1, by, bw + 2, 4);
-      ctx.fillStyle = '#b45309';
-      ctx.fillRect(bx - 1, by + 6, bw + 2, 4);
-
-      // Slat Highlights
-      ctx.fillStyle = '#d97706';
-      ctx.fillRect(bx, by, bw, 1.2);
-      ctx.fillRect(bx, by + 6, bw, 1.2);
-
-      // Iron Armrests
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(bx - 2, by + 2, 2, 6);
-      ctx.fillRect(bx + bw, by + 2, 2, 6);
-
-      ctx.restore();
+      this.drawSingleBench(ctx, b);
     }
   }
 
@@ -4451,64 +4489,68 @@ export class RouteExplorationEngine {
     ctx.restore();
   }
 
+  public drawSingleFence(ctx: CanvasRenderingContext2D, f: RouteFence): void {
+    ctx.save();
+
+    // 1. Soft Drop Shadow cast beneath fence rails & posts
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.fillRect(f.x, f.y + 14, f.w, 4);
+
+    // 2. Double Horizontal Wooden Rails
+    // Top Rail
+    ctx.fillStyle = '#58240c';
+    ctx.fillRect(f.x, f.y + 3, f.w, 4.5);
+    // Top Rail sunlit upper bevel
+    ctx.fillStyle = '#9a3412';
+    ctx.fillRect(f.x, f.y + 3, f.w, 1.2);
+
+    // Bottom Rail
+    ctx.fillStyle = '#58240c';
+    ctx.fillRect(f.x, f.y + 10, f.w, 4);
+    // Bottom Rail sunlit upper bevel
+    ctx.fillStyle = '#9a3412';
+    ctx.fillRect(f.x, f.y + 10, f.w, 1.2);
+
+    // 3. Cylindrical Vertical Posts
+    const postStep = 28;
+    for (let px = f.x; px <= f.x + f.w; px += postStep) {
+      // Ground contact shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(px, f.y + 18, 4, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Post body gradient
+      const postGrad = ctx.createLinearGradient(px - 3, f.y, px + 3, f.y);
+      postGrad.addColorStop(0, '#9a3412');
+      postGrad.addColorStop(0.4, '#78350f');
+      postGrad.addColorStop(0.85, '#58240c');
+      postGrad.addColorStop(1, '#3a1805');
+      ctx.fillStyle = postGrad;
+      ctx.fillRect(px - 3, f.y - 2, 6, 19);
+
+      // Chamfered Post Top Cap
+      ctx.fillStyle = '#b45309';
+      ctx.beginPath();
+      ctx.ellipse(px, f.y - 2, 3, 1.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Iron Bracket Rivets at rail intersections
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(px - 0.75, f.y + 4.5, 1.5, 1.5);
+      ctx.fillRect(px - 0.75, f.y + 11.5, 1.5, 1.5);
+    }
+
+    ctx.restore();
+  }
+
   private renderFences(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     const fences = this.getRouteFences(route);
     if (fences.length === 0) return;
 
-    ctx.save();
-
     for (const f of fences) {
-      // 1. Soft Drop Shadow cast beneath fence rails & posts
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-      ctx.fillRect(f.x, f.y + 14, f.w, 4);
-
-      // 2. Double Horizontal Wooden Rails
-      // Top Rail
-      ctx.fillStyle = '#58240c';
-      ctx.fillRect(f.x, f.y + 3, f.w, 4.5);
-      // Top Rail sunlit upper bevel
-      ctx.fillStyle = '#9a3412';
-      ctx.fillRect(f.x, f.y + 3, f.w, 1.2);
-
-      // Bottom Rail
-      ctx.fillStyle = '#58240c';
-      ctx.fillRect(f.x, f.y + 10, f.w, 4);
-      // Bottom Rail sunlit upper bevel
-      ctx.fillStyle = '#9a3412';
-      ctx.fillRect(f.x, f.y + 10, f.w, 1.2);
-
-      // 3. Cylindrical Vertical Posts
-      const postStep = 28;
-      for (let px = f.x; px <= f.x + f.w; px += postStep) {
-        // Ground contact shadow
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-        ctx.beginPath();
-        ctx.ellipse(px, f.y + 18, 4, 2, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Post body gradient
-        const postGrad = ctx.createLinearGradient(px - 3, f.y, px + 3, f.y);
-        postGrad.addColorStop(0, '#9a3412');
-        postGrad.addColorStop(0.4, '#78350f');
-        postGrad.addColorStop(0.85, '#58240c');
-        postGrad.addColorStop(1, '#3a1805');
-        ctx.fillStyle = postGrad;
-        ctx.fillRect(px - 3, f.y - 2, 6, 19);
-
-        // Chamfered Post Top Cap
-        ctx.fillStyle = '#b45309';
-        ctx.beginPath();
-        ctx.ellipse(px, f.y - 2, 3, 1.5, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Iron Bracket Rivets at rail intersections
-        ctx.fillStyle = '#1e293b';
-        ctx.fillRect(px - 0.75, f.y + 4.5, 1.5, 1.5);
-        ctx.fillRect(px - 0.75, f.y + 11.5, 1.5, 1.5);
-      }
+      this.drawSingleFence(ctx, f);
     }
-
-    ctx.restore();
   }
 
   private renderTreesLayer(ctx: CanvasRenderingContext2D, route: RouteDefinition, layer: 'behind' | 'front'): void {
@@ -4794,7 +4836,7 @@ export class RouteExplorationEngine {
     ctx.restore();
   }
 
-  private drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number = 1.0, type: 'oak' | 'pine' | 'blossom' | 'mystic' = 'oak'): void {
+  private drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number = 1.0, type: 'oak' | 'pine' | 'blossom' | 'mystic' | 'palm' | 'autumn' | 'city' = 'oak'): void {
     ctx.save();
 
     // Natural variation per tree so they aren't all identical clones
@@ -4848,6 +4890,100 @@ export class RouteExplorationEngine {
       this.drawPineTier(ctx, x, y + 2 + hOff, 26 * rScale, 18 * rScale);
       this.drawPineTier(ctx, x, y - 10 + hOff, 20 * rScale, 16 * rScale);
       this.drawPineTier(ctx, x, y - 22 + hOff, 14 * rScale, 16 * rScale);
+    } else if (type === 'palm') {
+      const palmWind = Math.sin(this.time * 2.0 + x * 0.05) * 2.0;
+
+      // Curved slender segmented palm trunk
+      ctx.fillStyle = '#78350f';
+      ctx.beginPath();
+      ctx.moveTo(x - 5 * rScale, y + 16 * rScale + hOff);
+      ctx.quadraticCurveTo(x + 4 * rScale, y + 2 * rScale, x + 2 * rScale + palmWind * 0.5, y - 16 * rScale + hOff);
+      ctx.lineTo(x + 7 * rScale + palmWind * 0.5, y - 16 * rScale + hOff);
+      ctx.quadraticCurveTo(x + 9 * rScale, y + 2 * rScale, x + 3 * rScale, y + 16 * rScale + hOff);
+      ctx.closePath();
+      ctx.fill();
+
+      // Coconuts cluster
+      const cx = x + 4 * rScale + palmWind * 0.5;
+      const cy = y - 14 * rScale + hOff;
+      ctx.fillStyle = '#451a03';
+      ctx.beginPath();
+      ctx.arc(cx - 3 * rScale, cy + 2 * rScale, 3.2 * rScale, 0, Math.PI * 2);
+      ctx.arc(cx + 3 * rScale, cy + 2 * rScale, 3.2 * rScale, 0, Math.PI * 2);
+      ctx.arc(cx, cy + 5 * rScale, 3.0 * rScale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Radiating arching tropical palm fronds
+      const frondAngles = [-2.4, -1.8, -1.1, -0.4, 0.3, 0.9];
+      for (const fa of frondAngles) {
+        const frondLen = 26 * rScale;
+        const sway = Math.sin(this.time * 2.2 + fa) * 2.5;
+        const endX = cx + Math.cos(fa) * frondLen + sway;
+        const endY = cy + Math.sin(fa) * (frondLen * 0.65);
+
+        ctx.strokeStyle = '#15803d';
+        ctx.lineWidth = 4 * rScale;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.quadraticCurveTo(cx + Math.cos(fa) * (frondLen * 0.5), cy - 10 * rScale, endX, endY);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#4ade80';
+        ctx.lineWidth = 1.8 * rScale;
+        ctx.stroke();
+      }
+    } else if (type === 'autumn') {
+      const canopyWind = Math.sin(this.time * 2.2 + x * 0.05) * 1.5;
+
+      // Base Amber/Crimson Gradient Under-canopy
+      const baseGrad = ctx.createRadialGradient(x - 4, y - 6 + hOff, 4, x, y + hOff, 26 * rScale);
+      baseGrad.addColorStop(0, '#c2410c');
+      baseGrad.addColorStop(0.65, '#9a3412');
+      baseGrad.addColorStop(1, '#431407');
+      ctx.fillStyle = baseGrad;
+      ctx.beginPath();
+      ctx.arc(x, y + hOff, 24 * rScale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Autumn Golden/Fiery Lobes
+      this.drawFoliageLobe(ctx, x - 12 * rScale, y + 2 + hOff, 14 * rScale, '#ea580c', '#c2410c', '#7c2d12');
+      this.drawFoliageLobe(ctx, x + 11 * rScale, y + 3 + hOff, 13 * rScale, '#d97706', '#b45309', '#78350f');
+      this.drawFoliageLobe(ctx, x - 10 * rScale + canopyWind * 0.5, y - 8 + hOff, 16 * rScale, '#f59e0b', '#d97706', '#9a3412');
+      this.drawFoliageLobe(ctx, x + 9 * rScale, y - 7 + hOff, 15 * rScale, '#ea580c', '#c2410c', '#7c2d12');
+      this.drawFoliageLobe(ctx, x + canopyWind * 0.8, y - 16 + hOff, 17 * rScale, '#fbbf24', '#f59e0b', '#b45309');
+
+      // Golden Rim flecks
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.arc(x - 5 * rScale + canopyWind, y - 20 + hOff, 2.5 * rScale, 0, Math.PI * 2);
+      ctx.arc(x + 2 * rScale + canopyWind, y - 18 + hOff, 2.0 * rScale, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (type === 'city') {
+      const canopyWind = Math.sin(this.time * 1.8 + x * 0.05) * 0.8;
+
+      // Base Ornamental Trim
+      const baseGrad = ctx.createRadialGradient(x - 3, y - 6 + hOff, 3, x, y + hOff, 22 * rScale);
+      baseGrad.addColorStop(0, '#047857');
+      baseGrad.addColorStop(0.65, '#065f46');
+      baseGrad.addColorStop(1, '#064e3b');
+      ctx.fillStyle = baseGrad;
+      ctx.beginPath();
+      ctx.arc(x, y + hOff, 21 * rScale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Neat Manicured Spherical Topiary Lobes
+      this.drawFoliageLobe(ctx, x - 9 * rScale, y + 1 + hOff, 12 * rScale, '#059669', '#047857', '#064e3b');
+      this.drawFoliageLobe(ctx, x + 9 * rScale, y + 1 + hOff, 12 * rScale, '#059669', '#047857', '#064e3b');
+      this.drawFoliageLobe(ctx, x + canopyWind * 0.6, y - 12 + hOff, 15 * rScale, '#10b981', '#059669', '#047857');
+
+      // Decorative Planter Rim at Ground
+      ctx.fillStyle = '#334155';
+      ctx.beginPath();
+      ctx.ellipse(x, y + 17 * rScale + hOff, 14 * rScale, 5 * rScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     } else if (type === 'blossom') {
       const canopyWind = Math.sin(this.time * 2.2 + x * 0.05) * 1.5;
 

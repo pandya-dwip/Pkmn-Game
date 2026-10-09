@@ -14,10 +14,9 @@ import { POKEMON_SPECIES_MAP } from '../data/pokemon';
 import { sound } from '../audio/SoundSynthesizer';
 import { generateEncounterMon, EncounterMon } from './EncounterSystem';
 import { inputManager } from './InputManager';
-import { drawCustomTrainerSprite } from '../data/characters';
 
 export interface RouteBuilding {
-  type: 'center' | 'mart' | 'gym' | 'gate' | 'house' | 'museum' | 'dept_store' | 'silph' | 'safari_gate' | 'lab' | 'fan_club' | 'dojo';
+  type: 'center' | 'mart' | 'gym' | 'gate' | 'house';
   x: number;
   y: number;
   w: number;
@@ -84,11 +83,37 @@ export interface RouteStone {
   variant?: 'granite' | 'mossy' | 'slate';
 }
 
+export type RouteTreeType =
+  | 'broadleaf'
+  | 'mature'
+  | 'small'
+  | 'slender'
+  | 'dense_forest'
+  | 'conifer'
+  | 'coastal'
+  | 'decorative'
+  | 'blossom'
+  | 'golden'
+  | 'mystic'
+  | 'oak'
+  | 'pine';
+
+export type FoliageColorVariant =
+  | 'standard'
+  | 'light'
+  | 'dark'
+  | 'olive'
+  | 'golden'
+  | 'blossom'
+  | 'mystic'
+  | 'coastal';
+
 export interface RouteTree {
   x: number;
   y: number;
   scale?: number;
-  type?: 'oak' | 'pine' | 'blossom' | 'mystic' | 'palm' | 'autumn' | 'city';
+  type?: RouteTreeType;
+  colorVariant?: FoliageColorVariant;
 }
 
 export interface RouteLedge {
@@ -132,8 +157,7 @@ export interface RouteFountain {
   x: number;
   y: number;
   radius: number;
-  style?: 'stone' | 'marble' | 'brick' | 'monument' | 'anchor' | 'clock' | 'fumarole' | 'zen' | 'tech';
-  label?: string;
+  style?: 'stone' | 'marble' | 'brick';
 }
 
 export interface RouteStreetlamp {
@@ -207,8 +231,6 @@ export class RouteExplorationEngine {
     cooldownTimer: 0,
   };
 
-  public selectedTrainerId: string = 'male_red';
-
   // Active Route
   public currentRoute: RouteDefinition | null = null;
   public routeIndex: number = 0;
@@ -221,6 +243,8 @@ export class RouteExplorationEngine {
 
   // Input Keys
   private keys: Record<string, boolean> = {};
+
+  public selectedTrainerId: string = 'male_red';
 
   // External Callbacks
   public onTriggerEncounter: ((mon: EncounterMon, x: number, y: number) => void) | null = null;
@@ -348,17 +372,6 @@ export class RouteExplorationEngine {
           this.onEnterCenter();
         } else if (b.type === 'house' && this.onEnterHouse) {
           this.onEnterHouse(b);
-        } else if (
-          (b.type === 'museum' ||
-            b.type === 'dept_store' ||
-            b.type === 'silph' ||
-            b.type === 'safari_gate' ||
-            b.type === 'lab' ||
-            b.type === 'fan_club' ||
-            b.type === 'dojo') &&
-          this.onEnterHouse
-        ) {
-          this.onEnterHouse(b);
         } else if (b.type === 'gate') {
           if (this.onEnterGate) {
             this.onEnterGate(b);
@@ -370,7 +383,7 @@ export class RouteExplorationEngine {
       }
     }
 
-    // Check Route Exit Signpost (Forward / East)
+    // Check Route Exit Signpost
     if (this.currentRoute.exitX > 0) {
       const ex = this.currentRoute.exitX - 30;
       const ey = 200;
@@ -381,15 +394,6 @@ export class RouteExplorationEngine {
         }
         return;
       }
-    }
-
-    // Check Previous Route Entrance (Backward / West)
-    if (this.currentRoute.id > 0 && this.player.x <= 55) {
-      sound.beep(880, 0.15, 'sine');
-      if (this.onRoutePreviousExit) {
-        this.onRoutePreviousExit(this.currentRoute.id - 1);
-      }
-      return;
     }
 
     // Check Route Signposts
@@ -732,7 +736,7 @@ export class RouteExplorationEngine {
           this.player.y <= b.y + b.h + 45;
         if (nearDoor) {
           promptTarget = b.label;
-          promptAction = b.type === 'gym' ? (b.gymIndex !== undefined ? 'Enter Gym' : 'Inspect') : (b.type === 'house' || b.type === 'museum' || b.type === 'dept_store' || b.type === 'silph' || b.type === 'safari_gate' || b.type === 'lab' || b.type === 'fan_club' || b.type === 'dojo') ? 'Visit' : 'Enter';
+          promptAction = b.type === 'gym' ? (b.gymIndex !== undefined ? 'Enter Gym' : 'Inspect') : b.type === 'house' ? 'Visit' : 'Enter';
           break;
         }
       }
@@ -745,11 +749,6 @@ export class RouteExplorationEngine {
         promptTarget = this.currentRoute.destinationLabel || 'Next Route';
         promptAction = 'Travel';
       }
-    }
-
-    if (!promptTarget && this.currentRoute.id > 0 && this.player.x <= 55) {
-      promptTarget = 'Previous Route / Area';
-      promptAction = 'Return ⬅';
     }
 
     const actBtn = document.getElementById('btn-interact');
@@ -792,7 +791,7 @@ export class RouteExplorationEngine {
       }
     }
 
-    // Check Route Exit (Forward / East)
+    // Check Route Exit
     if (this.currentRoute.exitX > 0 && this.player.x >= this.currentRoute.exitX) {
       if (this.onRouteExit) {
         this.isPaused = true;
@@ -802,11 +801,11 @@ export class RouteExplorationEngine {
       }
     }
 
-    // Check Route Exit (Backward / West)
-    if (this.currentRoute.id > 0 && this.player.x <= 26) {
+    // Check Previous Route Exit (walking back west through entrance)
+    if (this.currentRoute.id > 0 && this.player.x <= 40) {
       if (this.onRoutePreviousExit) {
         this.isPaused = true;
-        sound.beep(780, 0.25, 'triangle');
+        sound.beep(660, 0.25, 'triangle');
         this.onRoutePreviousExit(this.currentRoute.id - 1);
         return;
       }
@@ -860,63 +859,6 @@ export class RouteExplorationEngine {
     }
   }
 
-  private renderParallaxBackdrop(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
-    const isWater = route.theme === 'water' || route.id === 3 || route.id === 7;
-    const isForest = route.theme === 'forest' || route.id === 1;
-    const isCity = route.theme === 'city' || route.id === 4 || route.id === 6;
-
-    // Distant parallax shift (slow camera factor)
-    const pX = -Math.floor(this.camX * 0.12);
-    const pY = -Math.floor(this.camY * 0.08);
-
-    ctx.save();
-    // Sky / Horizon gradient
-    const skyGrad = ctx.createLinearGradient(0, pY - 80, 0, pY + 140);
-    if (isWater) {
-      skyGrad.addColorStop(0, '#0369a1');
-      skyGrad.addColorStop(0.6, '#38bdf8');
-      skyGrad.addColorStop(1, '#bae6fd');
-    } else if (isCity) {
-      skyGrad.addColorStop(0, '#1e1b4b');
-      skyGrad.addColorStop(0.6, '#312e81');
-      skyGrad.addColorStop(1, '#6366f1');
-    } else {
-      skyGrad.addColorStop(0, '#14532d');
-      skyGrad.addColorStop(0.6, '#15803d');
-      skyGrad.addColorStop(1, '#86efac');
-    }
-
-    ctx.fillStyle = skyGrad;
-    ctx.fillRect(0, 0, route.worldWidth, 80);
-
-    // Subtle distant hills
-    ctx.fillStyle = isWater ? 'rgba(7, 89, 133, 0.45)' : isCity ? 'rgba(30, 41, 59, 0.5)' : 'rgba(20, 83, 45, 0.45)';
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    for (let x = 0; x <= route.worldWidth; x += 120) {
-      const hillH = 35 + Math.sin(x * 0.02 + pX * 0.05) * 18;
-      ctx.lineTo(x, hillH);
-    }
-    ctx.lineTo(route.worldWidth, 0);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
-  }
-
-  private getDefaultTreeType(route: RouteDefinition): 'oak' | 'pine' | 'blossom' | 'mystic' | 'palm' | 'autumn' | 'city' {
-    if (route.id === 1) return 'pine'; // Viridian Forest
-    if (route.id === 3 || route.id === 7) return 'palm'; // Vermilion Harbor, Cinnabar Island
-    if (route.id === 4) return 'blossom'; // Celadon
-    if (route.id === 5) return 'mystic'; // Fuchsia / Safari
-    if (route.id === 6) return 'city'; // Saffron
-    if (route.theme === 'forest') return 'pine';
-    if (route.theme === 'city') return 'city';
-    if (route.theme === 'water') return 'palm';
-    if (route.theme === 'rock') return 'autumn';
-    return 'oak';
-  }
-
   private render(): void {
     const ctx = this.ctx;
     const canvas = this.canvas;
@@ -933,9 +875,6 @@ export class RouteExplorationEngine {
     // Apply Camera Translation
     ctx.translate(-Math.floor(this.camX), -Math.floor(this.camY));
 
-    // 0. Distant Parallax Horizon Layer
-    this.renderParallaxBackdrop(ctx, route);
-
     // 1. Terrain Grass Base
     this.renderTerrain(ctx, route);
 
@@ -948,135 +887,65 @@ export class RouteExplorationEngine {
     // 4. Paths & Cobblestone Avenues
     this.renderPaths(ctx, route);
 
-    // 5. Tall Grass with Wind Sway Animation & Wildflowers
+    // 4.5 City Fountains
+    this.renderFountains(ctx, route);
+
+    // 4.6 City Benches
+    this.renderBenches(ctx, route);
+
+    // 5. Tall Grass with Wind Sway Animation & Wildflowers (Special mystical grass in Rare Sanctuary!)
     this.renderTallGrass(ctx, route);
 
-    // 6. 2.5D Unified Y-Sorted Depth Entities Layer
-    interface DepthEntity {
-      baseY: number;
-      draw: () => void;
-    }
-    const depthEntities: DepthEntity[] = [];
+    // 6. Natural Stones & Boulders
+    this.renderStones(ctx, route);
 
-    // Fountains
-    if (route.fountains) {
-      for (const ft of route.fountains) {
-        depthEntities.push({
-          baseY: ft.y + ft.radius,
-          draw: () => this.drawSingleFountain(ctx, ft),
-        });
-      }
-    }
+    // 6.5 Carved Wooden Signposts
+    this.renderSignposts(ctx, route);
 
-    // Benches
-    if (route.benches) {
-      for (const b of route.benches) {
-        depthEntities.push({
-          baseY: b.y + 14,
-          draw: () => this.drawSingleBench(ctx, b),
-        });
-      }
-    }
+    // 7. Wooden Post-and-Rail Fences
+    this.renderFences(ctx, route);
 
-    // Stones / Boulders
-    const stones = this.getRouteStones(route);
-    for (const s of stones) {
-      depthEntities.push({
-        baseY: s.y + s.radius * 0.8,
-        draw: () => this.drawStone(ctx, s),
-      });
-    }
-
-    // Signposts
-    if (route.signposts) {
-      for (const sp of route.signposts) {
-        depthEntities.push({
-          baseY: sp.y + 16,
-          draw: () => this.drawSingleSignpost(ctx, sp),
-        });
-      }
-    }
-
-    // Fences
-    const fences = this.getRouteFences(route);
-    for (const f of fences) {
-      depthEntities.push({
-        baseY: f.y + 16,
-        draw: () => this.drawSingleFence(ctx, f),
-      });
-    }
-
-    // Buildings
+    // 8. Buildings (Pokémon Center, Poké Mart, Gym, Route Gate, Houses)
     for (const b of route.buildings) {
-      depthEntities.push({
-        baseY: b.y + b.h,
-        draw: () => this.renderBuilding(ctx, b),
-      });
+      this.renderBuilding(ctx, b);
     }
 
-    // Streetlamps
-    if (route.streetlamps) {
-      for (const l of route.streetlamps) {
-        depthEntities.push({
-          baseY: l.y + 4,
-          draw: () => this.drawSingleStreetlamp(ctx, l, route.id),
-        });
-      }
-    }
+    // 8.5 Ornate City Streetlamps with Warm Radial Glow
+    this.renderStreetlamps(ctx, route);
 
-    // Ground Items
+    // 9. Ground Items (3D Poké Balls with Sparkle)
     for (const it of route.items) {
       if (!it.collected) {
-        depthEntities.push({
-          baseY: it.y + 6,
-          draw: () => this.renderGroundItem(ctx, it),
-        });
+        this.renderGroundItem(ctx, it);
       }
     }
 
-    // NPCs
+    // 10. Trees BEHIND Player
+    this.renderTreesLayer(ctx, route, 'behind');
+
+    // 11. NPCs with Animated Interaction Prompts
     for (const npc of route.npcs) {
-      depthEntities.push({
-        baseY: npc.y + 14,
-        draw: () => this.renderNPC(ctx, npc),
-      });
+      this.renderNPC(ctx, npc);
     }
 
-    // Trees
-    const trees = this.getRouteTrees(route);
-    const defaultTreeType = this.getDefaultTreeType(route);
-    for (const t of trees) {
-      depthEntities.push({
-        baseY: t.y + 16,
-        draw: () => this.drawTree(ctx, t.x, t.y, t.scale || 1.0, t.type || defaultTreeType),
-      });
-    }
-
-    // Player Character
-    depthEntities.push({
-      baseY: this.player.y + 10,
-      draw: () => this.renderPlayer(ctx),
-    });
-
-    // Sort by baseline Y (higher Y = visually closer / in front)
-    depthEntities.sort((a, b) => a.baseY - b.baseY);
-
-    for (const entity of depthEntities) {
-      entity.draw();
-    }
-
-    // 7. Grass Particles
+    // 12. Grass Particles
     this.renderGrassParticles(ctx);
 
-    // 8. Overhead Exit Signpost & Scenery
+    // 13. Player Character (Detailed Red/Ash with Animated Walking Cycle)
+    this.renderPlayer(ctx);
+
+    // 14. Trees IN FRONT OF Player
+    this.renderTreesLayer(ctx, route, 'front');
+
+    // 15. Overhead Exit Signpost & Scenery
     this.renderOverheadScenery(ctx, route);
 
-    // 9. Ambient Atmospheric Particles (Leaves & Pollen in the Breeze)
+    // 16. Ambient Atmospheric Particles (Leaves & Pollen in the Breeze)
     this.renderAtmosphere(ctx, route);
 
     ctx.restore();
 
-    // 10. Active Map Section HUD Badge & Rare Area Warning Banner (Screen Space)
+    // 17. Active Map Section HUD Badge & Rare Area Warning Banner (Screen Space)
     this.renderSectionBanner(ctx);
   }
 
@@ -1174,299 +1043,224 @@ export class RouteExplorationEngine {
   private renderPaths(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     const isCityTheme = route.theme === 'city';
 
-    const isPavedPath = (p: RoutePath) =>
-      p.style === 'flagstone' ||
-      p.style === 'cobble' ||
-      p.style === 'brick' ||
-      p.style === 'paved' ||
-      isCityTheme ||
-      (route.id === 0 && p.x >= 1900);
-
-    const pavedPaths = route.path.filter(isPavedPath);
-    const dirtPaths = route.path.filter(p => !isPavedPath(p));
-
-    // ========================================================================
-    // 1. DIRT / NATURAL COUNTRY TRAILS
-    // ========================================================================
-    for (const p of dirtPaths) {
+    for (const p of route.path) {
       ctx.save();
 
-      // Soft ambient drop shadow underneath
+      // Soft ambient drop shadow underneath the entire path bed
       ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
       ctx.beginPath();
       ctx.roundRect(p.x - 2, p.y - 2, p.w + 4, p.h + 6, 8);
       ctx.fill();
 
-      // Deep Earth Loam Base
-      ctx.fillStyle = '#8c5e39';
-      ctx.fillRect(p.x, p.y, p.w, p.h);
+      // Determine if this path segment is paved flagstone / cobble / brick / city avenue
+      const isPaved =
+        p.style === 'flagstone' ||
+        p.style === 'cobble' ||
+        p.style === 'brick' ||
+        p.style === 'paved' ||
+        isCityTheme ||
+        (route.id === 0 && p.x >= 1900);
 
-      // Main Sunlit Trodden Earth Bed
-      ctx.fillStyle = '#b88d67';
-      ctx.fillRect(p.x + 3, p.y + 3, p.w - 6, p.h - 6);
+      if (isPaved) {
+        // ====================================================================
+        // CITY PLAZA / PAVED STREETS: Ashlar Flagstones with City-Specific Tones
+        // ====================================================================
+        let paverTones = ['#f8fafc', '#f1f5f9', '#e2e8f0', '#fed7aa', '#cbd5e1']; // Default / Viridian ivory
+        let subBaseColor = '#64748b';
+        let curbColor = '#475569';
+        let paverW = 32;
+        let paverH = 20;
 
-      // Central Sun-Baked Walking Lane
-      ctx.fillStyle = '#d4a373';
-      ctx.fillRect(p.x + 10, p.y + 8, p.w - 20, p.h - 16);
+        if (p.style === 'brick' || route.id === 3) {
+          // Vermilion Port Brickwork & Harbor Boardwalk
+          paverTones = ['#ea580c', '#c2410c', '#9a3412', '#b45309', '#f97316'];
+          subBaseColor = '#7c2d12';
+          curbColor = '#431407';
+          paverW = 26;
+          paverH = 16;
+        } else if (p.style === 'cobble' || route.id === 1) {
+          // Pewter Stone / Mt. Moon Granite Chiseled Slate
+          paverTones = ['#475569', '#334155', '#64748b', '#1e293b', '#4b5563'];
+          subBaseColor = '#1e293b';
+          curbColor = '#0f172a';
+          paverW = 28;
+          paverH = 22;
+        } else if (route.id === 2) {
+          // Cerulean Floral Water City Cyan / Azure Stone
+          paverTones = ['#e0f2fe', '#bae6fd', '#cbd5e1', '#f1f5f9', '#93c5fd'];
+          subBaseColor = '#0284c7';
+          curbColor = '#0369a1';
+        } else if (route.id === 4) {
+          // Celadon City Rainbow & Pastel Marble Flagstones
+          paverTones = ['#fdf4ff', '#fae8ff', '#f3e8ff', '#f8fafc', '#fef3c7'];
+          subBaseColor = '#86198f';
+          curbColor = '#a21caf';
+          paverW = 34;
+          paverH = 22;
+        } else if (route.id === 5) {
+          // Fuchsia Ninja & Safari Timber/Earthen Stone
+          paverTones = ['#d97706', '#b45309', '#92400e', '#78350f', '#fed7aa'];
+          subBaseColor = '#451a03';
+          curbColor = '#78350f';
+          paverW = 30;
+          paverH = 18;
+        } else if (route.id === 6) {
+          // Saffron Tech Platinum & Gold Metropolis Pavers
+          paverTones = ['#f8fafc', '#f1f5f9', '#e2e8f0', '#fef08a', '#cbd5e1'];
+          subBaseColor = '#334155';
+          curbColor = '#eab308';
+          paverW = 36;
+          paverH = 24;
+        } else if (route.id === 7) {
+          // Cinnabar Volcanic Basalt & Obsidian Sand
+          paverTones = ['#1e293b', '#0f172a', '#334155', '#ea580c', '#475569'];
+          subBaseColor = '#450a0a';
+          curbColor = '#dc2626';
+          paverW = 28;
+          paverH = 20;
+        } else if (route.id === 8) {
+          // Indigo Plateau Champions Marble & Gold
+          paverTones = ['#ffffff', '#f8fafc', '#f1f5f9', '#fef9c3', '#e2e8f0'];
+          subBaseColor = '#713f12';
+          curbColor = '#facc15';
+          paverW = 38;
+          paverH = 24;
+        }
 
-      // Subtle Dual Wagon / Foot-Traffic Ruts
-      ctx.fillStyle = '#a07855';
-      ctx.fillRect(p.x + 12, p.y + 14, p.w - 24, 6);
-      ctx.fillRect(p.x + 12, p.y + p.h - 20, p.w - 24, 6);
+        // Sub-base foundation bed
+        ctx.fillStyle = subBaseColor;
+        ctx.fillRect(p.x, p.y, p.w, p.h);
 
-      // Embedded 3D Cobblestones & River Stones
-      const stoneCount = Math.floor(p.w / 20);
-      for (let i = 0; i < stoneCount; i++) {
-        const sHash1 = Math.abs(Math.sin((p.x + i * 29.3) * 1.7));
-        const sHash2 = Math.abs(Math.cos((p.y + i * 47.9) * 2.3));
-        const stX = p.x + 12 + sHash1 * (p.w - 24);
-        const stY = p.y + 10 + sHash2 * (p.h - 20);
+        let rowIdx = 0;
+        for (let py = p.y; py < p.y + p.h; py += paverH) {
+          const rowOffset = (rowIdx % 2 === 0) ? 0 : paverW / 2;
+          for (let px = p.x - paverW; px < p.x + p.w + paverW; px += paverW) {
+            const actualX = px + rowOffset;
+            if (actualX + paverW < p.x || actualX > p.x + p.w) continue;
 
-        const rx = 3.2 + (sHash1 * 2.5);
-        const ry = 2.0 + (sHash2 * 1.6);
-        const rot = sHash1 * Math.PI;
+            // Clip boundaries of pavers at path edges
+            const drawX = Math.max(p.x, actualX);
+            const drawY = Math.max(p.y, py);
+            const drawW = Math.min(p.x + p.w, actualX + paverW) - drawX;
+            const drawH = Math.min(p.y + p.h, py + paverH) - drawY;
 
-        ctx.fillStyle = 'rgba(30, 20, 10, 0.35)';
-        ctx.beginPath();
-        ctx.ellipse(stX + 1.2, stY + 2, rx, ry, rot, 0, Math.PI * 2);
-        ctx.fill();
+            if (drawW <= 1 || drawH <= 1) continue;
 
-        ctx.fillStyle = sHash1 > 0.5 ? '#8c6239' : '#a67c52';
-        ctx.beginPath();
-        ctx.ellipse(stX, stY, rx, ry, rot, 0, Math.PI * 2);
-        ctx.fill();
+            const paverHash = Math.abs(Math.sin(actualX * 17.3 + py * 41.9));
+            const toneIdx = Math.floor(paverHash * paverTones.length);
+            const stoneColor = paverTones[toneIdx];
 
-        ctx.fillStyle = '#e6ccb2';
-        ctx.beginPath();
-        ctx.ellipse(stX - rx * 0.3, stY - ry * 0.3, rx * 0.4, ry * 0.35, rot, 0, Math.PI * 2);
-        ctx.fill();
-      }
+            // 1. Paver Face
+            ctx.fillStyle = stoneColor;
+            ctx.fillRect(drawX + 1, drawY + 1, drawW - 2, drawH - 2);
 
-      // Organic Edge Grass Encroachment
-      const grassEdgeCol = route.theme === 'forest' ? '#173d2a' : '#22552b';
-      ctx.fillStyle = grassEdgeCol;
+            // 2. Sunlit 3D Bevel (Top & Left Highlight)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+            ctx.fillRect(drawX + 1, drawY + 1, drawW - 2, 1);
+            ctx.fillRect(drawX + 1, drawY + 1, 1, drawH - 2);
 
-      for (let bx = p.x; bx < p.x + p.w; bx += 16) {
-        const eHash = Math.abs(Math.sin(bx * 17.3));
-        const eW = 10 + eHash * 10;
-        const eH = 2 + eHash * 4;
-        ctx.beginPath();
-        ctx.ellipse(bx + eW / 2, p.y + 1, eW / 2, eH, 0, 0, Math.PI);
-        ctx.fill();
-      }
+            // 3. Shaded 3D Bevel (Bottom & Right Drop Shadow)
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+            ctx.fillRect(drawX + 1, drawY + drawH - 2, drawW - 2, 1);
+            ctx.fillRect(drawX + drawW - 2, drawY + 1, 1, drawH - 2);
 
-      for (let bx = p.x; bx < p.x + p.w; bx += 16) {
-        const eHash = Math.abs(Math.sin(bx * 29.7));
-        const eW = 10 + eHash * 10;
-        const eH = 2 + eHash * 4;
-        ctx.beginPath();
-        ctx.ellipse(bx + eW / 2, p.y + p.h - 1, eW / 2, eH, 0, Math.PI, 0);
-        ctx.fill();
+            // 4. Subtle Surface Weathering / Micro-Fleck
+            if (paverHash > 0.7) {
+              ctx.fillStyle = 'rgba(51, 65, 85, 0.2)';
+              ctx.fillRect(drawX + drawW * 0.4, drawY + drawH * 0.4, 3, 2);
+            }
+          }
+          rowIdx++;
+        }
+
+        // Heavy Chiseled Granite Curb Border
+        ctx.strokeStyle = curbColor;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(p.x, p.y, p.w, p.h);
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(p.x + 1.5, p.y + 1.5, p.w - 3, p.h - 3);
+
+      } else {
+        // ====================================================================
+        // COUNTRY ROUTE: Natural Organic Dirt Trail with Cobblestones & Pebbles
+        // ====================================================================
+        // 1. Deep Earth Loam Base
+        ctx.fillStyle = '#8c5e39';
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+
+        // 2. Main Sunlit Trodden Earth Bed
+        ctx.fillStyle = '#b88d67';
+        ctx.fillRect(p.x + 3, p.y + 3, p.w - 6, p.h - 6);
+
+        // 3. Central Sun-Baked Walking Lane
+        ctx.fillStyle = '#d4a373';
+        ctx.fillRect(p.x + 10, p.y + 8, p.w - 20, p.h - 16);
+
+        // 4. Subtle Dual Wagon / Foot-Traffic Ruts
+        ctx.fillStyle = '#a07855';
+        ctx.fillRect(p.x + 12, p.y + 14, p.w - 24, 6);
+        ctx.fillRect(p.x + 12, p.y + p.h - 20, p.w - 24, 6);
+
+        // 5. Embedded 3D Cobblestones & River Stones (Organically scattered, not in rigid lines!)
+        const stoneCount = Math.floor(p.w / 20);
+        for (let i = 0; i < stoneCount; i++) {
+          const sHash1 = Math.abs(Math.sin((p.x + i * 29.3) * 1.7));
+          const sHash2 = Math.abs(Math.cos((p.y + i * 47.9) * 2.3));
+          const stX = p.x + 12 + sHash1 * (p.w - 24);
+          const stY = p.y + 10 + sHash2 * (p.h - 20);
+
+          const rx = 3.2 + (sHash1 * 2.5);
+          const ry = 2.0 + (sHash2 * 1.6);
+          const rot = sHash1 * Math.PI;
+
+          // Stone Drop Shadow
+          ctx.fillStyle = 'rgba(30, 20, 10, 0.35)';
+          ctx.beginPath();
+          ctx.ellipse(stX + 1.2, stY + 2, rx, ry, rot, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Stone Body
+          ctx.fillStyle = sHash1 > 0.5 ? '#8c6239' : '#a67c52';
+          ctx.beginPath();
+          ctx.ellipse(stX, stY, rx, ry, rot, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Sunlit Specular Highlight (Top-left)
+          ctx.fillStyle = '#e6ccb2';
+          ctx.beginPath();
+          ctx.ellipse(stX - rx * 0.3, stY - ry * 0.3, rx * 0.4, ry * 0.35, rot, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // 6. Organic Edge Grass Encroachment (Soft natural scalloped borders)
+        const grassEdgeCol = route.theme === 'forest' ? '#173d2a' : '#22552b';
+        ctx.fillStyle = grassEdgeCol;
+
+        // Top Border Soft Natural Encroachment
+        for (let bx = p.x; bx < p.x + p.w; bx += 16) {
+          const eHash = Math.abs(Math.sin(bx * 17.3));
+          const eW = 10 + eHash * 10;
+          const eH = 2 + eHash * 4;
+          ctx.beginPath();
+          ctx.ellipse(bx + eW / 2, p.y + 1, eW / 2, eH, 0, 0, Math.PI);
+          ctx.fill();
+        }
+
+        // Bottom Border Soft Natural Encroachment
+        for (let bx = p.x; bx < p.x + p.w; bx += 16) {
+          const eHash = Math.abs(Math.sin(bx * 29.7));
+          const eW = 10 + eHash * 10;
+          const eH = 2 + eHash * 4;
+          ctx.beginPath();
+          ctx.ellipse(bx + eW / 2, p.y + p.h - 1, eW / 2, eH, 0, Math.PI, 0);
+          ctx.fill();
+        }
       }
 
       ctx.restore();
     }
-
-    // ========================================================================
-    // 2. PAVED CITY STREETS & PLAZAS (Seamless Continuous Mesh System)
-    // ========================================================================
-    if (pavedPaths.length === 0) return;
-
-    // Helper: checks if a world coordinate is inside another paved path segment
-    const isCoveredByOtherPaved = (currentSegment: RoutePath, qx: number, qy: number) => {
-      for (const other of pavedPaths) {
-        if (other === currentSegment) continue;
-        if (qx >= other.x - 1 && qx <= other.x + other.w + 1 && qy >= other.y - 1 && qy <= other.y + other.h + 1) {
-          return true;
-        }
-      }
-      return false;
-    };
-
-    // Regional Paver Palette Specifications
-    let paverTones = ['#f8fafc', '#f1f5f9', '#e2e8f0', '#fed7aa', '#cbd5e1']; // Default / Viridian ivory
-    let subBaseColor = '#64748b';
-    let curbColor = '#475569';
-    let paverW = 32;
-    let paverH = 20;
-
-    if (route.id === 3) {
-      // Vermilion Port Brickwork & Harbor Boardwalk
-      paverTones = ['#ea580c', '#c2410c', '#9a3412', '#b45309', '#f97316'];
-      subBaseColor = '#7c2d12';
-      curbColor = '#431407';
-      paverW = 26;
-      paverH = 16;
-    } else if (route.id === 1) {
-      // Pewter Stone / Mt. Moon Granite Chiseled Slate
-      paverTones = ['#475569', '#334155', '#64748b', '#1e293b', '#4b5563'];
-      subBaseColor = '#1e293b';
-      curbColor = '#0f172a';
-      paverW = 28;
-      paverH = 22;
-    } else if (route.id === 2) {
-      // Cerulean Floral Water City Cyan / Azure Stone
-      paverTones = ['#e0f2fe', '#bae6fd', '#cbd5e1', '#f1f5f9', '#93c5fd'];
-      subBaseColor = '#0284c7';
-      curbColor = '#0369a1';
-      paverW = 30;
-      paverH = 20;
-    } else if (route.id === 4) {
-      // Celadon City Rainbow & Pastel Marble Flagstones
-      paverTones = ['#fdf4ff', '#fae8ff', '#f3e8ff', '#f8fafc', '#fef3c7'];
-      subBaseColor = '#86198f';
-      curbColor = '#a21caf';
-      paverW = 34;
-      paverH = 22;
-    } else if (route.id === 5) {
-      // Fuchsia Ninja & Safari Timber/Earthen Stone
-      paverTones = ['#d97706', '#b45309', '#92400e', '#78350f', '#fed7aa'];
-      subBaseColor = '#451a03';
-      curbColor = '#78350f';
-      paverW = 30;
-      paverH = 18;
-    } else if (route.id === 6) {
-      // Saffron Tech Platinum & Gold Metropolis Pavers
-      paverTones = ['#f8fafc', '#f1f5f9', '#e2e8f0', '#fef08a', '#cbd5e1'];
-      subBaseColor = '#334155';
-      curbColor = '#eab308';
-      paverW = 36;
-      paverH = 24;
-    } else if (route.id === 7) {
-      // Cinnabar Volcanic Basalt & Obsidian Sand
-      paverTones = ['#1e293b', '#0f172a', '#334155', '#ea580c', '#475569'];
-      subBaseColor = '#450a0a';
-      curbColor = '#dc2626';
-      paverW = 28;
-      paverH = 20;
-    } else if (route.id === 8) {
-      // Indigo Plateau Champions Marble & Gold
-      paverTones = ['#ffffff', '#f8fafc', '#f1f5f9', '#fef9c3', '#e2e8f0'];
-      subBaseColor = '#713f12';
-      curbColor = '#facc15';
-      paverW = 38;
-      paverH = 24;
-    }
-
-    // Step 2A: Unified Ambient Shadow Bed
-    ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
-    for (const p of pavedPaths) {
-      ctx.fillRect(p.x - 2, p.y - 2, p.w + 4, p.h + 5);
-    }
-    ctx.restore();
-
-    // Step 2B: Continuous Sub-Base Foundation
-    ctx.save();
-    ctx.fillStyle = subBaseColor;
-    for (const p of pavedPaths) {
-      ctx.fillRect(p.x, p.y, p.w, p.h);
-    }
-    ctx.restore();
-
-    // Step 2C: Global-Grid Aligned Pavers (Seamlessly continuous across all segments!)
-    ctx.save();
-    for (const p of pavedPaths) {
-      const startPy = Math.floor(p.y / paverH) * paverH;
-      for (let py = startPy; py < p.y + p.h; py += paverH) {
-        const globalRow = Math.round(py / paverH);
-        const rowOffset = (Math.abs(globalRow) % 2 === 0) ? 0 : paverW / 2;
-        const startPx = Math.floor((p.x - rowOffset) / paverW) * paverW + rowOffset;
-
-        for (let px = startPx; px < p.x + p.w + paverW; px += paverW) {
-          // Clip boundaries of pavers to the segment
-          const drawX = Math.max(p.x, px);
-          const drawY = Math.max(p.y, py);
-          const drawW = Math.min(p.x + p.w, px + paverW) - drawX;
-          const drawH = Math.min(p.y + p.h, py + paverH) - drawY;
-
-          if (drawW <= 1 || drawH <= 1) continue;
-
-          // Deterministic hash based on world position
-          const paverHash = Math.abs(Math.sin(px * 17.3 + py * 41.9));
-          const toneIdx = Math.floor(paverHash * paverTones.length);
-          const stoneColor = paverTones[toneIdx];
-
-          // 1. Paver Face
-          ctx.fillStyle = stoneColor;
-          ctx.fillRect(drawX + 1, drawY + 1, drawW - 2, drawH - 2);
-
-          // 2. Sunlit 3D Bevel (Top & Left Highlight)
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
-          ctx.fillRect(drawX + 1, drawY + 1, drawW - 2, 1);
-          ctx.fillRect(drawX + 1, drawY + 1, 1, drawH - 2);
-
-          // 3. Shaded 3D Bevel (Bottom & Right Drop Shadow)
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
-          ctx.fillRect(drawX + 1, drawY + drawH - 2, drawW - 2, 1);
-          ctx.fillRect(drawX + drawW - 2, drawY + 1, 1, drawH - 2);
-
-          // 4. Subtle Surface Weathering / Micro-Fleck
-          if (paverHash > 0.7) {
-            ctx.fillStyle = 'rgba(51, 65, 85, 0.2)';
-            ctx.fillRect(drawX + drawW * 0.4, drawY + drawH * 0.4, 3, 2);
-          }
-        }
-      }
-    }
-    ctx.restore();
-
-    // Step 2D: Exterior-Only Curbs (ONLY where street meets grass/earth, NEVER across intersections!)
-    ctx.save();
-    ctx.strokeStyle = curbColor;
-    ctx.lineWidth = 3;
-    const stepSize = 16;
-
-    for (const p of pavedPaths) {
-      // Top Edge: from x to x+w at y
-      for (let ex = p.x; ex < p.x + p.w; ex += stepSize) {
-        const segW = Math.min(stepSize, p.x + p.w - ex);
-        const midX = ex + segW / 2;
-        if (!isCoveredByOtherPaved(p, midX, p.y - 3)) {
-          ctx.beginPath();
-          ctx.moveTo(ex, p.y);
-          ctx.lineTo(ex + segW, p.y);
-          ctx.stroke();
-        }
-      }
-
-      // Bottom Edge: from x to x+w at y+h
-      for (let ex = p.x; ex < p.x + p.w; ex += stepSize) {
-        const segW = Math.min(stepSize, p.x + p.w - ex);
-        const midX = ex + segW / 2;
-        if (!isCoveredByOtherPaved(p, midX, p.y + p.h + 3)) {
-          ctx.beginPath();
-          ctx.moveTo(ex, p.y + p.h);
-          ctx.lineTo(ex + segW, p.y + p.h);
-          ctx.stroke();
-        }
-      }
-
-      // Left Edge: from y to y+h at x
-      for (let ey = p.y; ey < p.y + p.h; ey += stepSize) {
-        const segH = Math.min(stepSize, p.y + p.h - ey);
-        const midY = ey + segH / 2;
-        if (!isCoveredByOtherPaved(p, p.x - 3, midY)) {
-          ctx.beginPath();
-          ctx.moveTo(p.x, ey);
-          ctx.lineTo(p.x, ey + segH);
-          ctx.stroke();
-        }
-      }
-
-      // Right Edge: from y to y+h at x+w
-      for (let ey = p.y; ey < p.y + p.h; ey += stepSize) {
-        const segH = Math.min(stepSize, p.y + p.h - ey);
-        const midY = ey + segH / 2;
-        if (!isCoveredByOtherPaved(p, p.x + p.w + 3, midY)) {
-          ctx.beginPath();
-          ctx.moveTo(p.x + p.w, ey);
-          ctx.lineTo(p.x + p.w, ey + segH);
-          ctx.stroke();
-        }
-      }
-    }
-    ctx.restore();
   }
 
   private renderTallGrass(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
@@ -2507,576 +2301,6 @@ export class RouteExplorationEngine {
       ctx.beginPath();
       ctx.arc(porchLanternX, porchLanternY, 18, 0, Math.PI * 2);
       ctx.fill();
-    } else if (b.type === 'museum') {
-      // 1. Classical Granite Tiered Plinth (3 steps)
-      ctx.fillStyle = '#475569';
-      ctx.fillRect(b.x - 4, b.y + b.h - 8, b.w + 8, 10);
-      ctx.fillStyle = '#64748b';
-      ctx.fillRect(b.x - 2, b.y + b.h - 6, b.w + 4, 4);
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillRect(b.x, b.y + b.h - 4, b.w, 3);
-
-      // 2. Main Facade (Ashlar Limestone Blocks)
-      ctx.fillStyle = '#e2e8f0';
-      ctx.fillRect(b.x, b.y + 20, b.w, b.h - 26);
-
-      // Classical Horizontal Entablature & Ashlar Lines
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 1;
-      for (let sy = b.y + 28; sy < b.y + b.h - 8; sy += 10) {
-        ctx.beginPath();
-        ctx.moveTo(b.x + 4, sy);
-        ctx.lineTo(b.x + b.w - 4, sy);
-        ctx.stroke();
-      }
-
-      // 3. Classical Triangular Pediment Roof with Verdigris Bronze Trim
-      ctx.fillStyle = '#0f766e';
-      ctx.fillRect(b.x - 6, b.y + 18, b.w + 12, 5);
-
-      ctx.fillStyle = '#cbd5e1';
-      ctx.beginPath();
-      ctx.moveTo(b.x - 6, b.y + 20);
-      ctx.lineTo(b.x + b.w / 2, b.y - 8);
-      ctx.lineTo(b.x + b.w + 6, b.y + 20);
-      ctx.closePath();
-      ctx.fill();
-
-      // Pediment Sunlit Raking Cornice
-      ctx.strokeStyle = '#f8fafc';
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.moveTo(b.x - 6, b.y + 20);
-      ctx.lineTo(b.x + b.w / 2, b.y - 8);
-      ctx.lineTo(b.x + b.w + 6, b.y + 20);
-      ctx.stroke();
-
-      // Gold Museum Crest in Tympanum
-      ctx.fillStyle = '#facc15';
-      ctx.beginPath();
-      ctx.arc(b.x + b.w / 2, b.y + 8, 7, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#78350f';
-      ctx.font = 'bold 8px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('M', b.x + b.w / 2, b.y + 11);
-
-      // 4. Four Classical Ionic / Corinthian Columns
-      const colCount = 4;
-      const colSpacing = (b.w - 28) / (colCount - 1);
-      for (let ci = 0; ci < colCount; ci++) {
-        const colX = b.x + 14 + ci * colSpacing;
-        ctx.fillStyle = 'rgba(0,0,0,0.18)';
-        ctx.fillRect(colX - 4, b.y + 22, 8, b.h - 28);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(colX - 3.5, b.y + 22, 7, b.h - 28);
-        ctx.fillStyle = '#e2e8f0';
-        ctx.fillRect(colX - 1.5, b.y + 22, 2, b.h - 28);
-        ctx.fillStyle = '#94a3b8';
-        ctx.fillRect(colX - 5, b.y + 20, 10, 3);
-        ctx.fillRect(colX - 5, b.y + b.h - 8, 10, 3);
-      }
-
-      // 5. Arched Amber Fossil Exhibit Windows
-      const fossilWins = [b.x + 18, b.x + b.w - 38];
-      fossilWins.forEach(fx => {
-        ctx.fillStyle = '#78350f';
-        ctx.fillRect(fx - 1, b.y + 32, 20, 26);
-        ctx.fillStyle = '#fef08a';
-        ctx.fillRect(fx, b.y + 33, 18, 24);
-        ctx.fillStyle = '#d97706';
-        ctx.beginPath();
-        ctx.ellipse(fx + 9, b.y + 45, 6, 8, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#451a03';
-        ctx.beginPath();
-        ctx.arc(fx + 9, b.y + 45, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // 6. Double Mahogany Entrance Doors
-      const dW = 26;
-      const dH = 30;
-      const dX = b.x + b.w / 2 - dW / 2;
-      const dY = b.y + b.h - dH;
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(dX - 2, dY - 2, dW + 4, dH + 2);
-      ctx.fillStyle = '#78350f';
-      ctx.fillRect(dX, dY, dW, dH);
-      ctx.strokeStyle = '#451a03';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(dX + 2, dY + 3, dW / 2 - 3, dH - 6);
-      ctx.strokeRect(dX + dW / 2 + 1, dY + 3, dW / 2 - 3, dH - 6);
-      ctx.fillStyle = '#facc15';
-      ctx.beginPath();
-      ctx.arc(dX + dW / 2 - 3, dY + dH / 2, 2, 0, Math.PI * 2);
-      ctx.arc(dX + dW / 2 + 3, dY + dH / 2, 2, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else if (b.type === 'dept_store') {
-      // 1. Granite Plinth Base
-      ctx.fillStyle = '#064e3b';
-      ctx.fillRect(b.x - 4, b.y + b.h - 6, b.w + 8, 8);
-
-      // 2. Multi-Story Art Deco Terraced Body
-      ctx.fillStyle = '#047857';
-      ctx.fillRect(b.x, b.y + 16, b.w, b.h - 20);
-
-      // Decorative Gold Cornices
-      ctx.fillStyle = '#f59e0b';
-      ctx.fillRect(b.x - 2, b.y + 16, b.w + 4, 4);
-      ctx.fillRect(b.x + 4, b.y + 44, b.w - 8, 3);
-      ctx.fillRect(b.x + 4, b.y + 70, b.w - 8, 3);
-
-      // Upper Floor Windows
-      for (let floor = 0; floor < 2; floor++) {
-        const fy = b.y + 24 + floor * 26;
-        for (let col = 0; col < 5; col++) {
-          const wx = b.x + 12 + col * ((b.w - 24) / 5);
-          ctx.fillStyle = '#0f172a';
-          ctx.fillRect(wx - 1, fy - 1, 14, 16);
-          ctx.fillStyle = '#fef08a';
-          ctx.fillRect(wx, fy, 12, 14);
-          ctx.strokeStyle = '#f59e0b';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(wx, fy, 12, 14);
-        }
-      }
-
-      // 3. Ground Floor Showcase Atrium Windows
-      const gwW = (b.w - 44) / 2;
-      [b.x + 8, b.x + b.w - 8 - gwW].forEach(gx => {
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(gx - 1, b.y + b.h - 30, gwW + 2, 26);
-        ctx.fillStyle = '#38bdf8';
-        ctx.fillRect(gx, b.y + b.h - 29, gwW, 24);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(gx + 6, b.y + b.h - 20, 6, 12);
-        ctx.fillStyle = '#f43f5e';
-        ctx.fillRect(gx + gwW - 12, b.y + b.h - 18, 7, 10);
-      });
-
-      // 4. Rooftop Marquee Sign: "CELADON DEPT STORE"
-      const roofAtriumW = b.w - 32;
-      const roofAtriumX = b.x + 16;
-      ctx.fillStyle = '#065f46';
-      ctx.fillRect(roofAtriumX, b.y + 2, roofAtriumW, 14);
-      ctx.fillStyle = '#6ee7b7';
-      ctx.fillRect(roofAtriumX + 2, b.y + 4, roofAtriumW - 4, 10);
-
-      const neonHue = (this.time * 60) % 360;
-      ctx.fillStyle = `hsl(${neonHue}, 90%, 55%)`;
-      ctx.font = 'bold 9px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('★ CELADON DEPT STORE ★', b.x + b.w / 2, b.y + 12);
-
-      // 5. Grand Revolving Glass Entrance Doors
-      const entW = 28;
-      const entH = 30;
-      const entX = b.x + b.w / 2 - entW / 2;
-      const entY = b.y + b.h - entH;
-      ctx.fillStyle = '#f59e0b';
-      ctx.fillRect(entX - 2, entY - 2, entW + 4, entH + 2);
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(entX, entY, entW, entH);
-      ctx.fillStyle = '#dc2626';
-      ctx.fillRect(entX + 4, entY + entH - 4, entW - 8, 6);
-      const revAngle = this.time * 2;
-      ctx.strokeStyle = '#fef08a';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(entX + entW / 2, entY + 4);
-      ctx.lineTo(entX + entW / 2 + Math.cos(revAngle) * 9, entY + entH - 8);
-      ctx.stroke();
-
-    } else if (b.type === 'silph') {
-      // 1. Sleek Modern Foundation Plinth
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(b.x - 3, b.y + b.h - 6, b.w + 6, 8);
-
-      // 2. Midnight Blue Reflective Glass Tower Body
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(b.x, b.y + 14, b.w, b.h - 18);
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(b.x + 4, b.y + 18, b.w - 8, b.h - 26);
-
-      // Reflective Curtain Wall Mullions
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 1.2;
-      for (let fx = b.x + 14; fx < b.x + b.w - 10; fx += 16) {
-        ctx.beginPath();
-        ctx.moveTo(fx, b.y + 18);
-        ctx.lineTo(fx, b.y + b.h - 10);
-        ctx.stroke();
-      }
-      for (let fy = b.y + 24; fy < b.y + b.h - 14; fy += 14) {
-        ctx.beginPath();
-        ctx.moveTo(b.x + 4, fy);
-        ctx.lineTo(b.x + b.w - 4, fy);
-        ctx.stroke();
-      }
-
-      // Animated Glowing Cyan Data Conduit Traces
-      const pulseAlpha = 0.5 + Math.sin(this.time * 4) * 0.4;
-      ctx.strokeStyle = `rgba(6, 182, 212, ${pulseAlpha})`;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(b.x + 2, b.y + 16, b.w - 4, b.h - 22);
-
-      // 3. Rooftop Antenna & Blinking Beacon
-      const antX = b.x + b.w / 2;
-      const antY = b.y + 14;
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.moveTo(antX, antY);
-      ctx.lineTo(antX, antY - 20);
-      ctx.stroke();
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.beginPath();
-      ctx.arc(antX + 18, antY - 6, 8, 0, Math.PI, true);
-      ctx.fill();
-
-      const flash = Math.sin(this.time * 6) > 0.4;
-      ctx.fillStyle = flash ? '#ef4444' : '#7f1d1d';
-      ctx.beginPath();
-      ctx.arc(antX, antY - 21, 3, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 4. Glowing "SILPH CO." Corporate Logo Crest
-      ctx.fillStyle = '#06b6d4';
-      ctx.font = '800 10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('SILPH CO.', b.x + b.w / 2, b.y + 32);
-
-      // 5. Automated High-Tech Sliding Glass Entrance Doors
-      const sDoorW = 28;
-      const sDoorH = 26;
-      const sDoorX = b.x + b.w / 2 - sDoorW / 2;
-      const sDoorY = b.y + b.h - sDoorH;
-      ctx.fillStyle = '#0284c7';
-      ctx.fillRect(sDoorX - 2, sDoorY - 2, sDoorW + 4, sDoorH + 2);
-      ctx.fillStyle = '#0369a1';
-      ctx.fillRect(sDoorX, sDoorY, sDoorW, sDoorH);
-      ctx.fillStyle = '#22c55e';
-      ctx.beginPath();
-      ctx.arc(sDoorX + sDoorW + 4, sDoorY + sDoorH / 2, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else if (b.type === 'safari_gate') {
-      // 1. Rustic Timber Pier Base
-      ctx.fillStyle = '#451a03';
-      ctx.fillRect(b.x - 4, b.y + b.h - 6, b.w + 8, 8);
-
-      // 2. Heavy Cedar & Teak Timber Post Frame
-      ctx.fillStyle = '#78350f';
-      ctx.fillRect(b.x, b.y + 18, b.w, b.h - 22);
-
-      [b.x - 3, b.x + b.w - 7].forEach(lx => {
-        ctx.fillStyle = '#92400e';
-        ctx.fillRect(lx, b.y + 12, 10, b.h - 16);
-        ctx.fillStyle = '#78350f';
-        ctx.fillRect(lx + 2, b.y + 12, 3, b.h - 16);
-      });
-
-      // 3. Tropical Thatched Straw / Bamboo Canopy
-      ctx.fillStyle = '#b45309';
-      ctx.beginPath();
-      ctx.moveTo(b.x - 10, b.y + 20);
-      ctx.lineTo(b.x + b.w / 2, b.y - 6);
-      ctx.lineTo(b.x + b.w + 10, b.y + 20);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.strokeStyle = '#d97706';
-      ctx.lineWidth = 2.5;
-      for (let s = 0; s < 4; s++) {
-        const sy = b.y + s * 6;
-        const sw = (b.w + 16) * (1 - s * 0.22);
-        ctx.beginPath();
-        ctx.moveTo(b.x + b.w / 2 - sw / 2, sy);
-        ctx.lineTo(b.x + b.w / 2 + sw / 2, sy);
-        ctx.stroke();
-      }
-
-      // Wooden Archway Signboard: "SAFARI ZONE"
-      ctx.fillStyle = '#451a03';
-      ctx.fillRect(b.x + 16, b.y + 22, b.w - 32, 14);
-      ctx.strokeStyle = '#d97706';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(b.x + 16, b.y + 22, b.w - 32, 14);
-      ctx.fillStyle = '#fef08a';
-      ctx.font = 'bold 9px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('🌿 SAFARI ZONE 🌿', b.x + b.w / 2, b.y + 33);
-
-      // Fluttering Safari Pennant Flags on Roof
-      const flagX = b.x + b.w / 2;
-      const flagY = b.y - 6;
-      ctx.strokeStyle = '#78350f';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(flagX, flagY);
-      ctx.lineTo(flagX, flagY - 14);
-      ctx.stroke();
-      ctx.fillStyle = '#16a34a';
-      ctx.beginPath();
-      ctx.moveTo(flagX, flagY - 14);
-      ctx.lineTo(flagX + 12 + Math.sin(this.time * 4) * 2, flagY - 9);
-      ctx.lineTo(flagX, flagY - 4);
-      ctx.closePath();
-      ctx.fill();
-
-      // 4. Massive Double Wooden Safari Gates with Iron Straps
-      const gW = 34;
-      const gH = 32;
-      const gX = b.x + b.w / 2 - gW / 2;
-      const gY = b.y + b.h - gH;
-      ctx.fillStyle = '#292524';
-      ctx.fillRect(gX - 2, gY - 2, gW + 4, gH + 2);
-      ctx.fillStyle = '#92400e';
-      ctx.fillRect(gX, gY, gW, gH);
-      ctx.fillStyle = '#44403c';
-      ctx.fillRect(gX, gY + 6, gW, 3);
-      ctx.fillRect(gX, gY + gH - 8, gW, 3);
-      ctx.fillStyle = '#facc15';
-      ctx.beginPath();
-      ctx.arc(gX + gW / 2, gY + gH / 2, 4, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else if (b.type === 'lab') {
-      // 1. Reinforced Volcanic Seismic Concrete Plinth
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(b.x - 4, b.y + b.h - 6, b.w + 8, 8);
-
-      // 2. High-Tech White Industrial Composite Walls
-      ctx.fillStyle = '#e2e8f0';
-      ctx.fillRect(b.x, b.y + 16, b.w, b.h - 20);
-
-      ctx.strokeStyle = '#94a3b8';
-      ctx.lineWidth = 1;
-      for (let sy = b.y + 26; sy < b.y + b.h - 8; sy += 12) {
-        ctx.beginPath();
-        ctx.moveTo(b.x + 3, sy);
-        ctx.lineTo(b.x + b.w - 3, sy);
-        ctx.stroke();
-      }
-
-      // 3. Solar Panel Array on Roof
-      const solW = b.w - 18;
-      const solX = b.x + 9;
-      ctx.fillStyle = '#1e3a8a';
-      ctx.fillRect(solX, b.y + 2, solW, 14);
-      ctx.strokeStyle = '#60a5fa';
-      ctx.lineWidth = 1;
-      for (let sx = solX + 8; sx < solX + solW; sx += 12) {
-        ctx.beginPath();
-        ctx.moveTo(sx, b.y + 2);
-        ctx.lineTo(sx, b.y + 16);
-        ctx.stroke();
-      }
-
-      // Industrial Exhaust Turbine
-      ctx.fillStyle = '#475569';
-      ctx.fillRect(b.x + b.w - 20, b.y - 4, 12, 10);
-      ctx.fillStyle = '#334155';
-      ctx.beginPath();
-      ctx.arc(b.x + b.w - 14, b.y - 4, 6, 0, Math.PI, true);
-      ctx.fill();
-
-      // 4. Laboratory Chemical Research Windows
-      const labWinW = 20;
-      const labWins = [b.x + 12, b.x + b.w - 12 - labWinW];
-      labWins.forEach(lx => {
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(lx - 1, b.y + 30, labWinW + 2, 22);
-        ctx.fillStyle = '#06b6d4';
-        ctx.fillRect(lx, b.y + 31, labWinW, 20);
-        ctx.fillStyle = '#22c55e';
-        ctx.beginPath();
-        ctx.arc(lx + 6, b.y + 44, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ec4899';
-        ctx.beginPath();
-        ctx.arc(lx + 14, b.y + 42, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // 5. Heavy Steel Pressure-Seal Air-Lock Door
-      const labDoorW = 24;
-      const labDoorH = 28;
-      const labDoorX = b.x + b.w / 2 - labDoorW / 2;
-      const labDoorY = b.y + b.h - labDoorH;
-      ctx.fillStyle = '#334155';
-      ctx.fillRect(labDoorX - 2, labDoorY - 2, labDoorW + 4, labDoorH + 2);
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillRect(labDoorX, labDoorY, labDoorW, labDoorH);
-      ctx.fillStyle = '#facc15';
-      ctx.fillRect(labDoorX + 2, labDoorY + 4, labDoorW - 4, 3);
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(labDoorX + labDoorW / 2, labDoorY + labDoorH / 2 + 1, 5, 0, Math.PI * 2);
-      ctx.stroke();
-
-    } else if (b.type === 'fan_club') {
-      // 1. Maritime Granite Foundation
-      ctx.fillStyle = '#1e3a8a';
-      ctx.fillRect(b.x - 3, b.y + b.h - 6, b.w + 6, 8);
-
-      // 2. Royal Blue Maritime Timber Lap Siding
-      ctx.fillStyle = '#2563eb';
-      ctx.fillRect(b.x, b.y + 18, b.w, b.h - 22);
-
-      ctx.strokeStyle = '#93c5fd';
-      ctx.lineWidth = 1;
-      for (let sy = b.y + 26; sy < b.y + b.h - 6; sy += 8) {
-        ctx.beginPath();
-        ctx.moveTo(b.x + 2, sy);
-        ctx.lineTo(b.x + b.w - 2, sy);
-        ctx.stroke();
-      }
-
-      // 3. High-Pitched Crimson Cottage Roof
-      ctx.fillStyle = '#991b1b';
-      ctx.fillRect(b.x - 6, b.y + 16, b.w + 12, 5);
-
-      ctx.fillStyle = '#dc2626';
-      ctx.beginPath();
-      ctx.moveTo(b.x - 7, b.y + 18);
-      ctx.lineTo(b.x + b.w / 2, b.y - 6);
-      ctx.lineTo(b.x + b.w + 7, b.y + 18);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(b.x - 7, b.y + 18);
-      ctx.lineTo(b.x + b.w / 2, b.y - 6);
-      ctx.lineTo(b.x + b.w + 7, b.y + 18);
-      ctx.stroke();
-
-      // Spinning Pikachu Weathervane on Chimney
-      const chimX = b.x + b.w - 18;
-      const chimY = b.y - 8;
-      ctx.fillStyle = '#b91c1c';
-      ctx.fillRect(chimX, chimY, 10, 18);
-      const vaneAngle = Math.sin(this.time * 2) * 0.4;
-      ctx.fillStyle = '#facc15';
-      ctx.save();
-      ctx.translate(chimX + 5, chimY - 6);
-      ctx.rotate(vaneAngle);
-      ctx.beginPath();
-      ctx.arc(0, 0, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillRect(-3, -7, 2, 5);
-      ctx.fillRect(1, -7, 2, 5);
-      ctx.restore();
-
-      // 4. Brass Circular Porthole Windows
-      const portholes = [b.x + 14, b.x + b.w - 26];
-      portholes.forEach(px => {
-        ctx.fillStyle = '#d97706';
-        ctx.beginPath();
-        ctx.arc(px, b.y + 36, 9, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#fef08a';
-        ctx.beginPath();
-        ctx.arc(px, b.y + 36, 6.5, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // 5. Welcoming Dutch Oak Door with Heart Emblem
-      const fcDoorW = 20;
-      const fcDoorH = 26;
-      const fcDoorX = b.x + b.w / 2 - fcDoorW / 2;
-      const fcDoorY = b.y + b.h - fcDoorH;
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(fcDoorX - 2, fcDoorY - 2, fcDoorW + 4, fcDoorH + 2);
-      ctx.fillStyle = '#fef08a';
-      ctx.fillRect(fcDoorX, fcDoorY, fcDoorW, fcDoorH);
-      ctx.fillStyle = '#ef4444';
-      ctx.beginPath();
-      ctx.arc(fcDoorX + fcDoorW / 2, fcDoorY + 8, 3, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else if (b.type === 'dojo') {
-      // 1. Heavy Mountain Granite Plinth (Platform)
-      ctx.fillStyle = '#334155';
-      ctx.fillRect(b.x - 5, b.y + b.h - 8, b.w + 10, 10);
-      ctx.fillStyle = '#64748b';
-      ctx.fillRect(b.x - 3, b.y + b.h - 6, b.w + 6, 4);
-
-      // 2. Traditional Japanese Lacquer Timber Facade
-      ctx.fillStyle = '#b91c1c';
-      ctx.fillRect(b.x, b.y + 18, b.w, b.h - 24);
-
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(b.x + 3, b.y + 18, 5, b.h - 24);
-      ctx.fillRect(b.x + b.w - 8, b.y + 18, 5, b.h - 24);
-
-      // 3. Sweeping Pagoda Hip Roof with Upturned Corners
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(b.x - 10, b.y + 16, b.w + 20, 5);
-
-      ctx.fillStyle = '#1e293b';
-      ctx.beginPath();
-      ctx.moveTo(b.x - 12, b.y + 18);
-      ctx.lineTo(b.x + b.w / 2, b.y - 6);
-      ctx.lineTo(b.x + b.w + 12, b.y + 18);
-      ctx.closePath();
-      ctx.fill();
-
-      // Gold Upturned Pagoda Roof Finials
-      ctx.fillStyle = '#facc15';
-      ctx.beginPath();
-      ctx.arc(b.x - 12, b.y + 14, 3.5, 0, Math.PI * 2);
-      ctx.arc(b.x + b.w + 12, b.y + 14, 3.5, 0, Math.PI * 2);
-      ctx.arc(b.x + b.w / 2, b.y - 7, 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 4. Traditional Paper Andon Lanterns
-      const lanternPositions = [b.x + 14, b.x + b.w - 22];
-      lanternPositions.forEach(lx => {
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(lx, b.y + 28, 8, 2);
-        ctx.fillRect(lx, b.y + 42, 8, 2);
-        ctx.fillStyle = '#fef08a';
-        ctx.fillRect(lx + 1, b.y + 30, 6, 12);
-        ctx.fillStyle = '#ef4444';
-        ctx.fillRect(lx + 3, b.y + 34, 2, 4);
-      });
-
-      // 5. Sliding Shoji Wood Lattice Entrance Doors
-      const dojoDoorW = 26;
-      const dojoDoorH = 28;
-      const dojoDoorX = b.x + b.w / 2 - dojoDoorW / 2;
-      const dojoDoorY = b.y + b.h - dojoDoorH;
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(dojoDoorX - 2, dojoDoorY - 2, dojoDoorW + 4, dojoDoorH + 2);
-      ctx.fillStyle = '#fef3c7';
-      ctx.fillRect(dojoDoorX, dojoDoorY, dojoDoorW, dojoDoorH);
-      ctx.strokeStyle = '#78350f';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(dojoDoorX + dojoDoorW / 2, dojoDoorY);
-      ctx.lineTo(dojoDoorX + dojoDoorW / 2, dojoDoorY + dojoDoorH);
-      ctx.moveTo(dojoDoorX, dojoDoorY + 9);
-      ctx.lineTo(dojoDoorX + dojoDoorW, dojoDoorY + 9);
-      ctx.moveTo(dojoDoorX, dojoDoorY + 18);
-      ctx.lineTo(dojoDoorX + dojoDoorW, dojoDoorY + 18);
-      ctx.stroke();
-
-      // Stone Guardian Lions
-      [-9, dojoDoorW + 3].forEach(offX => {
-        ctx.fillStyle = '#64748b';
-        ctx.fillRect(dojoDoorX + offX, dojoDoorY + dojoDoorH - 12, 6, 12);
-        ctx.fillStyle = '#94a3b8';
-        ctx.beginPath();
-        ctx.arc(dojoDoorX + offX + 3, dojoDoorY + dojoDoorH - 12, 3, 0, Math.PI * 2);
-        ctx.fill();
-      });
     }
 
     // High-Contrast Glassmorphic Building Label Badge
@@ -3086,13 +2310,6 @@ export class RouteExplorationEngine {
     const isMart = b.type === 'mart';
     const isCenter = b.type === 'center';
     const isHouse = b.type === 'house';
-    const isMuseum = b.type === 'museum';
-    const isDeptStore = b.type === 'dept_store';
-    const isSilph = b.type === 'silph';
-    const isSafariGate = b.type === 'safari_gate';
-    const isLab = b.type === 'lab';
-    const isFanClub = b.type === 'fan_club';
-    const isDojo = b.type === 'dojo';
 
     const tagBg = isGym
       ? 'rgba(113, 63, 18, 0.94)'
@@ -3100,71 +2317,12 @@ export class RouteExplorationEngine {
         ? 'rgba(30, 58, 138, 0.94)'
         : isCenter
           ? 'rgba(153, 27, 27, 0.94)'
-          : isMuseum
-            ? 'rgba(51, 65, 85, 0.94)'
-            : isDeptStore
-              ? 'rgba(19, 78, 74, 0.94)'
-              : isSilph
-                ? 'rgba(15, 23, 42, 0.96)'
-                : isSafariGate
-                  ? 'rgba(120, 53, 15, 0.94)'
-                  : isLab
-                    ? 'rgba(30, 64, 175, 0.94)'
-                    : isFanClub
-                      ? 'rgba(29, 78, 216, 0.94)'
-                      : isDojo
-                        ? 'rgba(153, 27, 27, 0.94)'
-                        : isHouse
-                          ? 'rgba(22, 101, 52, 0.94)'
-                          : 'rgba(15, 23, 42, 0.9)';
+          : isHouse
+            ? 'rgba(22, 101, 52, 0.94)'
+            : 'rgba(15, 23, 42, 0.9)';
 
-    const tagBorder = isGym
-      ? '#facc15'
-      : isMart
-        ? '#60a5fa'
-        : isCenter
-          ? '#fca5a5'
-          : isMuseum
-            ? '#cbd5e1'
-            : isDeptStore
-              ? '#34d399'
-              : isSilph
-                ? '#38bdf8'
-                : isSafariGate
-                  ? '#fbbf24'
-                  : isLab
-                    ? '#93c5fd'
-                    : isFanClub
-                      ? '#fde047'
-                      : isDojo
-                        ? '#f87171'
-                        : isHouse
-                          ? '#86efac'
-                          : '#94a3b8';
-
-    const tagIcon = isGym
-      ? '🏆'
-      : isMart
-        ? '🛒'
-        : isCenter
-          ? '🏥'
-          : isMuseum
-            ? '🏛️'
-            : isDeptStore
-              ? '🏬'
-              : isSilph
-                ? '🏢'
-                : isSafariGate
-                  ? '🦁'
-                  : isLab
-                    ? '🔬'
-                    : isFanClub
-                      ? '⚡'
-                      : isDojo
-                        ? '🥋'
-                        : isHouse
-                          ? '🏡'
-                          : '🚪';
+    const tagBorder = isGym ? '#facc15' : isMart ? '#60a5fa' : isCenter ? '#fca5a5' : isHouse ? '#86efac' : '#94a3b8';
+    const tagIcon = isGym ? '🏆' : isMart ? '🛒' : isCenter ? '🏥' : isHouse ? '🏡' : '🚪';
 
     ctx.font = '800 11px system-ui';
     const textWidth = ctx.measureText(`${tagIcon} ${b.label}`).width;
@@ -3468,48 +2626,44 @@ export class RouteExplorationEngine {
     }
   }
 
-  public drawSingleSignpost(ctx: CanvasRenderingContext2D, sp: RouteSignpost): void {
-    ctx.save();
-
-    // 1. Contact Drop Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-    ctx.beginPath();
-    ctx.ellipse(sp.x, sp.y + 16, 10, 4.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 2. Wooden Post
-    ctx.fillStyle = '#58240c';
-    ctx.fillRect(sp.x - 2.5, sp.y - 2, 5, 18);
-
-    // 3. Wooden Signboard with Bevel
-    ctx.fillStyle = '#78350f';
-    ctx.fillRect(sp.x - 17, sp.y - 18, 34, 18);
-    ctx.fillStyle = '#fef3c7';
-    ctx.fillRect(sp.x - 15, sp.y - 16, 30, 14);
-
-    // Board Text Lines
-    ctx.fillStyle = '#92400e';
-    ctx.fillRect(sp.x - 11, sp.y - 13, 22, 1.8);
-    ctx.fillRect(sp.x - 11, sp.y - 9.5, 18, 1.8);
-    ctx.fillRect(sp.x - 11, sp.y - 6, 14, 1.8);
-
-    // 4. Proximity Interactive Indicator (📋 Read bubble)
-    const dist = Math.hypot(this.player.x - sp.x, this.player.y - sp.y);
-    if (dist < 50) {
-      const bob = Math.sin(this.time * 5) * 3;
-      ctx.font = '13px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('📋', sp.x, sp.y - 24 + bob);
-    }
-
-    ctx.restore();
-  }
-
   private renderSignposts(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     if (!route.signposts || route.signposts.length === 0) return;
 
     for (const sp of route.signposts) {
-      this.drawSingleSignpost(ctx, sp);
+      ctx.save();
+
+      // 1. Contact Drop Shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(sp.x, sp.y + 16, 10, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2. Wooden Post
+      ctx.fillStyle = '#58240c';
+      ctx.fillRect(sp.x - 2.5, sp.y - 2, 5, 18);
+
+      // 3. Wooden Signboard with Bevel
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(sp.x - 17, sp.y - 18, 34, 18);
+      ctx.fillStyle = '#fef3c7';
+      ctx.fillRect(sp.x - 15, sp.y - 16, 30, 14);
+
+      // Board Text Lines
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(sp.x - 11, sp.y - 13, 22, 1.8);
+      ctx.fillRect(sp.x - 11, sp.y - 9.5, 18, 1.8);
+      ctx.fillRect(sp.x - 11, sp.y - 6, 14, 1.8);
+
+      // 4. Proximity Interactive Indicator (📋 Read bubble)
+      const dist = Math.hypot(this.player.x - sp.x, this.player.y - sp.y);
+      if (dist < 50) {
+        const bob = Math.sin(this.time * 5) * 3;
+        ctx.font = '13px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('📋', sp.x, sp.y - 24 + bob);
+      }
+
+      ctx.restore();
     }
   }
 
@@ -3527,17 +2681,170 @@ export class RouteExplorationEngine {
   }
 
   private renderPlayer(ctx: CanvasRenderingContext2D): void {
-    drawCustomTrainerSprite(
-      ctx,
-      this.player.x,
-      this.player.y,
-      this.player.dir,
-      this.player.animFrame,
-      this.selectedTrainerId,
-      this.player.inGrass,
-      this.time,
-      1.0
-    );
+    const px = this.player.x;
+    const py = this.player.y;
+    const dir = this.player.dir;
+    const anim = this.player.animFrame;
+    const bob = anim === 1 ? -2 : anim === 3 ? 2 : 0;
+    const legSwing = anim === 1 ? -3.5 : anim === 3 ? 3.5 : 0;
+
+    ctx.save();
+
+    // 1. Realistic Elliptical Ground Drop Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+    ctx.beginPath();
+    ctx.ellipse(px, py + 13, 12, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. Denim Jeans (Indigo with crease shading)
+    ctx.fillStyle = '#1e3a8a';
+    if (dir === 'down' || dir === 'up') {
+      ctx.fillRect(px - 6, py + 3 + bob + (dir === 'down' ? legSwing : -legSwing), 5, 9);
+      ctx.fillRect(px + 1, py + 3 + bob + (dir === 'down' ? -legSwing : legSwing), 5, 9);
+      // Knee highlight
+      ctx.fillStyle = '#2563eb';
+      ctx.fillRect(px - 5, py + 6 + bob + (dir === 'down' ? legSwing : -legSwing), 3, 2);
+      ctx.fillRect(px + 2, py + 6 + bob + (dir === 'down' ? -legSwing : legSwing), 3, 2);
+    } else {
+      ctx.fillRect(px - 5 + legSwing, py + 3 + bob, 10, 9);
+      ctx.fillStyle = '#2563eb';
+      ctx.fillRect(px - 3 + legSwing, py + 6 + bob, 6, 2);
+    }
+
+    // 3. Running Sneakers (Red with White Rubber Midsoles)
+    ctx.fillStyle = '#dc2626';
+    if (dir === 'down' || dir === 'up') {
+      ctx.fillRect(px - 7, py + 10 + bob, 6, 4);
+      ctx.fillRect(px + 1, py + 10 + bob, 6, 4);
+      ctx.fillStyle = '#ffffff'; // White soles
+      ctx.fillRect(px - 7, py + 13 + bob, 6, 2);
+      ctx.fillRect(px + 1, py + 13 + bob, 6, 2);
+    } else {
+      const shoeDir = dir === 'right' ? 1 : -1;
+      ctx.fillRect(px - 6 + legSwing, py + 10 + bob, 11, 4);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(px - 6 + legSwing + (shoeDir > 0 ? 2 : 0), py + 13 + bob, 9, 2);
+    }
+
+    // 4. Green Explorer Backpack (Behind player when facing up or side)
+    if (dir === 'up' || dir === 'left' || dir === 'right') {
+      ctx.fillStyle = '#15803d';
+      const bpX = dir === 'up' ? px - 6 : dir === 'left' ? px + 2 : px - 8;
+      ctx.fillRect(bpX, py - 6 + bob, 6, 11);
+      ctx.fillStyle = '#166534';
+      ctx.fillRect(bpX + 1, py - 3 + bob, 4, 6);
+      // Backpack buckle
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(bpX + 2, py - 1 + bob, 2, 2);
+    }
+
+    // 5. Red Trainer Vest / Jacket
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(px - 7, py - 7 + bob, 14, 12);
+
+    // White Undershirt with Collar & Zipper
+    ctx.fillStyle = '#ffffff';
+    if (dir === 'down') {
+      ctx.fillRect(px - 3, py - 7 + bob, 6, 5);
+      // Vest center zipper
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(px - 1, py - 3 + bob, 2, 8);
+    } else if (dir === 'left' || dir === 'right') {
+      const colX = dir === 'left' ? px - 4 : px + 1;
+      ctx.fillRect(colX, py - 7 + bob, 3, 4);
+    }
+
+    // Arm Swings with Skin Hands
+    ctx.fillStyle = '#dc2626';
+    if (dir === 'down' || dir === 'up') {
+      ctx.fillRect(px - 9, py - 6 + bob - legSwing, 3, 7);
+      ctx.fillRect(px + 6, py - 6 + bob + legSwing, 3, 7);
+      // Skin hands
+      ctx.fillStyle = '#fed7aa';
+      ctx.fillRect(px - 9, py + 1 + bob - legSwing, 3, 3);
+      ctx.fillRect(px + 6, py + 1 + bob + legSwing, 3, 3);
+    }
+
+    // 6. Head / Face & Anime Eyes
+    ctx.fillStyle = '#fed7aa';
+    ctx.fillRect(px - 5, py - 17 + bob, 10, 10);
+
+    // Spiky Hair bangs peeking out
+    ctx.fillStyle = '#292524';
+    ctx.fillRect(px - 6, py - 18 + bob, 12, 3);
+    if (dir === 'down') {
+      ctx.fillRect(px - 5, py - 15 + bob, 2, 3);
+      ctx.fillRect(px + 3, py - 15 + bob, 2, 3);
+
+      // Expressive Anime Eyes with Catchlights
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(px - 3, py - 13 + bob, 2, 3);
+      ctx.fillRect(px + 1, py - 13 + bob, 2, 3);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(px - 3, py - 13 + bob, 1, 1);
+      ctx.fillRect(px + 1, py - 13 + bob, 1, 1);
+    } else if (dir === 'left') {
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(px - 4, py - 13 + bob, 2, 3);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(px - 4, py - 13 + bob, 1, 1);
+    } else if (dir === 'right') {
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(px + 2, py - 13 + bob, 2, 3);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(px + 3, py - 13 + bob, 1, 1);
+    }
+
+    // 7. Iconic Red Trainer Baseball Cap
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(px - 6, py - 21 + bob, 12, 6);
+
+    // White Half-Circle Emblem on Cap
+    ctx.fillStyle = '#ffffff';
+    if (dir === 'down' || dir === 'left' || dir === 'right') {
+      ctx.fillRect(px - 2, py - 20 + bob, 4, 3);
+    }
+
+    // Curved Visor / Brim
+    ctx.fillStyle = '#ffffff';
+    const visorOffset = dir === 'left' ? -9 : dir === 'right' ? 3 : -5;
+    const visorW = dir === 'down' ? 10 : 7;
+    ctx.fillRect(px + visorOffset, py - 16 + bob, visorW, 2.5);
+
+    // Dark Under-Visor Shadow over Eyes
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(px + visorOffset, py - 14 + bob, visorW, 1.2);
+
+    // 8. Tall Grass Immersion: Overlapping grass blades covering legs when wading in grass
+    if (this.player.inGrass) {
+      const gSway = Math.sin(this.time * 3 + px * 0.1) * 2.5;
+      ctx.fillStyle = '#40916c';
+      ctx.beginPath();
+      ctx.moveTo(px - 9, py + 14);
+      ctx.lineTo(px - 7 + gSway, py + 3);
+      ctx.lineTo(px - 4, py + 14);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#52b788';
+      ctx.beginPath();
+      ctx.moveTo(px - 3, py + 14);
+      ctx.lineTo(px + gSway, py + 1);
+      ctx.lineTo(px + 3, py + 14);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#40916c';
+      ctx.beginPath();
+      ctx.moveTo(px + 4, py + 14);
+      ctx.lineTo(px + 7 + gSway, py + 4);
+      ctx.lineTo(px + 9, py + 14);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.restore();
   }
 
   public isPointOnRoad(x: number, y: number, route: RouteDefinition): boolean {
@@ -3606,94 +2913,132 @@ export class RouteExplorationEngine {
     return stones;
   }
 
+  public getTreeTrunkFootY(tree: RouteTree): number {
+    const rScale = tree.scale || 1.0;
+    const type = tree.type || 'broadleaf';
+    if (type === 'coastal') return tree.y + 24 * rScale;
+    if (type === 'mature') return tree.y + 22 * rScale;
+    if (type === 'small') return tree.y + 15 * rScale;
+    if (type === 'slender') return tree.y + 20 * rScale;
+    if (type === 'decorative') return tree.y + 16 * rScale;
+    if (type === 'conifer' || type === 'pine') return tree.y + 19 * rScale;
+    return tree.y + 18 * rScale;
+  }
+
+  public getTreeCollisionRadius(tree: RouteTree): number {
+    const rScale = tree.scale || 1.0;
+    const type = tree.type || 'broadleaf';
+    if (type === 'small' || type === 'slender' || type === 'decorative') return 7 * rScale;
+    if (type === 'mature' || type === 'dense_forest') return 12 * rScale;
+    return 9 * rScale;
+  }
+
   public getRouteTrees(route: RouteDefinition): RouteTree[] {
     if (route.trees && route.trees.length > 0) {
       return route.trees;
     }
+
     const trees: RouteTree[] = [];
-    const rId = route.id;
+    const isForest = route.theme === 'forest';
+    const isRock = route.theme === 'rock';
+    const isWater = route.theme === 'water';
+    const isCity = route.theme === 'city';
 
-    // Determine regional tree palette for this location
-    const getTreeTypeForPos = (x: number, y: number, isBorder: boolean): 'oak' | 'pine' | 'blossom' | 'mystic' | 'palm' | 'autumn' | 'city' => {
-      if (rId === 3 || rId === 7) return 'palm'; // Vermilion & Cinnabar coastal
-      if (rId === 4) return (x > 1800 && (Math.round(x / 50) % 2 === 0)) ? 'city' : 'blossom'; // Celadon gardens & urban
-      if (rId === 6) return (x % 3 === 0) ? 'autumn' : 'city'; // Saffron metropolis & Silph plaza
-      if (rId === 5) return (Math.round(x / 40) % 2 === 0) ? 'mystic' : 'pine'; // Fuchsia safari & ninja groves
-      if (rId === 1) return (x > 1600) ? 'autumn' : 'pine'; // Pewter granite vs Viridian Forest
-      if (rId === 2) return (x < 1200) ? 'pine' : (x > 2000 ? 'blossom' : 'oak'); // Mt Moon vs Cerulean
-      if (rId === 8) return (Math.round(x / 60) % 2 === 0) ? 'autumn' : 'pine'; // Victory Road
-      if (rId === 0) return (y < 400 && x > 700 && x < 1400) ? 'blossom' : 'oak'; // Blossom Terrace
-      return route.theme === 'forest' ? 'pine' : route.theme === 'water' ? 'palm' : route.theme === 'rock' ? 'autumn' : 'oak';
-    };
+    // 1. Top boundary dense tree line
+    for (let x = 32; x < route.worldWidth - 20; x += 44) {
+      const tHash = Math.abs(Math.sin(x * 31.7 + route.id * 13.9));
+      const ty = 58 + ((tHash - 0.5) * 14);
 
-    // 1. Organic Northern Boundary Forest Line with Cluster Copses
-    for (let x = 36; x < route.worldWidth - 24; x += 52) {
-      const h1 = Math.abs(Math.sin(x * 13.7 + rId * 7.9));
-      const h2 = Math.abs(Math.cos(x * 29.3 + rId * 3.1));
-      const ty = 54 + (h1 - 0.5) * 26;
-      const tScale = 0.88 + h2 * 0.32;
-      const tType = getTreeTypeForPos(x, ty, true);
-      trees.push({ x, y: ty, scale: tScale, type: tType });
+      let treeType: RouteTreeType = 'broadleaf';
+      let colorVar: FoliageColorVariant = 'standard';
 
-      // Organic secondary tree depth in cluster
-      if (h1 > 0.45 && !this.isPointOnRoad(x + 18, ty + 24, route) && !this.isInsideBuilding(x + 18, ty + 24, route)) {
-        trees.push({ x: x + 18, y: ty + 24, scale: tScale * 0.92, type: tType });
+      if (isForest) {
+        treeType = tHash > 0.6 ? 'dense_forest' : tHash > 0.25 ? 'conifer' : 'mature';
+        colorVar = tHash > 0.5 ? 'dark' : 'standard';
+      } else if (isRock) {
+        treeType = tHash > 0.6 ? 'conifer' : tHash > 0.3 ? 'slender' : 'small';
+        colorVar = tHash > 0.4 ? 'olive' : 'standard';
+      } else if (isWater) {
+        treeType = tHash > 0.65 ? 'coastal' : tHash > 0.3 ? 'slender' : 'broadleaf';
+        colorVar = tHash > 0.7 ? 'coastal' : 'standard';
+      } else if (isCity) {
+        treeType = tHash > 0.65 ? 'decorative' : tHash > 0.3 ? 'small' : 'broadleaf';
+        colorVar = tHash > 0.85 ? 'blossom' : tHash > 0.7 ? 'golden' : 'standard';
+      } else {
+        // Standard route
+        treeType = tHash > 0.7 ? 'mature' : tHash > 0.35 ? 'dense_forest' : 'broadleaf';
+        colorVar = tHash > 0.85 ? 'golden' : tHash > 0.7 ? 'light' : 'standard';
       }
+
+      trees.push({
+        x,
+        y: ty,
+        scale: 0.96 + tHash * 0.16,
+        type: treeType,
+        colorVariant: colorVar,
+      });
     }
 
-    // 2. Organic Southern Boundary Forest Line with Cluster Copses
-    for (let x = 36; x < route.worldWidth - 24; x += 52) {
-      const h1 = Math.abs(Math.cos(x * 17.3 + rId * 5.3));
-      const h2 = Math.abs(Math.sin(x * 31.1 + rId * 11.7));
-      const ty = route.worldHeight - 48 + (h1 - 0.5) * 24;
-      const tScale = 0.88 + h2 * 0.32;
-      const tType = getTreeTypeForPos(x, ty, true);
-      trees.push({ x, y: ty, scale: tScale, type: tType });
+    // 2. Bottom boundary dense tree line
+    for (let x = 32; x < route.worldWidth - 20; x += 44) {
+      const tHash = Math.abs(Math.cos(x * 29.3 + route.id * 17.1));
+      const ty = route.worldHeight - 48 + ((tHash - 0.5) * 14);
 
-      // Organic secondary tree depth in cluster
-      if (h1 > 0.48 && !this.isPointOnRoad(x - 16, ty - 22, route) && !this.isInsideBuilding(x - 16, ty - 22, route)) {
-        trees.push({ x: x - 16, y: ty - 22, scale: tScale * 0.92, type: tType });
+      let treeType: RouteTreeType = 'broadleaf';
+      let colorVar: FoliageColorVariant = 'standard';
+
+      if (isForest) {
+        treeType = tHash > 0.55 ? 'dense_forest' : tHash > 0.2 ? 'conifer' : 'mature';
+        colorVar = tHash > 0.5 ? 'dark' : 'standard';
+      } else if (isRock) {
+        treeType = tHash > 0.6 ? 'conifer' : tHash > 0.3 ? 'slender' : 'small';
+        colorVar = tHash > 0.4 ? 'olive' : 'standard';
+      } else if (isWater) {
+        treeType = tHash > 0.6 ? 'coastal' : tHash > 0.3 ? 'slender' : 'broadleaf';
+        colorVar = tHash > 0.7 ? 'coastal' : 'standard';
+      } else if (isCity) {
+        treeType = tHash > 0.6 ? 'decorative' : tHash > 0.3 ? 'small' : 'broadleaf';
+        colorVar = tHash > 0.85 ? 'blossom' : 'standard';
+      } else {
+        treeType = tHash > 0.7 ? 'mature' : tHash > 0.35 ? 'dense_forest' : 'broadleaf';
+        colorVar = tHash > 0.85 ? 'golden' : 'standard';
       }
+
+      trees.push({
+        x,
+        y: ty,
+        scale: 0.96 + tHash * 0.16,
+        type: treeType,
+        colorVariant: colorVar,
+      });
     }
 
-    // 3. Natural Interior Groves & Shade Clusters (Non-linear, cluster formations)
-    const groveSpacing = (route.theme === 'forest' || rId === 5) ? 140 : 210;
-    for (let gx = 140; gx < route.worldWidth - 160; gx += groveSpacing) {
-      const gHash = Math.abs(Math.sin(gx * 37.3 + rId * 41.9));
-      const gHash2 = Math.abs(Math.cos(gx * 19.1 + rId * 13.7));
-
-      // Northern interior copse
-      const ny = 145 + gHash * 90;
-      if (!this.isPointOnRoad(gx, ny, route) && !this.isInsideBuilding(gx, ny, route)) {
-        const mainScale = 0.95 + gHash2 * 0.35;
-        const mainType = getTreeTypeForPos(gx, ny, false);
-        trees.push({ x: gx, y: ny, scale: mainScale, type: mainType });
-
-        // Companion tree to create realistic natural cluster
-        if (gHash > 0.38) {
-          const compX = gx + (gHash2 > 0.5 ? 34 : -32);
-          const compY = ny + (gHash > 0.6 ? 22 : -18);
-          if (!this.isPointOnRoad(compX, compY, route) && !this.isInsideBuilding(compX, compY, route)) {
-            trees.push({ x: compX, y: compY, scale: mainScale * 0.86, type: mainType });
-          }
-        }
+    // 3. Scattered interior meadow & trailside trees
+    for (let x = 160; x < route.worldWidth - 360; x += 260) {
+      const tHash = Math.abs(Math.sin(x * 47.1 + route.id * 7.7));
+      const ty = 160 + tHash * 45;
+      if (!this.isPointOnRoad(x, ty, route)) {
+        let treeType: RouteTreeType = isForest ? 'conifer' : isRock ? 'slender' : isWater ? 'coastal' : isCity ? 'decorative' : 'broadleaf';
+        if (tHash > 0.75) treeType = isForest ? 'mature' : isCity ? 'blossom' : 'mature';
+        trees.push({
+          x,
+          y: ty,
+          scale: 1.08 + tHash * 0.18,
+          type: treeType,
+          colorVariant: tHash > 0.8 ? 'golden' : tHash > 0.6 ? 'light' : 'standard',
+        });
       }
 
-      // Southern interior copse
-      const sy = route.worldHeight - 160 - gHash2 * 90;
-      if (!this.isPointOnRoad(gx + 60, sy, route) && !this.isInsideBuilding(gx + 60, sy, route)) {
-        const mainScale = 0.95 + gHash * 0.35;
-        const mainType = getTreeTypeForPos(gx + 60, sy, false);
-        trees.push({ x: gx + 60, y: sy, scale: mainScale, type: mainType });
-
-        // Companion tree in southern cluster
-        if (gHash2 > 0.35) {
-          const compX = gx + 60 + (gHash > 0.5 ? 30 : -28);
-          const compY = sy + (gHash2 > 0.6 ? -20 : 18);
-          if (!this.isPointOnRoad(compX, compY, route) && !this.isInsideBuilding(compX, compY, route)) {
-            trees.push({ x: compX, y: compY, scale: mainScale * 0.88, type: mainType });
-          }
-        }
+      const ty2 = route.worldHeight - 220 - tHash * 45;
+      if (!this.isPointOnRoad(x + 90, ty2, route)) {
+        let treeType: RouteTreeType = isForest ? 'dense_forest' : isRock ? 'small' : isWater ? 'slender' : isCity ? 'small' : 'small';
+        trees.push({
+          x: x + 90,
+          y: ty2,
+          scale: 1.02 + tHash * 0.15,
+          type: treeType,
+          colorVariant: tHash > 0.75 ? 'light' : 'standard',
+        });
       }
     }
 
@@ -3745,13 +3090,12 @@ export class RouteExplorationEngine {
       }
     }
 
-    // 5. Tree Trunks
+    // 5. Tree Trunks (Collision strictly with visible grounded trunk base)
     const trees = this.getRouteTrees(route);
     for (const t of trees) {
-      const trunkX = t.x;
-      const trunkY = t.y + 12;
-      const trunkR = (10 * (t.scale || 1.0)) + 6;
-      const dist = Math.hypot(x - trunkX, footY - trunkY);
+      const trunkFootY = this.getTreeTrunkFootY(t);
+      const trunkR = this.getTreeCollisionRadius(t);
+      const dist = Math.hypot(x - t.x, footY - trunkFootY);
       if (dist < trunkR) {
         return true;
       }
@@ -3849,362 +3193,41 @@ export class RouteExplorationEngine {
     return false;
   }
 
-  public drawSingleFountain(ctx: CanvasRenderingContext2D, f: RouteFountain): void {
-    ctx.save();
-    const x = f.x;
-    const y = f.y;
-    const r = f.radius;
+  private renderFountains(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    if (!route.fountains || route.fountains.length === 0) return;
 
-    // 1. Soft Contact Drop Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
-    ctx.beginPath();
-    ctx.ellipse(x, y + r * 0.4, r + 6, r * 0.6 + 4, 0, 0, Math.PI * 2);
-    ctx.fill();
+    for (const f of route.fountains) {
+      ctx.save();
+      const x = f.x;
+      const y = f.y;
+      const r = f.radius;
 
-    if (f.style === 'monument') {
-      // ====================================================================
-      // PEWTER METEORITE OBELISK / MT. MOON STONE MONUMENT
-      // ====================================================================
-      ctx.fillStyle = '#1e293b';
+      // 1. Soft Contact Drop Shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+      ctx.beginPath();
+      ctx.ellipse(x, y + r * 0.4, r + 6, r * 0.6 + 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2. Outer Stone Basin Curb
+      ctx.fillStyle = '#64748b';
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = '#475569';
-      ctx.lineWidth = 3;
-      ctx.stroke();
 
-      ctx.strokeStyle = '#facc15';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(x, y, r - 6, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(x - 14, y - 14, 28, 28);
-      ctx.fillStyle = '#334155';
-      ctx.fillRect(x - 10, y - 10, 20, 20);
-
-      const floatY = y - 6 + Math.sin(this.time * 2.5) * 4;
-      const glow = ctx.createRadialGradient(x, floatY, 2, x, floatY, 26);
-      glow.addColorStop(0, 'rgba(192, 132, 252, 0.6)');
-      glow.addColorStop(0.5, 'rgba(147, 197, 253, 0.3)');
-      glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(x, floatY, 26, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#c084fc';
-      ctx.beginPath();
-      ctx.moveTo(x, floatY - 14);
-      ctx.lineTo(x + 10, floatY);
-      ctx.lineTo(x, floatY + 14);
-      ctx.lineTo(x - 10, floatY);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#f3e8ff';
-      ctx.beginPath();
-      ctx.moveTo(x, floatY - 14);
-      ctx.lineTo(x, floatY + 14);
-      ctx.lineTo(x - 10, floatY);
-      ctx.closePath();
-      ctx.fill();
-
-      for (let si = 0; si < 3; si++) {
-        const sAngle = this.time * 1.5 + si * 2.1;
-        const sDist = 14 + Math.sin(this.time * 3 + si) * 4;
-        const sx = x + Math.cos(sAngle) * sDist;
-        const sy = floatY + Math.sin(sAngle) * sDist;
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(sx, sy, 1.8, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-    } else if (f.style === 'anchor') {
-      // ====================================================================
-      // VERMILION PORT GRAND ADMIRALTY ANCHOR
-      // ====================================================================
-      ctx.fillStyle = '#78350f';
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#451a03';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      ctx.strokeStyle = 'rgba(254, 243, 199, 0.25)';
-      ctx.lineWidth = 1;
-      for (let py = y - r + 6; py < y + r - 6; py += 8) {
-        ctx.beginPath();
-        ctx.moveTo(x - r + 8, py);
-        ctx.lineTo(x + r - 8, py);
-        ctx.stroke();
-      }
-
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(x - 3.5, y - r + 8, 7, r * 1.4);
-      ctx.fillStyle = '#78350f';
-      ctx.fillRect(x - r * 0.55, y - r + 16, r * 1.1, 6);
-      ctx.fillStyle = '#f59e0b';
-      ctx.fillRect(x - r * 0.55, y - r + 15, 3, 8);
-      ctx.fillRect(x + r * 0.55 - 3, y - r + 15, 3, 8);
-
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 7;
-      ctx.beginPath();
-      ctx.arc(x, y + r * 0.2, r * 0.5, 0.2, Math.PI - 0.2, false);
-      ctx.stroke();
-
-      ctx.fillStyle = '#334155';
-      ctx.beginPath();
-      ctx.moveTo(x - r * 0.5 - 2, y + r * 0.2);
-      ctx.lineTo(x - r * 0.5 + 8, y + r * 0.1);
-      ctx.lineTo(x - r * 0.5 + 4, y + r * 0.35);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(x + r * 0.5 + 2, y + r * 0.2);
-      ctx.lineTo(x + r * 0.5 - 8, y + r * 0.1);
-      ctx.lineTo(x + r * 0.5 - 4, y + r * 0.35);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.strokeStyle = '#94a3b8';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(x, y - r + 8, 6, 0, Math.PI * 2);
-      ctx.stroke();
-
-    } else if (f.style === 'clock') {
-      // ====================================================================
-      // VIRIDIAN FLORAL SUN CLOCK
-      // ====================================================================
-      ctx.fillStyle = '#475569';
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
+      // Outer Bevel Highlight
       ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      ctx.fillStyle = '#166534';
-      ctx.beginPath();
-      ctx.arc(x, y, r - 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      const flCount = 12;
-      const flColors = ['#ef4444', '#facc15', '#f472b6', '#38bdf8', '#fb923c'];
-      for (let i = 0; i < flCount; i++) {
-        const angle = (i / flCount) * Math.PI * 2;
-        const fx = x + Math.cos(angle) * (r - 9);
-        const fy = y + Math.sin(angle) * (r - 9);
-        ctx.fillStyle = flColors[i % flColors.length];
-        ctx.beginPath();
-        ctx.arc(fx, fy, 3.2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.fillStyle = '#f8fafc';
-      ctx.beginPath();
-      ctx.arc(x, y, r * 0.52, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#d97706';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      for (let h = 0; h < 12; h++) {
-        const hAngle = (h / 12) * Math.PI * 2;
-        const hx1 = x + Math.cos(hAngle) * (r * 0.44);
-        const hy1 = y + Math.sin(hAngle) * (r * 0.44);
-        const hx2 = x + Math.cos(hAngle) * (r * 0.36);
-        const hy2 = y + Math.sin(hAngle) * (r * 0.36);
-        ctx.strokeStyle = '#78350f';
-        ctx.lineWidth = (h % 3 === 0) ? 2 : 1;
-        ctx.beginPath();
-        ctx.moveTo(hx1, hy1);
-        ctx.lineTo(hx2, hy2);
-        ctx.stroke();
-      }
-
-      const minuteAngle = this.time * 0.5;
-      const hourAngle = this.time * 0.04;
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + Math.cos(minuteAngle) * (r * 0.36), y + Math.sin(minuteAngle) * (r * 0.36));
-      ctx.stroke();
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + Math.cos(hourAngle) * (r * 0.24), y + Math.sin(hourAngle) * (r * 0.24));
-      ctx.stroke();
-
-      ctx.fillStyle = '#facc15';
-      ctx.beginPath();
-      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else if (f.style === 'fumarole') {
-      // ====================================================================
-      // CINNABAR VOLCANIC GEOTHERMAL FUMAROLE
-      // ====================================================================
-      ctx.fillStyle = '#1e293b';
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#7f1d1d';
-      ctx.lineWidth = 4;
-      ctx.stroke();
-
-      const lavaGrad = ctx.createRadialGradient(x, y, 2, x, y, r - 6);
-      lavaGrad.addColorStop(0, '#fef08a');
-      lavaGrad.addColorStop(0.3, '#f97316');
-      lavaGrad.addColorStop(0.8, '#dc2626');
-      lavaGrad.addColorStop(1, '#450a0a');
-      ctx.fillStyle = lavaGrad;
-      ctx.beginPath();
-      ctx.arc(x, y, r - 6, 0, Math.PI * 2);
-      ctx.fill();
-
-      const heatAlpha = 0.3 + Math.sin(this.time * 3) * 0.2;
-      ctx.fillStyle = `rgba(249, 115, 22, ${heatAlpha})`;
-      ctx.beginPath();
-      ctx.arc(x, y, r + 8, 0, Math.PI * 2);
-      ctx.fill();
-
-      for (let pi = 0; pi < 5; pi++) {
-        const pPhase = (this.time * 2.2 + pi * 0.6) % 2.0;
-        const pProg = pPhase / 2.0;
-        const px = x + Math.sin(this.time * 3 + pi) * (r * 0.4);
-        const py = y - pProg * 35;
-        const pAlpha = (1 - pProg) * 0.6;
-        ctx.fillStyle = pi % 2 === 0 ? `rgba(254, 215, 170, ${pAlpha})` : `rgba(239, 68, 68, ${pAlpha})`;
-        ctx.beginPath();
-        ctx.arc(px, py, 2.5 + pProg * 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-    } else if (f.style === 'zen') {
-      // ====================================================================
-      // FUCHSIA ZEN ROCK GARDEN & TSUKUBAI BASIN
-      // ====================================================================
-      ctx.fillStyle = '#f1f5f9';
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
-      ctx.lineWidth = 1.2;
-      for (let ring = 8; ring < r - 4; ring += 7) {
-        ctx.beginPath();
-        ctx.arc(x, y, ring, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      const riverStones = [
-        { ox: -r * 0.45, oy: r * 0.2, sr: 6 },
-        { ox: r * 0.4, oy: -r * 0.3, sr: 5 },
-        { ox: r * 0.3, oy: r * 0.4, sr: 7 },
-      ];
-      riverStones.forEach(st => {
-        ctx.fillStyle = '#475569';
-        ctx.beginPath();
-        ctx.ellipse(x + st.ox, y + st.oy, st.sr, st.sr * 0.7, 0.4, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      ctx.fillStyle = '#334155';
-      ctx.beginPath();
-      ctx.arc(x, y, r * 0.4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#38bdf8';
-      ctx.beginPath();
-      ctx.arc(x, y, r * 0.28, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#65a30d';
-      ctx.fillRect(x - r * 0.45, y - 5, r * 0.45, 5);
-      const dropProg = (this.time * 2) % 1.0;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-      ctx.beginPath();
-      ctx.arc(x, y - 2 + dropProg * 4, 1.8, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else if (f.style === 'tech') {
-      // ====================================================================
-      // SAFFRON SILPH QUANTUM HOLOGRAPHIC MATRIX
-      // ====================================================================
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#0284c7';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      ctx.strokeStyle = '#06b6d4';
-      ctx.lineWidth = 1.5;
-      for (let ring = 6; ring < r - 4; ring += 8) {
-        ctx.beginPath();
-        ctx.arc(x, y, ring, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      const holoAlpha = 0.4 + Math.sin(this.time * 5) * 0.3;
-      const holoGrad = ctx.createRadialGradient(x, y, 2, x, y, r - 4);
-      holoGrad.addColorStop(0, `rgba(56, 189, 248, ${holoAlpha})`);
-      holoGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = holoGrad;
-      ctx.beginPath();
-      ctx.arc(x, y, r - 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      const rot1 = this.time * 2.2;
-      const rot2 = -this.time * 1.8;
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(x, y - 6, r * 0.42, r * 0.18, rot1, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = '#a855f7';
-      ctx.beginPath();
-      ctx.ellipse(x, y - 6, r * 0.38, r * 0.15, rot2, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(x, y - 6, 4.5, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else {
-      // ====================================================================
-      // CLASSIC ARCHITECTURAL WATER FOUNTAIN (STONE / MARBLE / BRICK)
-      // ====================================================================
-      const basinBorder = f.style === 'marble' ? '#f8fafc' : f.style === 'brick' ? '#ea580c' : '#64748b';
-      const innerBorder = f.style === 'marble' ? '#cbd5e1' : f.style === 'brick' ? '#7c2d12' : '#334155';
-
-      ctx.fillStyle = basinBorder;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.strokeStyle = f.style === 'marble' ? '#fef08a' : '#cbd5e1';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.arc(x, y, r - 1, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.fillStyle = innerBorder;
+      // Inner Basin Wall Shadow
+      ctx.fillStyle = '#334155';
       ctx.beginPath();
       ctx.arc(x, y, r - 5, 0, Math.PI * 2);
       ctx.fill();
 
+      // 3. Clear Blue Water Pool with Animated Ripples
       const waterGrad = ctx.createRadialGradient(x, y, 2, x, y, r - 6);
       waterGrad.addColorStop(0, '#38bdf8');
       waterGrad.addColorStop(0.6, '#0284c7');
@@ -4214,6 +3237,7 @@ export class RouteExplorationEngine {
       ctx.arc(x, y, r - 6, 0, Math.PI * 2);
       ctx.fill();
 
+      // Animated Water Caustic Rings
       for (let ri = 1; ri <= 3; ri++) {
         const ringProg = ((this.time * 0.8 + ri * 0.33) % 1.0);
         const ringR = (r - 8) * ringProg;
@@ -4225,6 +3249,7 @@ export class RouteExplorationEngine {
         ctx.stroke();
       }
 
+      // 4. Center Tiered Carved Stone Pedestal
       const pedR = r * 0.36;
       ctx.fillStyle = '#94a3b8';
       ctx.beginPath();
@@ -4236,11 +3261,13 @@ export class RouteExplorationEngine {
       ctx.arc(x, y - 2, pedR * 0.7, 0, Math.PI * 2);
       ctx.fill();
 
+      // Center Spout Nozzle
       ctx.fillStyle = '#facc15';
       ctx.beginPath();
       ctx.arc(x, y - 3, 3, 0, Math.PI * 2);
       ctx.fill();
 
+      // 5. Animated Water Jet Sprays (Shooting upwards and splashing)
       const jetH = 14 + Math.sin(this.time * 4) * 3;
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
       ctx.lineWidth = 2.2;
@@ -4249,6 +3276,7 @@ export class RouteExplorationEngine {
       ctx.lineTo(x, y - 3 - jetH);
       ctx.stroke();
 
+      // Splashing droplets falling in radial arcs
       const dropletCount = 6;
       for (let di = 0; di < dropletCount; di++) {
         const angle = (di / dropletCount) * Math.PI * 2 + (this.time * 1.5);
@@ -4261,141 +3289,125 @@ export class RouteExplorationEngine {
         ctx.arc(dropX, dropY, 1.8, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      ctx.restore();
     }
-
-    ctx.restore();
-  }
-
-  private renderFountains(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
-    if (!route.fountains || route.fountains.length === 0) return;
-
-    for (const f of route.fountains) {
-      this.drawSingleFountain(ctx, f);
-    }
-  }
-
-  public drawSingleStreetlamp(ctx: CanvasRenderingContext2D, lamp: RouteStreetlamp, routeId: number = 0): void {
-    ctx.save();
-    const lx = lamp.x;
-    const ly = lamp.y;
-
-    const isTech = lamp.style === 'modern' || routeId === 6;
-    const isGold = lamp.style === 'ornate' || routeId === 8 || routeId === 4;
-    const isFire = routeId === 7;
-    const isLantern = lamp.style === 'lantern' || routeId === 5;
-
-    const postColor = isGold ? '#ca8a04' : isTech ? '#64748b' : isLantern ? '#78350f' : isFire ? '#450a0a' : '#0f172a';
-    const glowColor1 = isTech ? 'rgba(56, 189, 248, 0.35)' : isFire ? 'rgba(249, 115, 22, 0.4)' : isGold ? 'rgba(250, 204, 21, 0.38)' : 'rgba(254, 240, 138, 0.32)';
-    const glowColor2 = isTech ? 'rgba(56, 189, 248, 0.12)' : isFire ? 'rgba(249, 115, 22, 0.16)' : isGold ? 'rgba(250, 204, 21, 0.15)' : 'rgba(253, 224, 71, 0.14)';
-    const glassColor = isTech ? '#7dd3fc' : isFire ? '#fb923c' : '#fef08a';
-
-    // 1. Warm Radial Light Cast on Ground
-    const lightPool = ctx.createRadialGradient(lx, ly - 22, 4, lx, ly - 10, 65);
-    lightPool.addColorStop(0, glowColor1);
-    lightPool.addColorStop(0.5, glowColor2);
-    lightPool.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = lightPool;
-    ctx.beginPath();
-    ctx.ellipse(lx, ly, 65, 34, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 2. Base Contact Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-    ctx.beginPath();
-    ctx.ellipse(lx, ly + 2, 7, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 3. Ornate Post Base & Shaft
-    ctx.fillStyle = postColor;
-    ctx.fillRect(lx - 4, ly - 3, 8, 4);
-    ctx.fillRect(lx - 2.5, ly - 8, 5, 5);
-    ctx.fillRect(lx - 1.5, ly - 26, 3, 18);
-
-    // Bracket Arms
-    ctx.strokeStyle = postColor;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(lx - 5, ly - 20);
-    ctx.lineTo(lx, ly - 25);
-    ctx.lineTo(lx + 5, ly - 20);
-    ctx.stroke();
-
-    // 4. Lantern Housing
-    ctx.fillStyle = postColor;
-    ctx.fillRect(lx - 5, ly - 32, 10, 2);
-    ctx.fillRect(lx - 4, ly - 24, 8, 2);
-
-    // Glowing Glass Core
-    ctx.fillStyle = glassColor;
-    ctx.fillRect(lx - 3.5, ly - 30, 7, 7);
-
-    // Core Filament Highlight
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(lx, ly - 26.5, 1.8, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Finial Spike on top
-    ctx.strokeStyle = postColor;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(lx, ly - 32);
-    ctx.lineTo(lx, ly - 36);
-    ctx.stroke();
-
-    ctx.restore();
   }
 
   private renderStreetlamps(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     if (!route.streetlamps || route.streetlamps.length === 0) return;
 
     for (const lamp of route.streetlamps) {
-      this.drawSingleStreetlamp(ctx, lamp, route.id);
+      ctx.save();
+      const lx = lamp.x;
+      const ly = lamp.y;
+
+      const isTech = lamp.style === 'modern' || route.id === 6;
+      const isGold = lamp.style === 'ornate' || route.id === 8 || route.id === 4;
+      const isFire = route.id === 7;
+      const isLantern = lamp.style === 'lantern' || route.id === 5;
+
+      const postColor = isGold ? '#ca8a04' : isTech ? '#64748b' : isLantern ? '#78350f' : isFire ? '#450a0a' : '#0f172a';
+      const glowColor1 = isTech ? 'rgba(56, 189, 248, 0.35)' : isFire ? 'rgba(249, 115, 22, 0.4)' : isGold ? 'rgba(250, 204, 21, 0.38)' : 'rgba(254, 240, 138, 0.32)';
+      const glowColor2 = isTech ? 'rgba(56, 189, 248, 0.12)' : isFire ? 'rgba(249, 115, 22, 0.16)' : isGold ? 'rgba(250, 204, 21, 0.15)' : 'rgba(253, 224, 71, 0.14)';
+      const glassColor = isTech ? '#7dd3fc' : isFire ? '#fb923c' : '#fef08a';
+
+      // 1. Warm Radial Light Cast on Ground
+      const lightPool = ctx.createRadialGradient(lx, ly - 22, 4, lx, ly - 10, 65);
+      lightPool.addColorStop(0, glowColor1);
+      lightPool.addColorStop(0.5, glowColor2);
+      lightPool.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = lightPool;
+      ctx.beginPath();
+      ctx.ellipse(lx, ly, 65, 34, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2. Base Contact Shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(lx, ly + 2, 7, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 3. Ornate Post Base & Shaft
+      ctx.fillStyle = postColor;
+      ctx.fillRect(lx - 4, ly - 3, 8, 4);
+      ctx.fillRect(lx - 2.5, ly - 8, 5, 5);
+      ctx.fillRect(lx - 1.5, ly - 26, 3, 18);
+
+      // Bracket Arms
+      ctx.strokeStyle = postColor;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(lx - 5, ly - 20);
+      ctx.lineTo(lx, ly - 25);
+      ctx.lineTo(lx + 5, ly - 20);
+      ctx.stroke();
+
+      // 4. Lantern Housing
+      ctx.fillStyle = postColor;
+      ctx.fillRect(lx - 5, ly - 32, 10, 2);
+      ctx.fillRect(lx - 4, ly - 24, 8, 2);
+
+      // Glowing Glass Core
+      ctx.fillStyle = glassColor;
+      ctx.fillRect(lx - 3.5, ly - 30, 7, 7);
+
+      // Core Filament Highlight
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(lx, ly - 26.5, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Finial Spike on top
+      ctx.strokeStyle = postColor;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(lx, ly - 32);
+      ctx.lineTo(lx, ly - 36);
+      ctx.stroke();
+
+      ctx.restore();
     }
-  }
-
-  public drawSingleBench(ctx: CanvasRenderingContext2D, b: RouteBench): void {
-    ctx.save();
-    const bx = b.x;
-    const by = b.y;
-    const bw = b.w || 28;
-    const bh = 14;
-
-    // Drop shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.beginPath();
-    ctx.roundRect(bx - 2, by + bh - 2, bw + 4, 4, 2);
-    ctx.fill();
-
-    // Wrought Iron Frame / Legs
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(bx, by + 4, 3, bh - 4);
-    ctx.fillRect(bx + bw - 3, by + 4, 3, bh - 4);
-
-    // Wooden Slats (Backrest & Seat)
-    ctx.fillStyle = '#92400e';
-    ctx.fillRect(bx - 1, by, bw + 2, 4);
-    ctx.fillStyle = '#b45309';
-    ctx.fillRect(bx - 1, by + 6, bw + 2, 4);
-
-    // Slat Highlights
-    ctx.fillStyle = '#d97706';
-    ctx.fillRect(bx, by, bw, 1.2);
-    ctx.fillRect(bx, by + 6, bw, 1.2);
-
-    // Iron Armrests
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(bx - 2, by + 2, 2, 6);
-    ctx.fillRect(bx + bw, by + 2, 2, 6);
-
-    ctx.restore();
   }
 
   private renderBenches(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     if (!route.benches || route.benches.length === 0) return;
 
     for (const b of route.benches) {
-      this.drawSingleBench(ctx, b);
+      ctx.save();
+      const bx = b.x;
+      const by = b.y;
+      const bw = b.w || 28;
+      const bh = 14;
+
+      // Drop shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.beginPath();
+      ctx.roundRect(bx - 2, by + bh - 2, bw + 4, 4, 2);
+      ctx.fill();
+
+      // Wrought Iron Frame / Legs
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(bx, by + 4, 3, bh - 4);
+      ctx.fillRect(bx + bw - 3, by + 4, 3, bh - 4);
+
+      // Wooden Slats (Backrest & Seat)
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(bx - 1, by, bw + 2, 4);
+      ctx.fillStyle = '#b45309';
+      ctx.fillRect(bx - 1, by + 6, bw + 2, 4);
+
+      // Slat Highlights
+      ctx.fillStyle = '#d97706';
+      ctx.fillRect(bx, by, bw, 1.2);
+      ctx.fillRect(bx, by + 6, bw, 1.2);
+
+      // Iron Armrests
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(bx - 2, by + 2, 2, 6);
+      ctx.fillRect(bx + bw, by + 2, 2, 6);
+
+      ctx.restore();
     }
   }
 
@@ -4489,68 +3501,64 @@ export class RouteExplorationEngine {
     ctx.restore();
   }
 
-  public drawSingleFence(ctx: CanvasRenderingContext2D, f: RouteFence): void {
-    ctx.save();
-
-    // 1. Soft Drop Shadow cast beneath fence rails & posts
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-    ctx.fillRect(f.x, f.y + 14, f.w, 4);
-
-    // 2. Double Horizontal Wooden Rails
-    // Top Rail
-    ctx.fillStyle = '#58240c';
-    ctx.fillRect(f.x, f.y + 3, f.w, 4.5);
-    // Top Rail sunlit upper bevel
-    ctx.fillStyle = '#9a3412';
-    ctx.fillRect(f.x, f.y + 3, f.w, 1.2);
-
-    // Bottom Rail
-    ctx.fillStyle = '#58240c';
-    ctx.fillRect(f.x, f.y + 10, f.w, 4);
-    // Bottom Rail sunlit upper bevel
-    ctx.fillStyle = '#9a3412';
-    ctx.fillRect(f.x, f.y + 10, f.w, 1.2);
-
-    // 3. Cylindrical Vertical Posts
-    const postStep = 28;
-    for (let px = f.x; px <= f.x + f.w; px += postStep) {
-      // Ground contact shadow
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-      ctx.beginPath();
-      ctx.ellipse(px, f.y + 18, 4, 2, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Post body gradient
-      const postGrad = ctx.createLinearGradient(px - 3, f.y, px + 3, f.y);
-      postGrad.addColorStop(0, '#9a3412');
-      postGrad.addColorStop(0.4, '#78350f');
-      postGrad.addColorStop(0.85, '#58240c');
-      postGrad.addColorStop(1, '#3a1805');
-      ctx.fillStyle = postGrad;
-      ctx.fillRect(px - 3, f.y - 2, 6, 19);
-
-      // Chamfered Post Top Cap
-      ctx.fillStyle = '#b45309';
-      ctx.beginPath();
-      ctx.ellipse(px, f.y - 2, 3, 1.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Iron Bracket Rivets at rail intersections
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(px - 0.75, f.y + 4.5, 1.5, 1.5);
-      ctx.fillRect(px - 0.75, f.y + 11.5, 1.5, 1.5);
-    }
-
-    ctx.restore();
-  }
-
   private renderFences(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     const fences = this.getRouteFences(route);
     if (fences.length === 0) return;
 
+    ctx.save();
+
     for (const f of fences) {
-      this.drawSingleFence(ctx, f);
+      // 1. Soft Drop Shadow cast beneath fence rails & posts
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+      ctx.fillRect(f.x, f.y + 14, f.w, 4);
+
+      // 2. Double Horizontal Wooden Rails
+      // Top Rail
+      ctx.fillStyle = '#58240c';
+      ctx.fillRect(f.x, f.y + 3, f.w, 4.5);
+      // Top Rail sunlit upper bevel
+      ctx.fillStyle = '#9a3412';
+      ctx.fillRect(f.x, f.y + 3, f.w, 1.2);
+
+      // Bottom Rail
+      ctx.fillStyle = '#58240c';
+      ctx.fillRect(f.x, f.y + 10, f.w, 4);
+      // Bottom Rail sunlit upper bevel
+      ctx.fillStyle = '#9a3412';
+      ctx.fillRect(f.x, f.y + 10, f.w, 1.2);
+
+      // 3. Cylindrical Vertical Posts
+      const postStep = 28;
+      for (let px = f.x; px <= f.x + f.w; px += postStep) {
+        // Ground contact shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+        ctx.beginPath();
+        ctx.ellipse(px, f.y + 18, 4, 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Post body gradient
+        const postGrad = ctx.createLinearGradient(px - 3, f.y, px + 3, f.y);
+        postGrad.addColorStop(0, '#9a3412');
+        postGrad.addColorStop(0.4, '#78350f');
+        postGrad.addColorStop(0.85, '#58240c');
+        postGrad.addColorStop(1, '#3a1805');
+        ctx.fillStyle = postGrad;
+        ctx.fillRect(px - 3, f.y - 2, 6, 19);
+
+        // Chamfered Post Top Cap
+        ctx.fillStyle = '#b45309';
+        ctx.beginPath();
+        ctx.ellipse(px, f.y - 2, 3, 1.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Iron Bracket Rivets at rail intersections
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(px - 0.75, f.y + 4.5, 1.5, 1.5);
+        ctx.fillRect(px - 0.75, f.y + 11.5, 1.5, 1.5);
+      }
     }
+
+    ctx.restore();
   }
 
   private renderTreesLayer(ctx: CanvasRenderingContext2D, route: RouteDefinition, layer: 'behind' | 'front'): void {
@@ -4558,10 +3566,21 @@ export class RouteExplorationEngine {
     const playerFootY = this.player.y + 8;
 
     for (const t of trees) {
-      const trunkY = t.y + 12;
-      const isBehind = trunkY <= playerFootY;
+      const trunkFootY = this.getTreeTrunkFootY(t);
+      const isBehind = trunkFootY <= playerFootY;
       if ((layer === 'behind' && isBehind) || (layer === 'front' && !isBehind)) {
-        this.drawTree(ctx, t.x, t.y, t.scale || 1.0, t.type || (route.theme === 'forest' ? 'pine' : 'oak'));
+        if (layer === 'front') {
+          // If player is behind foreground tree canopy, subtly soften alpha so player remains readable
+          const distToCanopy = Math.hypot(this.player.x - t.x, this.player.y - (t.y - 8));
+          if (distToCanopy < 38 * (t.scale || 1.0)) {
+            ctx.save();
+            ctx.globalAlpha = 0.82;
+            this.drawTree(ctx, t.x, t.y, t.scale || 1.0, t.type || 'broadleaf', t.colorVariant);
+            ctx.restore();
+            continue;
+          }
+        }
+        this.drawTree(ctx, t.x, t.y, t.scale || 1.0, t.type || 'broadleaf', t.colorVariant);
       }
     }
   }
@@ -4836,293 +3855,736 @@ export class RouteExplorationEngine {
     ctx.restore();
   }
 
-  private drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number = 1.0, type: 'oak' | 'pine' | 'blossom' | 'mystic' | 'palm' | 'autumn' | 'city' = 'oak'): void {
+  private drawTree(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    scale: number = 1.0,
+    type: RouteTreeType = 'broadleaf',
+    colorVariant?: FoliageColorVariant
+  ): void {
     ctx.save();
 
-    // Natural variation per tree so they aren't all identical clones
-    const treeHash = Math.abs(Math.sin(x * 47.9 + y * 73.1));
-    const hOff = (treeHash - 0.5) * 6;
-    const rScale = scale * (0.92 + treeHash * 0.16);
+    // Deterministic seeded variation so trees never flicker or change on revisit
+    const treeHash = Math.abs(Math.sin(x * 127.1 + y * 311.7));
+    const hOff = (treeHash - 0.5) * 4;
+    const rScale = scale * (0.94 + treeHash * 0.12);
+    const canopyWind = Math.sin(this.time * 2.2 + x * 0.05 + y * 0.02) * 1.8;
 
-    // 1. Soft Elliptical Ground Drop Shadow (Skewed south-east)
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
-    ctx.beginPath();
-    ctx.ellipse(x + 4 * rScale, y + 18 * rScale + hOff, 24 * rScale, 10 * rScale, 0.12, 0, Math.PI * 2);
-    ctx.fill();
+    // Resolve tree category
+    const normalizedType: RouteTreeType =
+      type === 'oak' ? 'broadleaf' : type === 'pine' ? 'conifer' : type;
 
-    // 2. Realistic Gnarled Trunk with Root Flare & Bark Texture
-    ctx.fillStyle = '#271206';
-    ctx.beginPath();
-    ctx.moveTo(x - 9 * rScale, y + 18 * rScale + hOff);
-    ctx.lineTo(x + 9 * rScale, y + 18 * rScale + hOff);
-    ctx.lineTo(x + 5 * rScale, y + 8 * rScale + hOff);
-    ctx.lineTo(x - 5 * rScale, y + 8 * rScale + hOff);
-    ctx.closePath();
-    ctx.fill();
+    // Resolve foliage color palette
+    const pal = this.getFoliagePalette(colorVariant, normalizedType, treeHash);
 
-    // Trunk Body
-    const trunkGrad = ctx.createLinearGradient(x - 6 * rScale, y + 4, x + 6 * rScale, y + 4);
-    trunkGrad.addColorStop(0, '#78350f');
-    trunkGrad.addColorStop(0.35, '#58240c');
-    trunkGrad.addColorStop(0.85, '#3a1805');
-    trunkGrad.addColorStop(1, '#271206');
-    ctx.fillStyle = trunkGrad;
-    ctx.fillRect(x - 5.5 * rScale, y + 3 * rScale + hOff, 11 * rScale, 15 * rScale);
+    // Geometry parameters based on variety
+    let footY = y + 19 * rScale + hOff;
+    let trunkTopY = y - 4 * rScale + hOff;
+    let trunkW = 10;
+    let shadowW = 22 * rScale;
+    let shadowH = 9 * rScale;
 
-    // Bark Grain Grooves
-    ctx.strokeStyle = '#1c0a02';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x - 1 * rScale, y + 5 * rScale + hOff);
-    ctx.lineTo(x - 1 * rScale, y + 17 * rScale + hOff);
-    ctx.moveTo(x + 2.5 * rScale, y + 6 * rScale + hOff);
-    ctx.lineTo(x + 2.5 * rScale, y + 16 * rScale + hOff);
-    ctx.stroke();
+    if (normalizedType === 'mature') {
+      footY = y + 24 * rScale + hOff;
+      trunkTopY = y - 7 * rScale + hOff;
+      trunkW = 14;
+      shadowW = 28 * rScale;
+      shadowH = 11 * rScale;
+    } else if (normalizedType === 'small') {
+      footY = y + 15 * rScale + hOff;
+      trunkTopY = y - 2 * rScale + hOff;
+      trunkW = 8;
+      shadowW = 16 * rScale;
+      shadowH = 7 * rScale;
+    } else if (normalizedType === 'slender') {
+      footY = y + 21 * rScale + hOff;
+      trunkTopY = y - 6 * rScale + hOff;
+      trunkW = 7;
+      shadowW = 17 * rScale;
+      shadowH = 7.5 * rScale;
+    } else if (normalizedType === 'coastal') {
+      footY = y + 25 * rScale + hOff;
+      trunkTopY = y - 18 * rScale + hOff;
+      trunkW = 8;
+      shadowW = 20 * rScale;
+      shadowH = 8 * rScale;
+    } else if (normalizedType === 'conifer') {
+      footY = y + 20 * rScale + hOff;
+      trunkTopY = y + 2 * rScale + hOff;
+      trunkW = 9;
+      shadowW = 20 * rScale;
+      shadowH = 8.5 * rScale;
+    } else if (normalizedType === 'dense_forest') {
+      footY = y + 20 * rScale + hOff;
+      trunkTopY = y - 5 * rScale + hOff;
+      trunkW = 12;
+      shadowW = 25 * rScale;
+      shadowH = 10 * rScale;
+    } else if (normalizedType === 'decorative') {
+      footY = y + 16 * rScale + hOff;
+      trunkTopY = y - 3 * rScale + hOff;
+      trunkW = 8.5;
+      shadowW = 18 * rScale;
+      shadowH = 7.5 * rScale;
+    }
 
-    // Lower Shaded Moss Accent
-    ctx.fillStyle = '#166534';
-    ctx.beginPath();
-    ctx.ellipse(x - 3 * rScale, y + 14 * rScale + hOff, 2.5 * rScale, 4 * rScale, -0.2, 0, Math.PI * 2);
-    ctx.fill();
+    // 1. SOFT DIRECTIONAL GROUND DROP SHADOW (Anchored at visible trunk base)
+    this.drawSoftTreeShadow(ctx, x, footY, shadowW, shadowH, rScale);
 
-    // 3. Canopy Rendering
-    if (type === 'pine') {
-      this.drawPineTier(ctx, x, y + 2 + hOff, 26 * rScale, 18 * rScale);
-      this.drawPineTier(ctx, x, y - 10 + hOff, 20 * rScale, 16 * rScale);
-      this.drawPineTier(ctx, x, y - 22 + hOff, 14 * rScale, 16 * rScale);
-    } else if (type === 'palm') {
-      const palmWind = Math.sin(this.time * 2.0 + x * 0.05) * 2.0;
-
-      // Curved slender segmented palm trunk
-      ctx.fillStyle = '#78350f';
-      ctx.beginPath();
-      ctx.moveTo(x - 5 * rScale, y + 16 * rScale + hOff);
-      ctx.quadraticCurveTo(x + 4 * rScale, y + 2 * rScale, x + 2 * rScale + palmWind * 0.5, y - 16 * rScale + hOff);
-      ctx.lineTo(x + 7 * rScale + palmWind * 0.5, y - 16 * rScale + hOff);
-      ctx.quadraticCurveTo(x + 9 * rScale, y + 2 * rScale, x + 3 * rScale, y + 16 * rScale + hOff);
-      ctx.closePath();
-      ctx.fill();
-
-      // Coconuts cluster
-      const cx = x + 4 * rScale + palmWind * 0.5;
-      const cy = y - 14 * rScale + hOff;
-      ctx.fillStyle = '#451a03';
-      ctx.beginPath();
-      ctx.arc(cx - 3 * rScale, cy + 2 * rScale, 3.2 * rScale, 0, Math.PI * 2);
-      ctx.arc(cx + 3 * rScale, cy + 2 * rScale, 3.2 * rScale, 0, Math.PI * 2);
-      ctx.arc(cx, cy + 5 * rScale, 3.0 * rScale, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Radiating arching tropical palm fronds
-      const frondAngles = [-2.4, -1.8, -1.1, -0.4, 0.3, 0.9];
-      for (const fa of frondAngles) {
-        const frondLen = 26 * rScale;
-        const sway = Math.sin(this.time * 2.2 + fa) * 2.5;
-        const endX = cx + Math.cos(fa) * frondLen + sway;
-        const endY = cy + Math.sin(fa) * (frondLen * 0.65);
-
-        ctx.strokeStyle = '#15803d';
-        ctx.lineWidth = 4 * rScale;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.quadraticCurveTo(cx + Math.cos(fa) * (frondLen * 0.5), cy - 10 * rScale, endX, endY);
-        ctx.stroke();
-
-        ctx.strokeStyle = '#4ade80';
-        ctx.lineWidth = 1.8 * rScale;
-        ctx.stroke();
-      }
-    } else if (type === 'autumn') {
-      const canopyWind = Math.sin(this.time * 2.2 + x * 0.05) * 1.5;
-
-      // Base Amber/Crimson Gradient Under-canopy
-      const baseGrad = ctx.createRadialGradient(x - 4, y - 6 + hOff, 4, x, y + hOff, 26 * rScale);
-      baseGrad.addColorStop(0, '#c2410c');
-      baseGrad.addColorStop(0.65, '#9a3412');
-      baseGrad.addColorStop(1, '#431407');
-      ctx.fillStyle = baseGrad;
-      ctx.beginPath();
-      ctx.arc(x, y + hOff, 24 * rScale, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Autumn Golden/Fiery Lobes
-      this.drawFoliageLobe(ctx, x - 12 * rScale, y + 2 + hOff, 14 * rScale, '#ea580c', '#c2410c', '#7c2d12');
-      this.drawFoliageLobe(ctx, x + 11 * rScale, y + 3 + hOff, 13 * rScale, '#d97706', '#b45309', '#78350f');
-      this.drawFoliageLobe(ctx, x - 10 * rScale + canopyWind * 0.5, y - 8 + hOff, 16 * rScale, '#f59e0b', '#d97706', '#9a3412');
-      this.drawFoliageLobe(ctx, x + 9 * rScale, y - 7 + hOff, 15 * rScale, '#ea580c', '#c2410c', '#7c2d12');
-      this.drawFoliageLobe(ctx, x + canopyWind * 0.8, y - 16 + hOff, 17 * rScale, '#fbbf24', '#f59e0b', '#b45309');
-
-      // Golden Rim flecks
-      ctx.fillStyle = '#fef08a';
-      ctx.beginPath();
-      ctx.arc(x - 5 * rScale + canopyWind, y - 20 + hOff, 2.5 * rScale, 0, Math.PI * 2);
-      ctx.arc(x + 2 * rScale + canopyWind, y - 18 + hOff, 2.0 * rScale, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (type === 'city') {
-      const canopyWind = Math.sin(this.time * 1.8 + x * 0.05) * 0.8;
-
-      // Base Ornamental Trim
-      const baseGrad = ctx.createRadialGradient(x - 3, y - 6 + hOff, 3, x, y + hOff, 22 * rScale);
-      baseGrad.addColorStop(0, '#047857');
-      baseGrad.addColorStop(0.65, '#065f46');
-      baseGrad.addColorStop(1, '#064e3b');
-      ctx.fillStyle = baseGrad;
-      ctx.beginPath();
-      ctx.arc(x, y + hOff, 21 * rScale, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Neat Manicured Spherical Topiary Lobes
-      this.drawFoliageLobe(ctx, x - 9 * rScale, y + 1 + hOff, 12 * rScale, '#059669', '#047857', '#064e3b');
-      this.drawFoliageLobe(ctx, x + 9 * rScale, y + 1 + hOff, 12 * rScale, '#059669', '#047857', '#064e3b');
-      this.drawFoliageLobe(ctx, x + canopyWind * 0.6, y - 12 + hOff, 15 * rScale, '#10b981', '#059669', '#047857');
-
-      // Decorative Planter Rim at Ground
-      ctx.fillStyle = '#334155';
-      ctx.beginPath();
-      ctx.ellipse(x, y + 17 * rScale + hOff, 14 * rScale, 5 * rScale, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#64748b';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    } else if (type === 'blossom') {
-      const canopyWind = Math.sin(this.time * 2.2 + x * 0.05) * 1.5;
-
-      // Base Ambient Shadow Under-canopy (Radiant Cherry Blossom)
-      const baseGrad = ctx.createRadialGradient(x - 4, y - 6 + hOff, 4, x, y + hOff, 26 * rScale);
-      baseGrad.addColorStop(0, '#db2777');
-      baseGrad.addColorStop(0.65, '#9d174d');
-      baseGrad.addColorStop(1, '#500724');
-      ctx.fillStyle = baseGrad;
-      ctx.beginPath();
-      ctx.arc(x, y + hOff, 24 * rScale, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Foliage Lobes (Pink Sakura)
-      this.drawFoliageLobe(ctx, x - 12 * rScale, y + 2 + hOff, 14 * rScale, '#f472b6', '#db2777', '#831843');
-      this.drawFoliageLobe(ctx, x + 11 * rScale, y + 3 + hOff, 13 * rScale, '#ec4899', '#be185d', '#831843');
-      this.drawFoliageLobe(ctx, x - 10 * rScale + canopyWind * 0.5, y - 8 + hOff, 16 * rScale, '#f9a8d4', '#f472b6', '#db2777');
-      this.drawFoliageLobe(ctx, x + 9 * rScale, y - 7 + hOff, 15 * rScale, '#f472b6', '#ec4899', '#be185d');
-      this.drawFoliageLobe(ctx, x + canopyWind * 0.8, y - 16 + hOff, 17 * rScale, '#fbcfe8', '#f472b6', '#db2777');
-
-      // Floating Pink Sakura Petals
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(x - 5 * rScale + canopyWind, y - 20 + hOff, 2.5 * rScale, 0, Math.PI * 2);
-      ctx.arc(x + 2 * rScale + canopyWind, y - 18 + hOff, 2.0 * rScale, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (type === 'mystic') {
-      const canopyWind = Math.sin(this.time * 2.2 + x * 0.05) * 1.5;
-
-      // Base Deep Ambient Shadow Under-canopy (Ancient Enchanted Oak)
-      const baseGrad = ctx.createRadialGradient(x - 4, y - 6 + hOff, 4, x, y + hOff, 26 * rScale);
-      baseGrad.addColorStop(0, '#047857');
-      baseGrad.addColorStop(0.65, '#064e3b');
-      baseGrad.addColorStop(1, '#022c22');
-      ctx.fillStyle = baseGrad;
-      ctx.beginPath();
-      ctx.arc(x, y + hOff, 24 * rScale, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Enchanted Emerald Lobes
-      this.drawFoliageLobe(ctx, x - 12 * rScale, y + 2 + hOff, 14 * rScale, '#059669', '#047857', '#064e3b');
-      this.drawFoliageLobe(ctx, x + 11 * rScale, y + 3 + hOff, 13 * rScale, '#047857', '#064e3b', '#022c22');
-      this.drawFoliageLobe(ctx, x - 10 * rScale + canopyWind * 0.5, y - 8 + hOff, 16 * rScale, '#10b981', '#059669', '#047857');
-      this.drawFoliageLobe(ctx, x + 9 * rScale, y - 7 + hOff, 15 * rScale, '#059669', '#047857', '#064e3b');
-      this.drawFoliageLobe(ctx, x + canopyWind * 0.8, y - 16 + hOff, 17 * rScale, '#34d399', '#10b981', '#059669');
-
-      // Fairy Dust Catchlights
-      ctx.fillStyle = '#a7f3d0';
-      ctx.beginPath();
-      ctx.arc(x - 4 * rScale + canopyWind, y - 20 + hOff, 2.5 * rScale, 0, Math.PI * 2);
-      ctx.arc(x + 3 * rScale + canopyWind, y - 19 + hOff, 2.2 * rScale, 0, Math.PI * 2);
-      ctx.fill();
+    // 2. VISIBLE BROWN TRUNK WITH ROOT FLARE, BARK TEXTURE & BRANCH FORKS
+    if (normalizedType === 'coastal') {
+      this.drawCoastalPalmTrunk(ctx, x, footY, trunkTopY, trunkW, rScale, treeHash);
     } else {
-      const canopyWind = Math.sin(this.time * 2.2 + x * 0.05) * 1.5;
+      const isSlender = normalizedType === 'slender' || normalizedType === 'small';
+      this.drawTrunkWithBranches(ctx, x, footY, trunkTopY, trunkW, rScale, isSlender, normalizedType);
+    }
 
-      // Base Deep Ambient Shadow Under-canopy
-      const baseGrad = ctx.createRadialGradient(x - 4, y - 6 + hOff, 4, x, y + hOff, 26 * rScale);
-      baseGrad.addColorStop(0, '#15803d');
-      baseGrad.addColorStop(0.65, '#14532d');
-      baseGrad.addColorStop(1, '#052e16');
-      ctx.fillStyle = baseGrad;
+    // 3. LAYERED ORGANIC CANOPY SILHOUETTES (No stacked identical spheres)
+    switch (normalizedType) {
+      case 'mature':
+        this.drawMatureCanopy(ctx, x, y, rScale, pal, canopyWind, hOff, treeHash);
+        break;
+      case 'small':
+        this.drawSmallCanopy(ctx, x, y, rScale, pal, canopyWind, hOff, treeHash);
+        break;
+      case 'slender':
+        this.drawSlenderCanopy(ctx, x, y, rScale, pal, canopyWind, hOff, treeHash);
+        break;
+      case 'dense_forest':
+        this.drawDenseForestCanopy(ctx, x, y, rScale, pal, canopyWind, hOff, treeHash);
+        break;
+      case 'conifer':
+        this.drawConiferCanopy(ctx, x, y, rScale, pal, canopyWind, hOff, treeHash);
+        break;
+      case 'coastal':
+        this.drawCoastalPalmCanopy(ctx, x, y, rScale, pal, canopyWind, hOff, treeHash);
+        break;
+      case 'decorative':
+        this.drawDecorativeCanopy(ctx, x, y, rScale, pal, canopyWind, hOff, treeHash);
+        break;
+      case 'blossom':
+      case 'golden':
+      case 'mystic':
+      case 'broadleaf':
+      default:
+        this.drawBroadleafCanopy(ctx, x, y, rScale, pal, canopyWind, hOff, treeHash);
+        break;
+    }
+
+    // 4. FLOATING ATMOSPHERIC PARTICLES (Sakura petals, autumn leaves, fairy motes)
+    if (pal.motes) {
+      ctx.fillStyle = pal.motes;
+      const mote1X = x - 8 * rScale + canopyWind * 1.2;
+      const mote1Y = y - 28 * rScale + hOff + Math.sin(this.time * 2.8 + x) * 3;
+      const mote2X = x + 10 * rScale + canopyWind * 1.5;
+      const mote2Y = y - 22 * rScale + hOff + Math.cos(this.time * 2.5 + y) * 3;
       ctx.beginPath();
-      ctx.arc(x, y + hOff, 24 * rScale, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Lower Left Bough
-      this.drawFoliageLobe(ctx, x - 12 * rScale, y + 2 + hOff, 14 * rScale, '#16a34a', '#14532d', '#052e16');
-      // Lower Right Bough
-      this.drawFoliageLobe(ctx, x + 11 * rScale, y + 3 + hOff, 13 * rScale, '#15803d', '#14532d', '#052e16');
-      // Mid Left Bough
-      this.drawFoliageLobe(ctx, x - 10 * rScale + canopyWind * 0.5, y - 8 + hOff, 16 * rScale, '#4ade80', '#22c55e', '#15803d');
-      // Mid Right Bough
-      this.drawFoliageLobe(ctx, x + 9 * rScale, y - 7 + hOff, 15 * rScale, '#22c55e', '#16a34a', '#14532d');
-      // Central Crown Lobe
-      this.drawFoliageLobe(ctx, x + canopyWind * 0.8, y - 16 + hOff, 17 * rScale, '#4ade80', '#22c55e', '#15803d');
-
-      // Sun-Dappled Leaf Flecks & Rim Light on Crown
-      ctx.fillStyle = '#86efac';
-      ctx.beginPath();
-      ctx.arc(x - 6 * rScale + canopyWind, y - 20 + hOff, 3.5 * rScale, 0, Math.PI * 2);
-      ctx.arc(x - 1 * rScale + canopyWind, y - 22 + hOff, 3.0 * rScale, 0, Math.PI * 2);
-      ctx.arc(x + 4 * rScale + canopyWind, y - 18 + hOff, 2.5 * rScale, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Golden Sun Glint
-      ctx.fillStyle = '#bbf7d0';
-      ctx.beginPath();
-      ctx.arc(x - 5 * rScale + canopyWind, y - 21 + hOff, 1.8 * rScale, 0, Math.PI * 2);
+      ctx.arc(mote1X, mote1Y, 1.8 * rScale, 0, Math.PI * 2);
+      ctx.arc(mote2X, mote2Y, 1.4 * rScale, 0, Math.PI * 2);
       ctx.fill();
     }
 
     ctx.restore();
   }
 
-  private drawFoliageLobe(ctx: CanvasRenderingContext2D, lx: number, ly: number, r: number, cLight: string, cMid: string, cDark: string): void {
-    const grad = ctx.createRadialGradient(lx - r * 0.35, ly - r * 0.35, r * 0.1, lx, ly, r);
-    grad.addColorStop(0, cLight);
-    grad.addColorStop(0.55, cMid);
-    grad.addColorStop(1, cDark);
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(lx, ly, r, 0, Math.PI * 2);
-    ctx.fill();
+  private getFoliagePalette(
+    variant: FoliageColorVariant | undefined,
+    type: RouteTreeType,
+    hash: number
+  ): { dark: string; mid: string; light: string; highlight: string; rim: string; motes?: string } {
+    if (type === 'blossom' || variant === 'blossom') {
+      return {
+        dark: '#500724',
+        mid: '#831843',
+        light: '#be185d',
+        highlight: '#ec4899',
+        rim: '#fbcfe8',
+        motes: '#fdf2f8',
+      };
+    }
+    if (type === 'golden' || variant === 'golden') {
+      return {
+        dark: '#451a03',
+        mid: '#78350f',
+        light: '#b45309',
+        highlight: '#d97706',
+        rim: '#fde047',
+        motes: '#fef08a',
+      };
+    }
+    if (type === 'mystic' || variant === 'mystic') {
+      return {
+        dark: '#022c22',
+        mid: '#064e3b',
+        light: '#047857',
+        highlight: '#10b981',
+        rim: '#a7f3d0',
+        motes: '#6ee7b7',
+      };
+    }
+    if (type === 'coastal' || variant === 'coastal') {
+      return {
+        dark: '#042f2e',
+        mid: '#0f766e',
+        light: '#0d9488',
+        highlight: '#14b8a6',
+        rim: '#99f6e4',
+      };
+    }
 
-    // Subtle edge leaf bumps for organic texture
-    ctx.fillStyle = cLight;
-    for (let a = -Math.PI * 0.8; a < 0; a += 0.7) {
-      const bx = lx + Math.cos(a) * (r - 1);
-      const by = ly + Math.sin(a) * (r - 1);
-      ctx.beginPath();
-      ctx.arc(bx, by, r * 0.22, 0, Math.PI * 2);
-      ctx.fill();
+    const effectiveVariant = variant || (hash > 0.82 ? 'light' : hash > 0.68 ? 'dark' : hash > 0.6 ? 'olive' : 'standard');
+
+    switch (effectiveVariant) {
+      case 'light':
+        return {
+          dark: '#1a2e05',
+          mid: '#3f6212',
+          light: '#65a30d',
+          highlight: '#84cc16',
+          rim: '#bef264',
+        };
+      case 'dark':
+        return {
+          dark: '#022c22',
+          mid: '#064e3b',
+          light: '#047857',
+          highlight: '#10b981',
+          rim: '#6ee7b7',
+        };
+      case 'olive':
+        return {
+          dark: '#142805',
+          mid: '#273a0c',
+          light: '#4d7c0f',
+          highlight: '#65a30d',
+          rim: '#a3e635',
+        };
+      case 'standard':
+      default:
+        return {
+          dark: '#052e16',
+          mid: '#14532d',
+          light: '#16a34a',
+          highlight: '#22c55e',
+          rim: '#86efac',
+        };
     }
   }
 
-  private drawPineTier(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-    const pineGrad = ctx.createLinearGradient(x - w / 2, y, x + w / 2, y + h);
-    pineGrad.addColorStop(0, '#15803d');
-    pineGrad.addColorStop(0.5, '#166534');
-    pineGrad.addColorStop(1, '#052e16');
-    ctx.fillStyle = pineGrad;
+  private drawSoftTreeShadow(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    footY: number,
+    shadowW: number,
+    shadowH: number,
+    rScale: number
+  ): void {
+    ctx.save();
+    const sx = x + 3.5 * rScale;
+    const sy = footY + 1 * rScale;
+    const shGrad = ctx.createRadialGradient(sx, sy, 2, sx, sy, shadowW);
+    shGrad.addColorStop(0, 'rgba(8, 22, 10, 0.44)');
+    shGrad.addColorStop(0.65, 'rgba(8, 22, 10, 0.22)');
+    shGrad.addColorStop(1, 'rgba(8, 22, 10, 0)');
+    ctx.fillStyle = shGrad;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, shadowW, shadowH, 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  private drawTrunkWithBranches(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    footY: number,
+    trunkTopY: number,
+    trunkW: number,
+    rScale: number,
+    isSlender: boolean,
+    type: RouteTreeType
+  ): void {
+    ctx.save();
+
+    const rootLeft = x - trunkW * 1.35 * rScale;
+    const rootRight = x + trunkW * 1.35 * rScale;
+    const topLeft = x - trunkW * 0.52 * rScale;
+    const topRight = x + trunkW * 0.52 * rScale;
+
+    // 1. Natural Flared Trunk Path
+    ctx.beginPath();
+    ctx.moveTo(rootLeft, footY);
+    ctx.quadraticCurveTo(x - trunkW * 0.75 * rScale, footY - 7 * rScale, topLeft, trunkTopY);
+    ctx.lineTo(topRight, trunkTopY);
+    ctx.quadraticCurveTo(x + trunkW * 0.75 * rScale, footY - 7 * rScale, rootRight, footY);
+    ctx.closePath();
+
+    // 2. Bark Gradient (Dark Bark Browns to Warm Chestnut)
+    const trunkGrad = ctx.createLinearGradient(rootLeft, footY, rootRight, footY);
+    trunkGrad.addColorStop(0, '#1c0a02');
+    trunkGrad.addColorStop(0.25, '#451a03');
+    trunkGrad.addColorStop(0.62, '#78350f');
+    trunkGrad.addColorStop(0.88, '#58240c');
+    trunkGrad.addColorStop(1, '#271206');
+    ctx.fillStyle = trunkGrad;
+    ctx.fill();
+
+    // 3. Vertical Bark Grain Lines
+    ctx.strokeStyle = 'rgba(28, 10, 2, 0.72)';
+    ctx.lineWidth = Math.max(1, 1.2 * rScale);
+    ctx.beginPath();
+    ctx.moveTo(x - trunkW * 0.22 * rScale, footY - 2 * rScale);
+    ctx.quadraticCurveTo(x - trunkW * 0.2 * rScale, (footY + trunkTopY) / 2, topLeft + 2 * rScale, trunkTopY + 2 * rScale);
+    ctx.moveTo(x + trunkW * 0.22 * rScale, footY - 3 * rScale);
+    ctx.quadraticCurveTo(x + trunkW * 0.16 * rScale, (footY + trunkTopY) / 2, topRight - 2 * rScale, trunkTopY + 3 * rScale);
+    ctx.stroke();
+
+    // 4. Subtle Sun-Dappled Bark Highlight Rib
+    ctx.strokeStyle = 'rgba(217, 119, 6, 0.32)';
+    ctx.lineWidth = 1 * rScale;
+    ctx.beginPath();
+    ctx.moveTo(x + trunkW * 0.04 * rScale, footY - 4 * rScale);
+    ctx.lineTo(x + trunkW * 0.04 * rScale, trunkTopY + 3 * rScale);
+    ctx.stroke();
+
+    // 5. Visible Branch Forks (Extending naturally into lower canopy)
+    if (!isSlender && type !== 'conifer') {
+      ctx.strokeStyle = '#451a03';
+      ctx.lineWidth = Math.max(2, 3.2 * rScale);
+      ctx.lineCap = 'round';
+      // Left branch limb
+      ctx.beginPath();
+      ctx.moveTo(x - trunkW * 0.2 * rScale, trunkTopY + 4 * rScale);
+      ctx.quadraticCurveTo(x - trunkW * 0.8 * rScale, trunkTopY - 4 * rScale, x - trunkW * 1.5 * rScale, trunkTopY - 10 * rScale);
+      ctx.stroke();
+      // Right branch limb
+      ctx.beginPath();
+      ctx.moveTo(x + trunkW * 0.2 * rScale, trunkTopY + 4 * rScale);
+      ctx.quadraticCurveTo(x + trunkW * 0.8 * rScale, trunkTopY - 3 * rScale, x + trunkW * 1.4 * rScale, trunkTopY - 8 * rScale);
+      ctx.stroke();
+
+      if (type === 'mature') {
+        // Center higher limb for mature tree
+        ctx.beginPath();
+        ctx.moveTo(x, trunkTopY + 2 * rScale);
+        ctx.lineTo(x, trunkTopY - 14 * rScale);
+        ctx.stroke();
+      }
+    }
+
+    // 6. Natural Grass/Turf Contact Blades
+    ctx.fillStyle = '#166534';
+    ctx.beginPath();
+    ctx.moveTo(rootLeft - 2 * rScale, footY);
+    ctx.lineTo(rootLeft + 1 * rScale, footY - 4 * rScale);
+    ctx.lineTo(rootLeft + 4 * rScale, footY);
+    ctx.moveTo(rootRight - 4 * rScale, footY);
+    ctx.lineTo(rootRight - 1 * rScale, footY - 5 * rScale);
+    ctx.lineTo(rootRight + 2 * rScale, footY);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  private drawCoastalPalmTrunk(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    footY: number,
+    trunkTopY: number,
+    trunkW: number,
+    rScale: number,
+    treeHash: number
+  ): void {
+    ctx.save();
+    const curveOffset = (treeHash - 0.5) * 12 * rScale;
+    const midY = (footY + trunkTopY) / 2;
+
+    // Curved slender trunk path
+    ctx.beginPath();
+    ctx.moveTo(x - trunkW * 0.9 * rScale, footY);
+    ctx.quadraticCurveTo(x + curveOffset - trunkW * 0.4 * rScale, midY, x + curveOffset * 0.5 - trunkW * 0.3 * rScale, trunkTopY);
+    ctx.lineTo(x + curveOffset * 0.5 + trunkW * 0.3 * rScale, trunkTopY);
+    ctx.quadraticCurveTo(x + curveOffset + trunkW * 0.4 * rScale, midY, x + trunkW * 0.9 * rScale, footY);
+    ctx.closePath();
+
+    const palmTrunkGrad = ctx.createLinearGradient(x - trunkW * rScale, footY, x + trunkW * rScale, footY);
+    palmTrunkGrad.addColorStop(0, '#451a03');
+    palmTrunkGrad.addColorStop(0.4, '#78350f');
+    palmTrunkGrad.addColorStop(0.85, '#9a3412');
+    palmTrunkGrad.addColorStop(1, '#271206');
+    ctx.fillStyle = palmTrunkGrad;
+    ctx.fill();
+
+    // Segmented ring marks on palm trunk
+    ctx.strokeStyle = '#271206';
+    ctx.lineWidth = 1.2 * rScale;
+    for (let ty = trunkTopY + 6 * rScale; ty < footY - 4 * rScale; ty += 7 * rScale) {
+      const progress = (ty - trunkTopY) / (footY - trunkTopY);
+      const currX = x + curveOffset * (1 - progress * 0.7);
+      ctx.beginPath();
+      ctx.moveTo(currX - trunkW * 0.4 * rScale, ty);
+      ctx.lineTo(currX + trunkW * 0.4 * rScale, ty + 1 * rScale);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  private drawOrganicBough(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    rw: number,
+    rh: number,
+    pal: { dark: string; mid: string; light: string; highlight: string; rim: string },
+    jitterSeed: number = 0
+  ): void {
+    ctx.save();
+
+    // 7-lobed organic asymmetrical perimeter
+    const numLobes = 7;
+    const points: { x: number; y: number }[] = [];
+    for (let i = 0; i < numLobes; i++) {
+      const angle = (i / numLobes) * Math.PI * 2;
+      const wave = Math.sin(angle * 3 + jitterSeed) * 0.16 + Math.cos(angle * 2 + jitterSeed * 1.5) * 0.1;
+      const rLobeW = rw * (0.92 + wave);
+      const rLobeH = rh * (0.90 + wave * 0.75);
+      points.push({
+        x: cx + Math.cos(angle) * rLobeW,
+        y: cy + Math.sin(angle) * rLobeH,
+      });
+    }
 
     ctx.beginPath();
-    ctx.moveTo(x, y - h * 0.4);
-    ctx.lineTo(x + w / 2, y + h);
-    ctx.lineTo(x - w / 2, y + h);
+    ctx.moveTo((points[0].x + points[numLobes - 1].x) / 2, (points[0].y + points[numLobes - 1].y) / 2);
+    for (let i = 0; i < numLobes; i++) {
+      const nextIdx = (i + 1) % numLobes;
+      const midX = (points[i].x + points[nextIdx].x) / 2;
+      const midY = (points[i].y + points[nextIdx].y) / 2;
+      ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+    }
     ctx.closePath();
+
+    // Volume gradient: highlight on sunlit top-left, deep shadow on bottom-right
+    const grad = ctx.createRadialGradient(cx - rw * 0.35, cy - rh * 0.35, rw * 0.15, cx, cy, Math.max(rw, rh));
+    grad.addColorStop(0, pal.highlight);
+    grad.addColorStop(0.35, pal.light);
+    grad.addColorStop(0.72, pal.mid);
+    grad.addColorStop(1, pal.dark);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Interior sunlit leaf mass
+    ctx.fillStyle = pal.highlight;
+    const hx = cx - rw * 0.28;
+    const hy = cy - rh * 0.28;
+    ctx.beginPath();
+    ctx.ellipse(hx, hy, rw * 0.36, rh * 0.28, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Sun rim catchlight
+    ctx.fillStyle = pal.rim;
+    ctx.beginPath();
+    ctx.arc(hx - rw * 0.08, hy - rh * 0.08, rw * 0.15, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  private drawBroadleafCanopy(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    rScale: number,
+    pal: { dark: string; mid: string; light: string; highlight: string; rim: string },
+    wind: number,
+    hOff: number,
+    seed: number
+  ): void {
+    // Under-canopy shadow base
+    ctx.save();
+    ctx.fillStyle = pal.dark;
+    ctx.beginPath();
+    ctx.ellipse(x + wind * 0.3, y - 10 * rScale + hOff, 22 * rScale, 16 * rScale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Layer 1: Lower Boughs (leaving 18px of visible trunk beneath)
+    this.drawOrganicBough(ctx, x - 13 * rScale + wind * 0.3, y - 8 * rScale + hOff, 14 * rScale, 12 * rScale, pal, seed);
+    this.drawOrganicBough(ctx, x + 12 * rScale + wind * 0.4, y - 7 * rScale + hOff, 13 * rScale, 11 * rScale, pal, seed + 1.2);
+
+    // Layer 2: Mid Canopy Body
+    this.drawOrganicBough(ctx, x - 10 * rScale + wind * 0.6, y - 16 * rScale + hOff, 16 * rScale, 13 * rScale, pal, seed + 2.4);
+    this.drawOrganicBough(ctx, x + 9 * rScale + wind * 0.7, y - 15 * rScale + hOff, 15 * rScale, 12 * rScale, pal, seed + 3.6);
+
+    // Layer 3: Crown Mass
+    this.drawOrganicBough(ctx, x + wind * 0.9, y - 24 * rScale + hOff, 17 * rScale, 14 * rScale, pal, seed + 4.8);
+
+    // Sunlit leaf flecks on crown edge
+    ctx.fillStyle = pal.rim;
+    ctx.beginPath();
+    ctx.arc(x - 5 * rScale + wind, y - 32 * rScale + hOff, 2.8 * rScale, 0, Math.PI * 2);
+    ctx.arc(x + 1 * rScale + wind, y - 34 * rScale + hOff, 2.2 * rScale, 0, Math.PI * 2);
+    ctx.arc(x + 6 * rScale + wind, y - 30 * rScale + hOff, 2.0 * rScale, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  private drawMatureCanopy(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    rScale: number,
+    pal: { dark: string; mid: string; light: string; highlight: string; rim: string },
+    wind: number,
+    hOff: number,
+    seed: number
+  ): void {
+    // Large deep ambient shadow base
+    ctx.save();
+    ctx.fillStyle = pal.dark;
+    ctx.beginPath();
+    ctx.ellipse(x + wind * 0.3, y - 14 * rScale + hOff, 32 * rScale, 20 * rScale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Expansive 5-bough mature crown
+    this.drawOrganicBough(ctx, x - 20 * rScale + wind * 0.3, y - 10 * rScale + hOff, 18 * rScale, 14 * rScale, pal, seed);
+    this.drawOrganicBough(ctx, x + 19 * rScale + wind * 0.4, y - 9 * rScale + hOff, 17 * rScale, 13 * rScale, pal, seed + 1);
+    this.drawOrganicBough(ctx, x - 14 * rScale + wind * 0.6, y - 22 * rScale + hOff, 20 * rScale, 15 * rScale, pal, seed + 2);
+    this.drawOrganicBough(ctx, x + 13 * rScale + wind * 0.7, y - 20 * rScale + hOff, 19 * rScale, 14 * rScale, pal, seed + 3);
+    this.drawOrganicBough(ctx, x + wind * 0.9, y - 32 * rScale + hOff, 22 * rScale, 16 * rScale, pal, seed + 4);
+
+    // Crown sun highlights
+    ctx.fillStyle = pal.rim;
+    ctx.beginPath();
+    ctx.arc(x - 8 * rScale + wind, y - 42 * rScale + hOff, 3.5 * rScale, 0, Math.PI * 2);
+    ctx.arc(x + wind, y - 44 * rScale + hOff, 2.8 * rScale, 0, Math.PI * 2);
+    ctx.arc(x + 7 * rScale + wind, y - 40 * rScale + hOff, 2.5 * rScale, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  private drawSmallCanopy(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    rScale: number,
+    pal: { dark: string; mid: string; light: string; highlight: string; rim: string },
+    wind: number,
+    hOff: number,
+    seed: number
+  ): void {
+    // Compact garden / street canopy
+    this.drawOrganicBough(ctx, x - 7 * rScale + wind * 0.4, y - 6 * rScale + hOff, 11 * rScale, 9 * rScale, pal, seed);
+    this.drawOrganicBough(ctx, x + 7 * rScale + wind * 0.5, y - 5 * rScale + hOff, 10 * rScale, 8.5 * rScale, pal, seed + 1.5);
+    this.drawOrganicBough(ctx, x + wind * 0.8, y - 16 * rScale + hOff, 13 * rScale, 11 * rScale, pal, seed + 3);
+
+    ctx.fillStyle = pal.rim;
+    ctx.beginPath();
+    ctx.arc(x - 3 * rScale + wind, y - 23 * rScale + hOff, 2.0 * rScale, 0, Math.PI * 2);
+    ctx.arc(x + 2 * rScale + wind, y - 22 * rScale + hOff, 1.8 * rScale, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  private drawSlenderCanopy(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    rScale: number,
+    pal: { dark: string; mid: string; light: string; highlight: string; rim: string },
+    wind: number,
+    hOff: number,
+    seed: number
+  ): void {
+    // Narrow elevated crown
+    this.drawOrganicBough(ctx, x - 5 * rScale + wind * 0.3, y - 9 * rScale + hOff, 10 * rScale, 11 * rScale, pal, seed);
+    this.drawOrganicBough(ctx, x + 5 * rScale + wind * 0.4, y - 8 * rScale + hOff, 9.5 * rScale, 10.5 * rScale, pal, seed + 1.2);
+    this.drawOrganicBough(ctx, x + wind * 0.7, y - 20 * rScale + hOff, 12 * rScale, 13 * rScale, pal, seed + 2.5);
+    this.drawOrganicBough(ctx, x + wind * 0.9, y - 30 * rScale + hOff, 10 * rScale, 11 * rScale, pal, seed + 4);
+  }
+
+  private drawDenseForestCanopy(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    rScale: number,
+    pal: { dark: string; mid: string; light: string; highlight: string; rim: string },
+    wind: number,
+    hOff: number,
+    seed: number
+  ): void {
+    // Deep heavy boundary canopy
+    ctx.save();
+    ctx.fillStyle = pal.dark;
+    ctx.beginPath();
+    ctx.ellipse(x + wind * 0.3, y - 12 * rScale + hOff, 28 * rScale, 18 * rScale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    this.drawOrganicBough(ctx, x - 17 * rScale + wind * 0.3, y - 8 * rScale + hOff, 16 * rScale, 13 * rScale, pal, seed);
+    this.drawOrganicBough(ctx, x + 16 * rScale + wind * 0.4, y - 7 * rScale + hOff, 15 * rScale, 12 * rScale, pal, seed + 1.5);
+    this.drawOrganicBough(ctx, x - 11 * rScale + wind * 0.6, y - 18 * rScale + hOff, 17 * rScale, 14 * rScale, pal, seed + 3);
+    this.drawOrganicBough(ctx, x + 10 * rScale + wind * 0.7, y - 17 * rScale + hOff, 16 * rScale, 13 * rScale, pal, seed + 4.5);
+    this.drawOrganicBough(ctx, x + wind * 0.9, y - 27 * rScale + hOff, 19 * rScale, 15 * rScale, pal, seed + 6);
+  }
+
+  private drawConiferCanopy(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    rScale: number,
+    pal: { dark: string; mid: string; light: string; highlight: string; rim: string },
+    wind: number,
+    hOff: number,
+    seed: number
+  ): void {
+    // Distinct conical silhouette with 3 tapered needle tiers (leaving 16px of visible trunk)
+    this.drawConiferTier(ctx, x + wind * 0.3, y + 4 * rScale + hOff, 30 * rScale, 17 * rScale, pal, seed);
+    this.drawConiferTier(ctx, x + wind * 0.6, y - 9 * rScale + hOff, 23 * rScale, 16 * rScale, pal, seed + 1);
+    this.drawConiferTier(ctx, x + wind * 0.9, y - 22 * rScale + hOff, 15 * rScale, 16 * rScale, pal, seed + 2);
+
+    // Tip needle peak
+    ctx.fillStyle = pal.rim;
+    ctx.beginPath();
+    ctx.moveTo(x + wind * 0.9 - 2 * rScale, y - 31 * rScale + hOff);
+    ctx.lineTo(x + wind * 0.9, y - 36 * rScale + hOff);
+    ctx.lineTo(x + wind * 0.9 + 2 * rScale, y - 31 * rScale + hOff);
+    ctx.fill();
+  }
+
+  private drawConiferTier(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    tierBaseY: number,
+    w: number,
+    h: number,
+    pal: { dark: string; mid: string; light: string; highlight: string; rim: string },
+    seed: number
+  ): void {
+    ctx.save();
+    const halfW = w / 2;
+    const apexY = tierBaseY - h;
+
+    // Conical tier path
+    ctx.beginPath();
+    ctx.moveTo(x, apexY);
+    ctx.lineTo(x + halfW, tierBaseY);
+    ctx.lineTo(x - halfW, tierBaseY);
+    ctx.closePath();
+
+    // Volume gradient
+    const tierGrad = ctx.createLinearGradient(x - halfW, apexY, x + halfW, tierBaseY);
+    tierGrad.addColorStop(0, pal.highlight);
+    tierGrad.addColorStop(0.35, pal.light);
+    tierGrad.addColorStop(0.75, pal.mid);
+    tierGrad.addColorStop(1, pal.dark);
+    ctx.fillStyle = tierGrad;
     ctx.fill();
 
     // Serrated bottom needles
-    ctx.fillStyle = '#14532d';
-    for (let nx = x - w / 2; nx <= x + w / 2; nx += 6) {
+    ctx.fillStyle = pal.dark;
+    const step = 6;
+    for (let nx = x - halfW; nx <= x + halfW; nx += step) {
       ctx.beginPath();
-      ctx.moveTo(nx - 3, y + h);
-      ctx.lineTo(nx, y + h + 3);
-      ctx.lineTo(nx + 3, y + h);
+      ctx.moveTo(nx - 3, tierBaseY);
+      ctx.lineTo(nx, tierBaseY + 3.5);
+      ctx.lineTo(nx + 3, tierBaseY);
       ctx.closePath();
       ctx.fill();
     }
+
+    // Western slope sunlit needle flecks
+    ctx.fillStyle = pal.rim;
+    ctx.beginPath();
+    ctx.moveTo(x - halfW * 0.5, tierBaseY - h * 0.3);
+    ctx.lineTo(x - halfW * 0.3, tierBaseY - h * 0.6);
+    ctx.lineTo(x - halfW * 0.1, tierBaseY - h * 0.3);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  private drawCoastalPalmCanopy(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    rScale: number,
+    pal: { dark: string; mid: string; light: string; highlight: string; rim: string },
+    wind: number,
+    hOff: number,
+    seed: number
+  ): void {
+    ctx.save();
+    const crownX = x + wind * 0.6;
+    const crownY = y - 18 * rScale + hOff;
+
+    // Coconut cluster under fronds
+    ctx.fillStyle = '#451a03';
+    ctx.beginPath();
+    ctx.arc(crownX - 3 * rScale, crownY + 2 * rScale, 3.2 * rScale, 0, Math.PI * 2);
+    ctx.arc(crownX + 3 * rScale, crownY + 2 * rScale, 3.0 * rScale, 0, Math.PI * 2);
+    ctx.arc(crownX, crownY + 4 * rScale, 2.8 * rScale, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 5 radiating drooping palm fronds
+    const frondAngles = [-Math.PI * 0.85, -Math.PI * 0.6, -Math.PI * 0.35, -Math.PI * 0.1, Math.PI * 0.05];
+    for (let i = 0; i < frondAngles.length; i++) {
+      const baseAngle = frondAngles[i];
+      const frondLen = (28 + (i % 2) * 5) * rScale;
+      const endX = crownX + Math.cos(baseAngle) * frondLen + wind * 0.5;
+      const endY = crownY + Math.sin(baseAngle) * (frondLen * 0.65) + 12 * rScale;
+      const ctrlX = crownX + Math.cos(baseAngle) * (frondLen * 0.6);
+      const ctrlY = crownY + Math.sin(baseAngle) * (frondLen * 0.5) - 6 * rScale;
+
+      ctx.beginPath();
+      ctx.moveTo(crownX, crownY);
+      ctx.quadraticCurveTo(ctrlX, ctrlY, endX, endY);
+      ctx.strokeStyle = i < 2 ? pal.highlight : pal.mid;
+      ctx.lineWidth = 3.5 * rScale;
+      ctx.stroke();
+
+      // Frond leaflets
+      ctx.fillStyle = i < 2 ? pal.light : pal.dark;
+      ctx.beginPath();
+      ctx.ellipse(ctrlX, ctrlY + 2 * rScale, 9 * rScale, 4.5 * rScale, baseAngle, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  private drawDecorativeCanopy(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    rScale: number,
+    pal: { dark: string; mid: string; light: string; highlight: string; rim: string },
+    wind: number,
+    hOff: number,
+    seed: number
+  ): void {
+    // Manicured urban topiary crown
+    ctx.save();
+    const cy = y - 12 * rScale + hOff;
+
+    const grad = ctx.createRadialGradient(x - 5 * rScale, cy - 6 * rScale, 3 * rScale, x, cy, 18 * rScale);
+    grad.addColorStop(0, pal.highlight);
+    grad.addColorStop(0.45, pal.light);
+    grad.addColorStop(0.8, pal.mid);
+    grad.addColorStop(1, pal.dark);
+    ctx.fillStyle = grad;
+
+    ctx.beginPath();
+    ctx.ellipse(x + wind * 0.5, cy, 15 * rScale, 18 * rScale, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Topiary manicured sunlit highlight ring
+    ctx.strokeStyle = pal.rim;
+    ctx.lineWidth = 1.5 * rScale;
+    ctx.beginPath();
+    ctx.arc(x - 4 * rScale + wind * 0.4, cy - 6 * rScale, 6 * rScale, -Math.PI * 0.7, Math.PI * 0.1);
+    ctx.stroke();
+
+    ctx.restore();
   }
 
   private renderOverheadScenery(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {

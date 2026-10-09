@@ -312,6 +312,7 @@ body {
 #title,
 #map {
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* ==========================================================================
@@ -7058,74 +7059,369 @@ tr:last-child td {
 }
 
 /* ==========================================================================
-   KANTO WORLD MAP MODAL STYLES
+   WEB DASHBOARD / DESKTOP OPTIMIZATIONS (>= 769px)
+   Perfect fit inside Pokédex chassis (#g) with high contrast & zero overflow.
+   Mobile view (<= 768px) is completely preserved.
    ========================================================================== */
-.world-map-modal-overlay {
+@media (min-width: 769px) {
+  .char-select-screen {
+    max-width: 100%;
+    width: 100%;
+    padding: 8px 4px 18px;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+
+  .char-select-header {
+    margin-bottom: 14px;
+    text-align: center;
+  }
+
+  .char-select-badge {
+    background: #e0f2fe;
+    border: 1.5px solid #0284c7;
+    color: #0369a1;
+    font-size: 10.5px;
+    font-weight: 900;
+    padding: 3px 12px;
+    letter-spacing: 1.2px;
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.15);
+  }
+
+  .char-select-title {
+    font-size: 24px;
+    font-weight: 900;
+    letter-spacing: 1.2px;
+    margin: 4px 0 6px;
+    color: #0f172a;
+    background: linear-gradient(135deg, #0f172a 0%, #334155 45%, #b91c1c 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+  }
+
+  .char-select-subtitle {
+    font-size: 13px;
+    color: #475569;
+    font-weight: 600;
+  }
+
+  .char-select-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .char-preview-card {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    border-radius: 18px;
+    background: #0f172a;
+    border: 2px solid #334155;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+
+  .char-preview-stage {
+    flex: 0 0 160px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #char-preview-canvas {
+    width: 150px;
+    height: 166px;
+    display: block;
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.6));
+  }
+
+  .char-dir-controls {
+    margin-top: 6px;
+    gap: 6px;
+    display: flex;
+  }
+
+  .char-dir-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 13px;
+  }
+
+  .char-info-box {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: left;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    border-left: 1.5px solid #1e293b;
+    padding-left: 18px;
+  }
+
+  .char-info-name {
+    font-size: 21px;
+    font-weight: 900;
+    color: #f8fafc;
+    letter-spacing: 0.5px;
+  }
+
+  .char-info-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #38bdf8;
+    margin-top: 2px;
+  }
+
+  .char-info-desc {
+    font-size: 12px;
+    line-height: 1.45;
+    color: #94a3b8;
+    margin: 8px 0 0 0;
+  }
+
+  .char-config-card {
+    flex: none;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 18px 20px;
+    gap: 14px;
+    border-radius: 18px;
+    background: #0f172a;
+    border: 2px solid #334155;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+
+  .char-gender-tabs {
+    width: 100%;
+    gap: 10px;
+    display: flex;
+  }
+
+  .char-gender-btn {
+    flex: 1;
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 900;
+    white-space: nowrap;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .char-roster-grid {
+    grid-template-columns: repeat(2, 1fr);
+    width: 100%;
+    gap: 10px;
+    display: grid;
+  }
+
+  .char-roster-btn {
+    min-width: 0;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    min-height: auto;
+  }
+
+  .roster-name {
+    font-size: 13.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .roster-tagline {
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .char-name-group {
+    width: 100%;
+    gap: 6px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .char-name-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: #94a3b8;
+  }
+
+  .char-name-input-wrap {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+  }
+
+  .char-name-input {
+    width: 100%;
+  }
+
+  .char-confirm-btn {
+    width: 100%;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px;
+    box-sizing: border-box;
+  }
+}
+
+/* ==========================================================================
+   KANTO REGIONAL WORLD MAP — MODERN MOBILE & DESKTOP REDESIGN
+   ========================================================================== */
+.kanto-map-modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(15, 23, 42, 0.88);
-  backdrop-filter: blur(8px);
+  background: rgba(10, 15, 29, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
-  animation: fadeIn 0.2s ease;
+  padding: env(safe-area-inset-top, 10px) env(safe-area-inset-right, 10px) env(safe-area-inset-bottom, 10px) env(safe-area-inset-left, 10px);
+  animation: mapModalFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
 }
 
-.world-map-container {
-  width: 95%;
-  max-width: 960px;
-  height: 92vh;
-  max-height: 720px;
+@keyframes mapModalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.kanto-map-modal-card {
+  width: 96vw;
+  max-width: 1240px;
+  height: 94vh;
+  max-height: 860px;
   background: #0f172a;
   border: 2px solid #38bdf8;
   border-radius: 20px;
-  box-shadow: 0 0 40px rgba(56, 189, 248, 0.35);
+  box-shadow: 0 0 50px rgba(56, 189, 248, 0.3), 0 25px 60px rgba(0, 0, 0, 0.85);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
-.world-map-header {
+/* TOP HEADER */
+.kanto-map-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 18px;
-  background: #1e293b;
+  padding: 12px 20px;
+  background: linear-gradient(180deg, #1e293b, #0f172a);
   border-bottom: 2px solid #334155;
+  flex-shrink: 0;
+  gap: 12px;
 }
 
-.world-map-header-left {
+.kanto-map-header-brand {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.world-map-icon {
-  font-size: 24px;
+.kanto-map-emblem {
+  font-size: 26px;
+  filter: drop-shadow(0 2px 6px rgba(56, 189, 248, 0.4));
 }
 
-.world-map-title {
+.kanto-map-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.kanto-map-title {
+  margin: 0;
   font-size: 16px;
   font-weight: 900;
   color: #38bdf8;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
 }
 
-.world-map-sub {
+.kanto-map-subtitle {
   font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.kanto-map-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kanto-map-current-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(30, 41, 59, 0.9);
+  border: 1px solid #16a34a;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.kanto-map-current-pill .pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 10px #22c55e;
+  animation: pulseDot 1.6s ease infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.kanto-map-current-pill .pill-label {
   color: #94a3b8;
 }
 
-.world-map-close-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+.kanto-map-current-pill .pill-name {
+  color: #4ade80;
+  font-weight: 800;
+}
+
+.kanto-map-close-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   background: #334155;
-  border: 1px solid #475569;
+  border: 1.5px solid #475569;
   color: #f8fafc;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 900;
   cursor: pointer;
   display: flex;
@@ -7134,31 +7430,133 @@ tr:last-child td {
   transition: all 0.15s ease;
 }
 
-.world-map-close-btn:hover {
+.kanto-map-close-btn:hover {
   background: #dc2626;
   border-color: #ef4444;
+  transform: scale(1.05);
 }
 
-.world-map-viewport {
+/* WORKSPACE SPLIT */
+.kanto-map-workspace {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+/* VIEWPORT CANVAS CONTAINER */
+.kanto-map-viewport {
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: #075985;
+  background: #023e8a;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
 }
 
-.world-map-geo {
+.kanto-map-viewport:active {
+  cursor: grabbing;
+}
+
+/* STAGE CANVAS & LAYERS */
+.kanto-map-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: center center;
+  transition: transform 0.05s linear;
+}
+
+.kanto-geo-svg {
   width: 100%;
   height: 100%;
   display: block;
 }
 
-.world-map-pins-layer {
+.kanto-map-landmarks-layer,
+.kanto-map-cities-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
 
-.world-map-pin {
+/* HUD CONTROLS (+, -, Recenter) */
+.kanto-map-hud-controls {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.kanto-hud-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1.5px solid #38bdf8;
+  color: #f8fafc;
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  transition: all 0.15s ease;
+}
+
+.kanto-hud-btn:hover {
+  background: #0284c7;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(56, 189, 248, 0.4);
+}
+
+.kanto-hud-btn:active {
+  transform: translateY(0);
+}
+
+/* COMPASS HUD */
+.kanto-map-compass-hud {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 40;
+  pointer-events: none;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1.5px solid #334155;
+  border-radius: 12px;
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  backdrop-filter: blur(6px);
+}
+
+.compass-needle {
+  font-size: 13px;
+  font-weight: 900;
+  color: #ef4444;
+  line-height: 1;
+}
+
+.compass-sub {
+  font-size: 9px;
+  font-weight: 800;
+  color: #94a3b8;
+  letter-spacing: 1px;
+}
+
+/* CITY PINS */
+.kanto-city-pin {
   position: absolute;
   transform: translate(-50%, -50%);
   pointer-events: auto;
@@ -7166,219 +7564,594 @@ tr:last-child td {
   display: flex;
   flex-direction: column;
   align-items: center;
-  transition: all 0.15s ease;
-  z-index: 10;
-}
-
-.world-map-pin:hover {
-  transform: translate(-50%, -55%) scale(1.1);
+  transition: transform 0.15s ease, filter 0.15s ease;
   z-index: 20;
 }
 
-.world-map-pin.selected {
-  transform: translate(-50%, -55%) scale(1.15);
-  z-index: 30;
+.kanto-city-pin:hover {
+  transform: translate(-50%, -56%) scale(1.12);
+  z-index: 35;
 }
 
-.pin-marker {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #1e293b;
-  border: 2px solid #94a3b8;
+.kanto-city-pin.selected {
+  transform: translate(-50%, -56%) scale(1.18);
+  z-index: 40;
+}
+
+.city-pin-anchor {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+.city-pin-bubble {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #1e293b;
+  border: 2.5px solid #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
   transition: all 0.15s ease;
 }
 
-.world-map-pin.unlocked .pin-marker {
+.kanto-city-pin.unlocked .city-pin-bubble {
   border-color: #facc15;
   background: #0f172a;
-  box-shadow: 0 0 14px rgba(250, 204, 21, 0.4);
+  box-shadow: 0 0 16px rgba(250, 204, 21, 0.45), 0 4px 12px rgba(0, 0, 0, 0.6);
 }
 
-.world-map-pin.selected .pin-marker {
+.kanto-city-pin.current .city-pin-bubble {
+  border-color: #22c55e;
+  background: #052e16;
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.65), 0 4px 14px rgba(0, 0, 0, 0.7);
+}
+
+.kanto-city-pin.selected .city-pin-bubble {
   border-color: #38bdf8;
   background: #0369a1;
-  box-shadow: 0 0 18px rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 22px rgba(56, 189, 248, 0.8), 0 4px 14px rgba(0, 0, 0, 0.7);
 }
 
-.world-map-pin.current-loc .pin-marker {
-  border-color: #22c55e;
-  background: #14532d;
-  box-shadow: 0 0 18px rgba(34, 197, 94, 0.6);
+.city-pin-icon {
+  font-size: 20px;
 }
 
-.pin-icon {
-  font-size: 18px;
-}
-
-.pin-current-pulse {
+.pin-radar-ping {
   position: absolute;
-  inset: -6px;
+  inset: -8px;
   border-radius: 50%;
-  border: 2px solid #22c55e;
-  animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  border: 2.5px solid #22c55e;
+  animation: radarPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  pointer-events: none;
 }
 
-@keyframes ping {
-  75%, 100% {
-    transform: scale(1.6);
-    opacity: 0;
-  }
+@keyframes radarPing {
+  0% { transform: scale(0.9); opacity: 1; }
+  75%, 100% { transform: scale(1.6); opacity: 0; }
 }
 
-.pin-label {
+.city-pin-label {
   margin-top: 4px;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-size: 10px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 11px;
   font-weight: 800;
   color: #f8fafc;
   white-space: nowrap;
   display: flex;
   align-items: center;
-  gap: 3px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  gap: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
 }
 
-.pin-lock-tag {
-  font-size: 9px;
+.city-lock-indicator {
+  font-size: 10px;
 }
 
-.world-map-drawer {
+/* LANDMARKS */
+.kanto-landmark-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform 0.15s ease;
+  z-index: 15;
+}
+
+.kanto-landmark-marker:hover {
+  transform: translate(-50%, -54%) scale(1.12);
+  z-index: 30;
+}
+
+.kanto-landmark-marker.selected {
+  transform: translate(-50%, -54%) scale(1.15);
+  z-index: 35;
+}
+
+.landmark-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   background: #1e293b;
-  border-top: 2px solid #334155;
-  padding: 14px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-@media (max-width: 640px) {
-  .world-map-drawer {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 10px 14px;
-  }
-}
-
-.drawer-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex: 1;
-}
-
-.drawer-icon-box {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: #0f172a;
-  border: 1.5px solid #38bdf8;
+  border: 2px solid #64748b;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
-  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  transform: rotate(45deg);
+  transition: all 0.15s ease;
 }
 
-.drawer-city-info {
+.landmark-badge .landmark-icon {
+  transform: rotate(-45deg);
+  font-size: 16px;
+}
+
+.kanto-landmark-marker.unlocked .landmark-badge {
+  border-color: #38bdf8;
+  background: #0f172a;
+}
+
+.kanto-landmark-marker.selected .landmark-badge {
+  border-color: #facc15;
+  background: #78350f;
+  box-shadow: 0 0 16px rgba(250, 204, 21, 0.6);
+}
+
+.landmark-name-tag {
+  margin-top: 8px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+/* DESKTOP SIDEBAR */
+.kanto-map-sidebar {
+  width: 340px;
+  max-width: 32%;
+  background: #1e293b;
+  border-left: 2px solid #334155;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.detail-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.detail-badge-box {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: #0f172a;
+  border: 2px solid #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.detail-badge-box.landmark-theme {
+  border-color: #facc15;
+}
+
+.detail-title-box {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.drawer-city-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+.detail-region-tag {
+  font-size: 10px;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
 }
 
-.drawer-city-name {
-  font-size: 15px;
+.detail-location-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.detail-location-subtitle {
+  font-size: 11.5px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+/* STATUS BANNER */
+.detail-status-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  border: 1.5px solid transparent;
+}
+
+.detail-status-banner.status-current {
+  background: rgba(22, 163, 74, 0.15);
+  border-color: #22c55e;
+  color: #4ade80;
+}
+
+.detail-status-banner.status-unlocked {
+  background: rgba(2, 132, 199, 0.15);
+  border-color: #38bdf8;
+  color: #7dd3fc;
+}
+
+.detail-status-banner.status-locked {
+  background: rgba(234, 88, 12, 0.15);
+  border-color: #f97316;
+  color: #fdba74;
+}
+
+.status-headline {
+  font-weight: 900;
+  font-size: 11.5px;
+  letter-spacing: 0.4px;
+}
+
+.status-subtext {
+  font-size: 10.5px;
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
+/* BODY CONTENT */
+.detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.detail-section-title {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-weight: 900;
+  color: #94a3b8;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.detail-description {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #cbd5e1;
+}
+
+/* GYM FEATURE CARD */
+.gym-feature-card {
+  background: #0f172a;
+  border: 1.5px solid #334155;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gym-badge-preview {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #1e293b;
+  border: 1px solid #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.gym-info-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gym-name {
+  font-size: 13px;
   font-weight: 900;
   color: #f8fafc;
 }
 
-.status-badge {
-  font-size: 9.5px;
-  font-weight: 800;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.status-badge.current {
-  background: #15803d;
-  color: #f0fdf4;
-}
-
-.status-badge.unlocked {
-  background: #0369a1;
-  color: #f0f9ff;
-}
-
-.status-badge.locked {
-  background: #78350f;
-  color: #fef3c7;
-}
-
-.drawer-city-region {
+.gym-leader-line,
+.gym-badge-name {
   font-size: 11px;
-  color: #38bdf8;
-  font-weight: 700;
-}
-
-.drawer-city-desc {
-  font-size: 11.5px;
   color: #94a3b8;
-  line-height: 1.35;
 }
 
-.drawer-gym-status {
-  font-size: 11px;
+.gym-leader-line strong,
+.gym-badge-name strong {
+  color: #facc15;
+}
+
+/* CONNECTED HIGHWAYS LIST */
+.connected-routes-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.connected-routes-list li {
+  font-size: 11.5px;
   color: #cbd5e1;
-  margin-top: 3px;
+  background: #0f172a;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.drawer-right {
-  flex-shrink: 0;
-}
-
-.travel-btn {
-  padding: 10px 18px;
-  font-size: 13px;
+.route-bullet {
+  color: #38bdf8;
   font-weight: 900;
-  border-radius: 10px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s ease;
-  border: 1.5px solid transparent;
 }
 
-.travel-btn.active {
+/* FOOTER ACTIONS */
+.detail-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #334155;
+}
+
+.kanto-action-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 900;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.16s ease;
+}
+
+.kanto-action-btn.travel.active {
   background: linear-gradient(135deg, #0284c7, #0369a1);
   border-color: #38bdf8;
-  color: #fff;
-  box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.4);
 }
 
-.travel-btn.active:hover {
+.kanto-action-btn.travel.active:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(56, 189, 248, 0.6);
+  box-shadow: 0 6px 22px rgba(56, 189, 248, 0.6);
+  background: linear-gradient(135deg, #0369a1, #0284c7);
 }
 
-.travel-btn.disabled {
+.kanto-action-btn.current {
+  background: #14532d;
+  border-color: #22c55e;
+  color: #86efac;
+  cursor: default;
+}
+
+.kanto-action-btn.disabled {
   background: #334155;
   border-color: #475569;
   color: #64748b;
   cursor: not-allowed;
 }
+
+.detail-hint {
+  margin: 0;
+  font-size: 10.5px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+/* MOBILE DEDICATED BOTTOM DRAWER */
+.kanto-map-mobile-drawer {
+  display: none;
+}
+
+/* ==========================================================================
+   MOBILE & TABLET RESPONSIVE STYLES
+   ========================================================================== */
+@media (max-width: 860px) {
+  .kanto-map-modal-card {
+    width: 100vw;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
+    border-radius: 0;
+    border: none;
+  }
+
+  .kanto-map-header {
+    padding: 10px 14px;
+  }
+
+  .kanto-map-title {
+    font-size: 14px;
+  }
+
+  .kanto-map-subtitle {
+    display: none;
+  }
+
+  .kanto-map-current-pill .pill-label {
+    display: none;
+  }
+
+  .kanto-map-workspace {
+    flex-direction: column;
+  }
+
+  .kanto-map-sidebar {
+    display: none;
+  }
+
+  /* MOBILE DRAWER SHEET */
+  .kanto-map-mobile-drawer {
+    display: block;
+    background: #1e293b;
+    border-top: 2px solid #38bdf8;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+    flex-shrink: 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
+    z-index: 60;
+  }
+
+  .mobile-drawer-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .mobile-drawer-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mobile-loc-icon {
+    font-size: 24px;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: #0f172a;
+    border: 1.5px solid #38bdf8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .mobile-loc-titles {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mobile-loc-name {
+    font-size: 14.5px;
+    font-weight: 900;
+    color: #f8fafc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-loc-status {
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .mobile-loc-status.text-green {
+    color: #4ade80;
+  }
+
+  .mobile-loc-status.text-blue {
+    color: #38bdf8;
+  }
+
+  .mobile-loc-status.text-amber {
+    color: #fbbf24;
+  }
+
+  .mobile-loc-desc {
+    margin: 0;
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.35;
+  }
+
+  .mobile-drawer-action {
+    display: flex;
+  }
+
+  .mobile-travel-btn {
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 900;
+    cursor: pointer;
+    border: 1px solid transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+
+  .mobile-travel-btn.active {
+    background: linear-gradient(135deg, #0284c7, #0369a1);
+    border-color: #38bdf8;
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4);
+  }
+
+  .mobile-travel-btn.disabled {
+    background: #334155;
+    border-color: #475569;
+    color: #64748b;
+    cursor: not-allowed;
+  }
+
+  /* HUD controls positioning on mobile */
+  .kanto-hud-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+    border-radius: 10px;
+  }
+
+  .kanto-map-compass-hud {
+    bottom: 8px;
+    left: 8px;
+    padding: 4px 8px;
+  }
+}
+
 

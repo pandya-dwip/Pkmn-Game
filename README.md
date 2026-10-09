@@ -6,21 +6,33 @@ An immersive Gen 1 Pokémon adventure and tournament game built with **TypeScrip
 
 ## 🌟 Highlights & New Features
 
-### 🌲 Interactive Top-Down Kanto Route Exploration
-- **Real-Time World Travel:** Freely explore iconic Kanto routes (Route 1 through Viridian City, Route 2 through Pewter City, Cerulean, Vermilion, Celadon, Fuchsia, Saffron, Cinnabar, and the Indigo Plateau).
-- **Volumetric 2D Canvas Graphics:**
-  - **Volumetric Tree Canopies:** Natural multi-lobed foliage bodies with directional sunlight gradients, leafy cluster highlights, gnarled oak trunks, root flares, and organic height/scale variations.
-  - **Organic Terrain & Trails:** Multi-tone velvety lawns with procedural turf dappling, wild four-leaf clover clusters, and yellow meadow dandelions. Country trails feature organically scattered 3D river cobblestones, sun-baked walking lanes, and soft scalloped grass borders. City plazas feature weathered ashlar flagstones with 3D beveled edges, mortar lines, and chiseled granite curbs.
-  - **Dynamic Swaying Tall Grass:** Rounded mossy soil beds with soft depth shadows, multi-layered curved blades with 2-phase wind ripples, reactive blade parting as the trainer walks through, and embedded blooming wild meadow flowers (buttercups, poppies, bluebells, lavender, and daisies).
-  - **Atmospheric Lighting & Particles:** Diagonal volumetric sunbeams (god-rays) streaming from the canopy, accompanied by floating leaves, cherry blossom petals, and golden pollen dust motes drifting across the screen.
-  - **Detailed Red/Ash Trainer Sprite:** Shaded baseball cap with white Poké Ball emblem and dark visor shadow, layered red vest with white collar, indigo denim jeans with knee crease highlights, red sneakers with white rubber soles, and a fluid 4-frame walking stride.
-- **Architectural Buildings:**
-  - **🏥 Pokémon Center:** 3D curved crimson roof with terracotta shingles, white ridge caps, cream stucco siding, sky-blue corner pilasters, glowing amber transom windows with blooming tulip flowerboxes, cyan automatic sliding glass doors, communications mast with blinking navigation beacon, and an illuminated 3D Poké Ball crest with a pulsing cyan/white LED button. Heals your entire party to 100% HP.
-  - **🛒 Poké Mart:** Royal-blue scalloped hipped roof, ivory brick facade, storefront display showcase window with mini 3D potions and Poké Balls on wooden shelves beneath a 3D scalloped blue-and-white awning, decorative potted shrub, illuminated gold sign, and full shopping interface.
-  - **🏆 Kanto League Gyms:** Monumental classical battle arenas with 3-tier marble steps, ashlar granite courses, triangular pediment, 4 fluted neoclassical columns, dark oak double portals with knockers, stone braziers with dancing dynamic fire tongues casting warm flickering light, and a radiant pulsing elemental badge crystal.
-  - **🚪 Route Gatehouses:** Weathered red brick checkpoints with arched passage tunnels and glowing wrought-iron coach lanterns.
-- **Ground Items & Interactive NPCs:** Collect ground-dropped Poké Balls, Berries, and Poké Dollars with shiny particle gleams, and speak with animated NPCs for tips, lore, and gifts.
-- **Position Persistence:** Return seamlessly to your exact coordinates on the route after completing wild battles, gym matches, or shopping trips.
+### 🌲 Interactive Top-Down Kanto Route Exploration & Unique City Architecture
+- **Real-Time World Travel Across All 9 Routes:** Freely explore an expansive Kanto region (world width up to 3,600px per route) structured with clear natural zones, upper ridges, shoreline docks, and fully realized town grids.
+- **Distinct Visual Look & Architecture For Every City:**
+  - **Viridian City (Route 0 - Evergreen Garden City):** Ivory sandstone ashlar flagstones with natural stone curbs, emerald and terracotta pitched roofs, flourishing tulip flowerboxes, central tiered marble fountain, Pokémon Center, Poké Mart, Trainer Academy, and cozy botanist cottages.
+  - **Pewter City (Route 1 - Mt. Moon Stone Mining City):** Dark chiseled granite and slate cobblestone avenues, charcoal and slate roofs, solid meteor rock fountain, Brock's Rock-type Gym, Geologist Flint's cottage, Fossil Research Lab, quarry foreman lodge, and scattered Mt. Moon boulders.
+  - **Cerulean City (Route 2 - Floral Water & Canal City):** Cyan and azure marine stone pavers with blue mortar lines, flowing freshwater canals with walkable wooden fishing piers, central azure cascade fountain, Bike Shop Villa, Berry Herbalist Cottage, Water Breeder's Lodge, and Swimmer's Oasis.
+  - **Vermilion City (Route 3 - Lightning Harbor Port):** Warm terracotta brickwork avenues and waterfront boardwalks, harbor bay with fishing docks, central stone anchor piazza and fountain, Pokémon Fan Club, Sailor's Quarters, Old Rod Guru's Cottage, and Dockmaster Office under salty sea breezes.
+  - **Celadon City (Route 4 - Rainbow Metropolis):** Grand pastel and purple marble boulevards, 5-story Celadon Department Store, royal floral marble fountain, Erika's lush greenhouse Gym, Celadon Perfumery Villa, Game Corner suite, Botanist Manor, and gilded gold streetlamps.
+  - **Fuchsia City (Route 5 - Historic Ninja & Safari Town):** Earthen amber timber and stone pavers, serene Zen koi pond with wooden bridge, stone basin fountain, traditional Japanese stone lanterns, Safari Zone Warden Slowpoke's Villa, Ninja Technique Dojo with Apprentice Raizo, Poison Herbalist shanty, and conservation pens.
+  - **Saffron City (Route 6 - Golden Tech Metropolis):** Platinum and gold high-tech metropolis pavers, Silph Co. headquarters, central magnetic hydro-fountain, futuristic cyan LED streetlamps, Silph Senior Engineer Manor, Fighting Dojo Master Koichi's hall, Copycat's quirky villa, and Telekinesis lab.
+  - **Cinnabar Island (Route 7 - Volcanic Isle & Geothermal Springs):** Volcanic basalt and obsidian cobblestones with crimson curbs, smoldering thermal springs, caldera magma stone fountain, Blaine's Fire Gym, Fossil Resurrection Lab, Volcanologist Dr. Volcan's villa, beach shacks, and volcanic torches.
+  - **Indigo Plateau (Route 8 - Champions Imperial Citadel):** Imperial white marble and gold paved victory avenues, central Victory Fountain, gilded lanterns, Champion Lance's dragon pavilion, Elite Four council manor, League headquarters, and Veteran Champion Blue's sanctuary.
+- **Volumetric 2D Canvas Graphics & Living Scenery:**
+  - **Volumetric Tree Canopies:** Natural multi-lobed foliage with directional sunlight gradients, leafy cluster highlights, gnarled trunks, root flares, and theme-specific trees (Lush Oaks, Mt. Moon Pines, Pink Cherry Blossoms, and Mystic Glowing Oaks).
+  - **Interactive Residential Houses & Cottages:** Foundation plinths, horizontal siding, timber posts, pitched gables with dynamic styles (`terracotta`, `emerald`, `slate`, `azure`, `wood`), real-time animated chimney smoke puffs, cross-mullion glowing windows with tulip flowerboxes, paneled wooden doors with polished brass doorknobs, illuminated porch coach lanterns, and resident NPC dialogues.
+  - **Civic Amenities:** Central animated fountains with water ripples and splash droplets, adaptive streetlamps with warm radial ground lighting pools, wrought-iron and wooden park benches with collision support, and garden picket fences.
+  - **Organic Terrain & Trails:** Velvety grass turf with procedural micro-clovers and dandelions. Routes feature authentic dirt trails with embedded 3D river cobblestones and scalloped edges, transitioning smoothly into city stone avenues.
+  - **Dynamic Swaying Tall Grass:** Wind-responsive blades that part when walked through, accompanied by blooming meadow wildflowers (buttercups, poppies, bluebells, lavender, and daisies). Safe lawn turf and paved streets guarantee 0 wild encounters until stepping into tall grass.
+  - **Atmospheric Lighting & Particles:** Diagonal volumetric sunbeams (god-rays), drifting autumn leaves, floating sakura petals, and golden pollen motes.
+  - **Detailed Red/Ash Trainer Sprite:** Shaded baseball cap, red vest, indigo jeans, sneakers, and smooth 4-frame walking animations.
+- **Architectural Buildings & Key Landmarks:**
+  - **🏥 Pokémon Center:** 3D crimson roof, cream stucco, glowing amber windows, cyan automatic doors, antenna mast with blinking beacon, and an illuminated Poké Ball crest. Restores party HP to 100%.
+  - **🛒 Poké Mart:** Royal-blue scalloped roof, showcase display window with mini 3D items, striped awning, potted shrubs, and full item store.
+  - **🏆 Kanto League Gyms:** Neoclassical arenas with fluted columns, pediments, blazing braziers, and glowing elemental badge crystals.
+  - **🚪 Route Gatehouses:** Historic brick checkpoints with arched passageways leading to the next region.
+- **Ground Items, Dynamic HUD & Interactive NPCs:** Dropped Poké Balls, Berries, and Poké Dollars with sparkle animations; interactive NPC residents offering regional lore, combat hints, and gifts; and real-time section location HUD banners.
+- **Position Persistence:** Automatically saves and resumes your exact coordinates on the route upon completing battles, shopping, or gym challenges.
 
 ---
 

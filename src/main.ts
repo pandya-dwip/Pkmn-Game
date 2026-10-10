@@ -3632,7 +3632,19 @@ export const spr = (im: HTMLImageElement, id: number, _back?: boolean) => {
   im.src = U(id);
 };
 
-export async function say(t: string, p: number = 550): Promise<void> {
+let textSkipRequested = false;
+
+// Global fast-forward / tap-to-skip listener for battle dialogue and messages
+if (typeof window !== 'undefined') {
+  const triggerSkip = () => { textSkipRequested = true; };
+  window.addEventListener('click', triggerSkip);
+  window.addEventListener('touchstart', triggerSkip, { passive: true });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === ' ' || e.key === 'Enter') triggerSkip();
+  });
+}
+
+export async function say(t: string, p: number = 220): Promise<void> {
   if (HUB) {
     HUB.push(t);
     return;
@@ -3640,11 +3652,22 @@ export async function say(t: string, p: number = 550): Promise<void> {
   const b = $('#msg');
   if (!b) return;
   b.textContent = '';
-  for (const c of t) {
-    b.textContent += c;
-    await sleep(14);
+  textSkipRequested = false;
+
+  // Modern snappy typewriter: 5ms per character, or instantaneous if tapped/clicked
+  for (let i = 0; i < t.length; i++) {
+    if (textSkipRequested) {
+      b.textContent = t;
+      break;
+    }
+    b.textContent += t[i];
+    await sleep(5);
   }
-  await sleep(p);
+
+  // Snappy pause: default ~200ms (instant skip if tapped)
+  const actualPause = textSkipRequested ? 50 : Math.min(Math.round(p * 0.5), 220);
+  textSkipRequested = false;
+  await sleep(actualPause);
 }
 
 export function ui(): void {
@@ -3713,7 +3736,7 @@ export async function hit(s: 'p' | 'f', dm: number, k: number = 1): Promise<void
 
   if (pokemon3DManager.is3DActive(s)) {
     if (e) e.style.opacity = '0';
-    await sleep(450);
+    await sleep(200);
     return;
   }
 
@@ -3721,11 +3744,11 @@ export async function hit(s: 'p' | 'f', dm: number, k: number = 1): Promise<void
     await e.animate(
       [
         { transform: 'translateX(0)', filter: 'brightness(3)' },
-        { transform: 'translateX(-10px)', opacity: '0.3' },
-        { transform: 'translateX(10px)', opacity: '1' },
+        { transform: 'translateX(-8px)', opacity: '0.4' },
+        { transform: 'translateX(8px)', opacity: '1' },
         { transform: 'none', filter: 'none' },
       ],
-      { duration: 450 }
+      { duration: 220 }
     ).finished;
   }
 }
@@ -3832,7 +3855,7 @@ export async function attack(s: 'p' | 'f', mv: any): Promise<void> {
   const o = s === 'p' ? 'f' : 'p';
   const a = M(s);
   const d = M(o);
-  await say(`${NM(s)} used ${mv.name.toUpperCase()}!`, 300);
+  await say(`${NM(s)} used ${mv.name.toUpperCase()}!`, 180);
 
   if (R() * 100 >= mv.accuracy) {
     await say('The attack missed!');
@@ -3890,10 +3913,10 @@ export async function attack(s: 'p' | 'f', mv: any): Promise<void> {
   shk(cr || e > 1 || mv.power >= 85);
   await hit(o, dm, cr ? 3 : e > 1 ? 2 : e < 1 ? 0 : 1);
 
-  if (e > 1) await say(`It's SUPER EFFECTIVE! ×${e} damage`, 500);
-  else if (e < 1) await say(`It's not very effective... ×${e} damage`, 500);
-  if (cr) await say('CRITICAL HIT!', 400);
-  await say(`${NM(o)} took ${dm} damage!`, 400);
+  if (e > 1) await say(`It's SUPER EFFECTIVE! ×${e} damage`, 200);
+  else if (e < 1) await say(`It's not very effective... ×${e} damage`, 200);
+  if (cr) await say('CRITICAL HIT!', 180);
+  await say(`${NM(o)} took ${dm} damage!`, 200);
 }
 
 export function aiMove(): any {
@@ -4166,7 +4189,7 @@ export async function turn(pa: any): Promise<string | null> {
       else if (ballKey === 'greatBall') G.greatBalls = Math.max(0, (G.greatBalls || 1) - 1);
       else if (ballKey === 'ultraBall') G.ultraBalls = Math.max(0, (G.ultraBalls || 1) - 1);
       save();
-      await say(`${G.trainerName.toUpperCase()} threw a ${ballCfg.name.toUpperCase()}!`, 200);
+      await say(`${G.trainerName.toUpperCase()} threw a ${ballCfg.name.toUpperCase()}!`, 160);
 
       // Poké Ball flight animation across battlefield
       const pw = $('#pw');
@@ -4231,7 +4254,7 @@ export async function turn(pa: any): Promise<string | null> {
           { transform: 'rotate(0deg)' },
           { transform: 'rotate(720deg)' },
         ],
-        { duration: 680, easing: 'ease-out', fill: 'forwards' }
+        { duration: 400, easing: 'ease-out', fill: 'forwards' }
       );
 
       await ballContainer.animate(
@@ -4240,7 +4263,7 @@ export async function turn(pa: any): Promise<string | null> {
           { transform: `translate(calc(-50% + ${dx * 0.45}px), calc(-50% + ${dy * 0.45 - 130}px)) scale(1.15)`, offset: 0.45 },
           { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1.0)` },
         ],
-        { duration: 680, easing: 'cubic-bezier(0.22, 0.9, 0.36, 1)', fill: 'forwards' }
+        { duration: 400, easing: 'cubic-bezier(0.22, 0.9, 0.36, 1)', fill: 'forwards' }
       ).finished;
 
       // 2. Open Ball & Capture Beam
@@ -4309,7 +4332,7 @@ export async function turn(pa: any): Promise<string | null> {
       const shakeCount = catchResult.shakeCount;
       const maxShakes = success ? 3 : Math.max(1, shakeCount);
 
-      await sleep(450);
+      await sleep(200);
 
       for (let s = 1; s <= maxShakes; s++) {
         // LED Glows Red + Rattle Sound
@@ -4317,18 +4340,18 @@ export async function turn(pa: any): Promise<string | null> {
           ledEl.style.fill = '#ef4444';
           ledEl.style.filter = 'drop-shadow(0 0 6px #ef4444)';
         }
-        sound.swp(460, 320, 0.14, 'sine', 0.12);
-        sound.beep(380, 0.12, 'triangle');
+        sound.swp(460, 320, 0.12, 'sine', 0.12);
+        sound.beep(380, 0.1, 'triangle');
 
         // Tilt left, tilt right, settle
         await rotator.animate(
           [
             { transform: 'rotate(0deg)' },
-            { transform: 'rotate(-28deg)', offset: 0.25 },
-            { transform: 'rotate(24deg)', offset: 0.65 },
+            { transform: 'rotate(-26deg)', offset: 0.25 },
+            { transform: 'rotate(22deg)', offset: 0.65 },
             { transform: 'rotate(0deg)' },
           ],
-          { duration: 380, easing: 'cubic-bezier(0.25, 1, 0.5, 1)', fill: 'forwards' }
+          { duration: 220, easing: 'cubic-bezier(0.25, 1, 0.5, 1)', fill: 'forwards' }
         ).finished;
 
         if (ledEl) {
@@ -4336,7 +4359,7 @@ export async function turn(pa: any): Promise<string | null> {
           ledEl.style.filter = 'none';
         }
 
-        await sleep(420);
+        await sleep(160);
       }
 
       // 5. Catch Resolution
@@ -4366,7 +4389,7 @@ export async function turn(pa: any): Promise<string | null> {
         );
 
         sound.music('victory');
-        await sleep(500);
+        await sleep(250);
         ballContainer.remove();
 
         const captured = mk(F().id, F().lv);
@@ -4392,10 +4415,10 @@ export async function turn(pa: any): Promise<string | null> {
         return 'caught';
       } else {
         ballContainer.remove();
-        sound.swp(180, 480, 0.25, 'sawtooth', 0.18);
-        puff(fRect.x, fRect.y + 40, '💥', 10, 80, 450);
+        sound.swp(180, 480, 0.22, 'sawtooth', 0.18);
+        puff(fRect.x, fRect.y + 40, '💥', 10, 80, 350);
         await release('f');
-        await say(`Oh no! The wild ${NM('f')} broke free!`, 500);
+        await say(`Oh no! The wild ${NM('f')} broke free!`, 220);
 
         // Wild mon strikes back!
         S.phase = 'OPPONENT_TURN';

@@ -15,14 +15,14 @@ export interface QualityConfig {
 
 export const QUALITY_CONFIGS: Record<Exclude<QualityLevel, 'AUTO'>, QualityConfig> = {
   HIGH: {
-    pixelRatioMax: 2.0,
+    pixelRatioMax: 1.5,
     antialias: true,
     shadows: true,
     shadowMapSize: 1024,
     particles: true,
   },
   MEDIUM: {
-    pixelRatioMax: 1.5,
+    pixelRatioMax: 1.25,
     antialias: true,
     shadows: true,
     shadowMapSize: 512,

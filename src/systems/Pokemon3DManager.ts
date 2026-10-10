@@ -339,10 +339,10 @@ export class Pokemon3DManager {
 
     // Subtle camera zoom on physical strikes
     if (isPhysical && this.scene) {
-      this.scene.zoomCamera(1.1, 400);
+      this.scene.zoomCamera(1.1, 260);
     }
 
-    await attackerSlot.controller.playAttack(lungeDir, isPhysical ? 0.45 : 0.6);
+    await attackerSlot.controller.playAttack(lungeDir, isPhysical ? 0.3 : 0.36);
   }
 
   /**

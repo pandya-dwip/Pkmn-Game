@@ -237,7 +237,7 @@ export class Pokemon3DAnimationController {
   /**
    * Plays an attack animation (clip or procedural lunge).
    */
-  public async playAttack(lungeVector: THREE.Vector3 = new THREE.Vector3(1, 0, 0), duration: number = 0.5): Promise<void> {
+  public async playAttack(lungeVector: THREE.Vector3 = new THREE.Vector3(1, 0, 0), duration: number = 0.32): Promise<void> {
     if (this.isFainting) return;
 
     this.isAttacking = true;
@@ -269,7 +269,7 @@ export class Pokemon3DAnimationController {
     if (this.isFainting) return;
 
     this.isHit = true;
-    this.hitTimer = isCritical ? 0.45 : 0.3;
+    this.hitTimer = isCritical ? 0.28 : 0.18;
 
     // Flash materials to white / emissive
     this.setEmissiveFlash(true, isCritical ? 0xff4444 : 0xffffff);
@@ -287,7 +287,7 @@ export class Pokemon3DAnimationController {
         this.isHit = false;
         this.playIdle();
         resolve();
-      }, (isCritical ? 450 : 300));
+      }, (isCritical ? 280 : 180));
     });
   }
 

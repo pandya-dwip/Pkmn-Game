@@ -129,7 +129,7 @@ export const MOVE_PROFILES: Record<string, MoveAnimationProfile> = {
   // FIRE
   Ember: { kind: 'projectile', subType: 'ember', element: 'fire', powerScale: 0.8 },
   Flamethrower: { kind: 'stream', subType: 'flamethrower', element: 'fire', powerScale: 1.2 },
-  'Fire Blast': { kind: 'projectile', subType: 'fire_blast', element: 'fire', powerScale: 1.6, chargeDuration: 350 },
+  'Fire Blast': { kind: 'projectile', subType: 'fire_blast', element: 'fire', powerScale: 1.6, chargeDuration: 140 },
   'Fire Spin': { kind: 'vortex', subType: 'fire_spin', element: 'fire', powerScale: 1.0 },
   'Heat Wave': { kind: 'vortex', subType: 'heat_wave', element: 'fire', powerScale: 1.3 },
   'Fire Fang': { kind: 'physical', subType: 'fire_fang', element: 'fire', isPhysical: true, powerScale: 1.0 },
@@ -137,7 +137,7 @@ export const MOVE_PROFILES: Record<string, MoveAnimationProfile> = {
 
   // WATER
   'Water Gun': { kind: 'stream', subType: 'water_gun', element: 'water', powerScale: 0.9 },
-  'Hydro Pump': { kind: 'stream', subType: 'hydro_pump', element: 'water', powerScale: 1.6, chargeDuration: 400 },
+  'Hydro Pump': { kind: 'stream', subType: 'hydro_pump', element: 'water', powerScale: 1.6, chargeDuration: 140 },
   Surf: { kind: 'vortex', subType: 'surf', element: 'water', powerScale: 1.4 },
   Bubble: { kind: 'projectile', subType: 'bubble', element: 'water', powerScale: 0.7 },
   'Bubble Beam': { kind: 'stream', subType: 'bubble_beam', element: 'water', powerScale: 1.1 },
@@ -148,14 +148,14 @@ export const MOVE_PROFILES: Record<string, MoveAnimationProfile> = {
   'Thunder Shock': { kind: 'burst', subType: 'thunder_shock', element: 'electric', powerScale: 0.8 },
   Spark: { kind: 'physical', subType: 'spark', element: 'electric', isPhysical: true, powerScale: 1.1 },
   Thunderbolt: { kind: 'beam', subType: 'thunderbolt', element: 'electric', powerScale: 1.3 },
-  Thunder: { kind: 'sky_drop', subType: 'thunder', element: 'electric', powerScale: 1.7, chargeDuration: 350 },
+  Thunder: { kind: 'sky_drop', subType: 'thunder', element: 'electric', powerScale: 1.7, chargeDuration: 140 },
   'Electro Ball': { kind: 'projectile', subType: 'electro_ball', element: 'electric', powerScale: 1.1 },
   Discharge: { kind: 'burst', subType: 'discharge', element: 'electric', powerScale: 1.3 },
 
   // GRASS
   'Razor Leaf': { kind: 'projectile', subType: 'razor_leaf', element: 'grass', powerScale: 1.0 },
   'Vine Whip': { kind: 'burst', subType: 'vine_whip', element: 'grass', isPhysical: true, powerScale: 0.9 },
-  'Solar Beam': { kind: 'beam', subType: 'solar_beam', element: 'grass', powerScale: 1.8, chargeDuration: 550 },
+  'Solar Beam': { kind: 'beam', subType: 'solar_beam', element: 'grass', powerScale: 1.8, chargeDuration: 160 },
   'Leaf Blade': { kind: 'physical', subType: 'leaf_blade', element: 'grass', isPhysical: true, powerScale: 1.2 },
   'Energy Ball': { kind: 'projectile', subType: 'energy_ball', element: 'grass', powerScale: 1.2 },
   'Petal Dance': { kind: 'vortex', subType: 'petal_dance', element: 'grass', powerScale: 1.3 },
@@ -168,7 +168,7 @@ export const MOVE_PROFILES: Record<string, MoveAnimationProfile> = {
   // ICE
   'Ice Beam': { kind: 'beam', subType: 'ice_beam', element: 'ice', powerScale: 1.3 },
   'Ice Shard': { kind: 'projectile', subType: 'ice_shard', element: 'ice', powerScale: 0.9 },
-  Blizzard: { kind: 'vortex', subType: 'blizzard', element: 'ice', powerScale: 1.6, chargeDuration: 300 },
+  Blizzard: { kind: 'vortex', subType: 'blizzard', element: 'ice', powerScale: 1.6, chargeDuration: 140 },
   'Icicle Spear': { kind: 'multihit', subType: 'icicle_spear', element: 'ice', multiHitCount: 4, powerScale: 0.9 },
   'Ice Punch': { kind: 'physical', subType: 'ice_punch', element: 'ice', isPhysical: true, powerScale: 1.1 },
   'Powder Snow': { kind: 'projectile', subType: 'powder_snow', element: 'ice', powerScale: 0.8 },
@@ -181,14 +181,14 @@ export const MOVE_PROFILES: Record<string, MoveAnimationProfile> = {
   'Rock Tomb': { kind: 'sky_drop', subType: 'rock_tomb', element: 'rock', powerScale: 1.1 },
 
   // PSYCHIC
-  Psychic: { kind: 'burst', subType: 'psychic', element: 'psychic', powerScale: 1.4, chargeDuration: 300 },
+  Psychic: { kind: 'burst', subType: 'psychic', element: 'psychic', powerScale: 1.4, chargeDuration: 120 },
   Psybeam: { kind: 'beam', subType: 'psybeam', element: 'psychic', powerScale: 1.1 },
   Confusion: { kind: 'vortex', subType: 'confusion', element: 'psychic', powerScale: 0.9 },
   Psyshock: { kind: 'projectile', subType: 'psyshock', element: 'psychic', powerScale: 1.2 },
   'Future Sight': { kind: 'sky_drop', subType: 'future_sight', element: 'psychic', powerScale: 1.6 },
 
   // GHOST
-  'Shadow Ball': { kind: 'projectile', subType: 'shadow_ball', element: 'ghost', powerScale: 1.3, chargeDuration: 400 },
+  'Shadow Ball': { kind: 'projectile', subType: 'shadow_ball', element: 'ghost', powerScale: 1.3, chargeDuration: 140 },
   Lick: { kind: 'physical', subType: 'lick', element: 'ghost', isPhysical: true, powerScale: 0.7 },
   'Night Shade': { kind: 'burst', subType: 'night_shade', element: 'ghost', powerScale: 1.1 },
   Hex: { kind: 'vortex', subType: 'hex', element: 'ghost', powerScale: 1.1 },
@@ -301,7 +301,7 @@ export function getMoveProfile(moveName: string, typeShort: string, power: numbe
       subType: 'hyper_beam',
       element,
       powerScale: power / 80,
-      chargeDuration: 300,
+      chargeDuration: 140,
     };
   } else if (power > 50) {
     return {
@@ -385,48 +385,49 @@ export class MoveAnimationSystem {
 
     // Physical lunge wind-up
     if (profile.isPhysical) {
-      const recoilX = isPlayer ? -18 : 18;
-      const recoilY = isPlayer ? 10 : -10;
+      const recoilX = isPlayer ? -14 : 14;
+      const recoilY = isPlayer ? 8 : -8;
       await attackerEl.animate(
         [
           { transform: 'none' },
           { transform: `translate(${recoilX}px, ${recoilY}px) scale(0.96)`, offset: 0.6 },
-          { transform: `translate(${recoilX * 1.2}px, ${recoilY * 1.2}px) scale(0.94)` },
+          { transform: `translate(${recoilX * 1.1}px, ${recoilY * 1.1}px) scale(0.95)` },
         ],
-        { duration: 240, easing: 'ease-out' }
+        { duration: 110, easing: 'ease-out' }
       ).finished;
       return;
     }
 
     // Charging particles gather for high-power attacks
-    if (profile.chargeDuration && profile.chargeDuration > 100) {
+    if (profile.chargeDuration && profile.chargeDuration > 80) {
+      const chargeDur = Math.min(profile.chargeDuration, 140);
       const chargeGlow = el('charge-orb', {
         position: 'absolute',
         left: A.x + 'px',
         top: A.y + 'px',
-        width: '30px',
-        height: '30px',
+        width: '28px',
+        height: '28px',
         transform: 'translate(-50%, -50%)',
         borderRadius: '50%',
         background: `radial-gradient(circle, #fff, ${this.getColorForElement(profile.element)} 70%, transparent)`,
-        filter: 'blur(2px)',
+        boxShadow: `0 0 12px ${this.getColorForElement(profile.element)}`,
         zIndex: '30',
       });
 
-      // Motes spiraling inwards
-      const moteCount = 12;
+      // Motes spiraling inwards (5 motes for lightweight performance)
+      const moteCount = 5;
       for (let i = 0; i < moteCount; i++) {
         const angle = (i / moteCount) * Math.PI * 2;
-        const dist = 70;
+        const dist = 55;
         const mote = el('mote', {
           position: 'absolute',
           left: A.x + Math.cos(angle) * dist + 'px',
           top: A.y + Math.sin(angle) * dist + 'px',
-          width: '8px',
-          height: '8px',
+          width: '7px',
+          height: '7px',
           borderRadius: '50%',
           background: '#ffffff',
-          boxShadow: `0 0 8px ${this.getColorForElement(profile.element)}`,
+          boxShadow: `0 0 6px ${this.getColorForElement(profile.element)}`,
           zIndex: '31',
         });
         fly(
@@ -435,7 +436,7 @@ export class MoveAnimationSystem {
             { transform: 'translate(-50%, -50%) scale(1)', opacity: '1' },
             { transform: `translate(${A.x - (A.x + Math.cos(angle) * dist) - 4}px, ${A.y - (A.y + Math.sin(angle) * dist) - 4}px) scale(0.2)`, opacity: '0' },
           ],
-          { duration: profile.chargeDuration, easing: 'ease-in' }
+          { duration: chargeDur, easing: 'ease-in' }
         );
       }
 
@@ -443,9 +444,9 @@ export class MoveAnimationSystem {
         chargeGlow,
         [
           { transform: 'translate(-50%, -50%) scale(0.4)', opacity: '0.4' },
-          { transform: 'translate(-50%, -50%) scale(2.2)', opacity: '1' },
+          { transform: 'translate(-50%, -50%) scale(1.8)', opacity: '1' },
         ],
-        { duration: profile.chargeDuration }
+        { duration: chargeDur }
       );
     }
   }
@@ -1056,19 +1057,19 @@ export class MoveAnimationSystem {
   /** THUNDERBOLT: Branching zigzag lightning bolts from attacker to target */
   private async playThunderbolt(A: { x: number; y: number }, D: { x: number; y: number }): Promise<void> {
     sound.sfxA('l', { t: 'El' }, 'bolt', 2, 1.4);
-    screenShake('medium', 400);
-    screenFlash('#fffbeb', 220);
+    screenShake('medium', 200);
+    screenFlash('#fffbeb', 150);
 
     const world = $('#world');
     if (!world) return;
 
-    for (let bolt = 0; bolt < 3; bolt++) {
+    for (let bolt = 0; bolt < 2; bolt++) {
       const points: [number, number][] = [[A.x, A.y]];
-      const segments = 7;
+      const segments = 6;
       for (let s = 1; s < segments; s++) {
         const t = s / segments;
-        const lx = A.x + (D.x - A.x) * t + (R() - 0.5) * 45;
-        const ly = A.y + (D.y - A.y) * t + (R() - 0.5) * 45;
+        const lx = A.x + (D.x - A.x) * t + (R() - 0.5) * 40;
+        const ly = A.y + (D.y - A.y) * t + (R() - 0.5) * 40;
         points.push([lx, ly]);
       }
       points.push([D.x, D.y]);
@@ -1077,30 +1078,30 @@ export class MoveAnimationSystem {
       svg.setAttribute('style', 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:35;');
       const poly = points.map(p => p.join(',')).join(' ');
       svg.innerHTML = `
-        <polyline points="${poly}" fill="none" stroke="#facc15" stroke-width="8" stroke-linecap="round" filter="drop-shadow(0 0 8px #eab308)"/>
-        <polyline points="${poly}" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+        <polyline points="${poly}" fill="none" stroke="#facc15" stroke-width="7" stroke-linecap="round"/>
+        <polyline points="${poly}" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
       `;
       world.appendChild(svg);
-      fly(svg as unknown as HTMLElement, [{ opacity: '1' }, { opacity: '0' }], { duration: 220, delay: bolt * 60 });
+      fly(svg as unknown as HTMLElement, [{ opacity: '1' }, { opacity: '0' }], { duration: 150, delay: bolt * 35 });
     }
-    await new Promise(r => setTimeout(r, 350));
+    await new Promise(r => setTimeout(r, 160));
   }
 
   /** THUNDER: Massive vertical lightning pillar descending from sky */
   private async playThunder(D: { x: number; y: number }): Promise<void> {
     sound.sfxA('l', { t: 'El' }, 'blast', 3, 1.8);
-    screenFlash('#ffffff', 350);
-    screenShake('heavy', 600);
+    screenFlash('#ffffff', 180);
+    screenShake('heavy', 280);
 
     const world = $('#world');
     if (!world) return;
 
     const skyY = -50;
     const points: [number, number][] = [[D.x + (R() - 0.5) * 20, skyY]];
-    const segments = 8;
+    const segments = 7;
     for (let s = 1; s < segments; s++) {
       const t = s / segments;
-      const lx = D.x + (R() - 0.5) * 50;
+      const lx = D.x + (R() - 0.5) * 45;
       const ly = skyY + (D.y - skyY) * t;
       points.push([lx, ly]);
     }
@@ -1110,12 +1111,12 @@ export class MoveAnimationSystem {
     svg.setAttribute('style', 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:36;');
     const poly = points.map(p => p.join(',')).join(' ');
     svg.innerHTML = `
-      <polyline points="${poly}" fill="none" stroke="#facc15" stroke-width="16" stroke-linecap="round" filter="drop-shadow(0 0 16px #eab308)"/>
-      <polyline points="${poly}" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
+      <polyline points="${poly}" fill="none" stroke="#facc15" stroke-width="13" stroke-linecap="round"/>
+      <polyline points="${poly}" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
     `;
     world.appendChild(svg);
 
-    await fly(svg as unknown as HTMLElement, [{ opacity: '1' }, { opacity: '0' }], { duration: 450 });
+    await fly(svg as unknown as HTMLElement, [{ opacity: '1' }, { opacity: '0' }], { duration: 220 });
   }
 
   /** ELECTRO BALL: Growing electrical sphere launching */
@@ -2589,32 +2590,32 @@ export class MoveAnimationSystem {
     const isWeak = effectiveness < 1 && effectiveness > 0;
     const shakeIntensity = isCritical || isSuper || powerScale >= 1.5 ? 'heavy' : isWeak ? 'light' : 'medium';
 
-    screenShake(shakeIntensity, isSuper ? 400 : 250);
+    screenShake(shakeIntensity, isSuper ? 220 : 150);
 
     const D = ctr(defenderEl);
 
     // 1. Luminous hit-burst directly over target's center (visible in both 2D and 3D!)
-    this.createImpactBurst(D, isCritical ? '#fbbf24' : isSuper ? '#ef4444' : '#ffffff', Math.max(0.9, powerScale));
+    this.createImpactBurst(D, isCritical ? '#fbbf24' : isSuper ? '#ef4444' : '#ffffff', Math.max(0.85, powerScale * 0.9));
 
     // 2. Sprite hit reaction (for 2D mode, keeping translateX(-50%))
     const is3D = defenderEl.closest('#fld')?.classList.contains('has-3d-player') || defenderEl.closest('#fld')?.classList.contains('has-3d-foe');
     if (!is3D && defenderEl.style.opacity !== '0') {
       defenderEl.animate(
         [
-          { transform: 'translateX(-50%)', filter: 'brightness(3.5)' },
-          { transform: 'translateX(calc(-50% - 12px))', offset: 0.3 },
-          { transform: 'translateX(calc(-50% + 10px))', offset: 0.6 },
+          { transform: 'translateX(-50%)', filter: 'brightness(2.5)' },
+          { transform: 'translateX(calc(-50% - 8px))', offset: 0.3 },
+          { transform: 'translateX(calc(-50% + 7px))', offset: 0.6 },
           { transform: 'translateX(-50%)', filter: 'none' },
         ],
-        { duration: 320 }
+        { duration: 180 }
       );
     }
   }
 
   public createImpactBurst(pos: { x: number; y: number }, color: string = '#ffffff', scale: number = 1.0): void {
-    const size = Math.round(55 * scale);
+    const size = Math.round(48 * scale);
 
-    // 1. Central blinding impact flash star
+    // 1. Central blinding impact flash star (hardware box-shadow instead of heavy multi-pass drop-shadow filter)
     const star = el('impact-flash-star', {
       position: 'absolute',
       left: pos.x + 'px',
@@ -2623,7 +2624,7 @@ export class MoveAnimationSystem {
       height: `${size}px`,
       transform: 'translate(-50%, -50%)',
       background: `radial-gradient(circle, #ffffff 30%, ${color} 70%, transparent 95%)`,
-      filter: `drop-shadow(0 0 15px #ffffff) drop-shadow(0 0 25px ${color})`,
+      boxShadow: `0 0 16px #ffffff, 0 0 24px ${color}`,
       borderRadius: '50%',
       zIndex: '48',
     });
@@ -2631,10 +2632,10 @@ export class MoveAnimationSystem {
       star,
       [
         { transform: 'translate(-50%, -50%) scale(0.2) rotate(0deg)', opacity: '1' },
-        { transform: 'translate(-50%, -50%) scale(1.6) rotate(90deg)', opacity: '1', offset: 0.4 },
-        { transform: 'translate(-50%, -50%) scale(2.2) rotate(180deg)', opacity: '0' },
+        { transform: 'translate(-50%, -50%) scale(1.5) rotate(90deg)', opacity: '1', offset: 0.4 },
+        { transform: 'translate(-50%, -50%) scale(2.0) rotate(180deg)', opacity: '0' },
       ],
-      { duration: 280, easing: 'ease-out' }
+      { duration: 180, easing: 'ease-out' }
     );
 
     // 2. Expanding shockwave ring
@@ -2646,17 +2647,17 @@ export class MoveAnimationSystem {
       height: `${Math.round(size * 0.9)}px`,
       transform: 'translate(-50%, -50%)',
       borderRadius: '50%',
-      border: `3.5px solid ${color}`,
-      boxShadow: `0 0 18px ${color}, inset 0 0 12px ${color}`,
+      border: `2.5px solid ${color}`,
+      boxShadow: `0 0 12px ${color}`,
       zIndex: '47',
     });
     fly(
       ring,
       [
         { transform: 'translate(-50%, -50%) scale(0.2)', opacity: '1' },
-        { transform: 'translate(-50%, -50%) scale(2.4)', opacity: '0' },
+        { transform: 'translate(-50%, -50%) scale(2.2)', opacity: '0' },
       ],
-      { duration: 320, easing: 'ease-out' }
+      { duration: 200, easing: 'ease-out' }
     );
 
     // 3. Dynamic diamond sparks scattering outward

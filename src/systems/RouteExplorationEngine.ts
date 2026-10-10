@@ -859,6 +859,16 @@ export class RouteExplorationEngine {
     }
   }
 
+  private isInViewport(x: number, y: number, margin = 90): boolean {
+    if (!this.canvas) return true;
+    return (
+      x >= this.camX - margin &&
+      x <= this.camX + this.canvas.width + margin &&
+      y >= this.camY - margin &&
+      y <= this.camY + this.canvas.height + margin
+    );
+  }
+
   private render(): void {
     const ctx = this.ctx;
     const canvas = this.canvas;
@@ -907,7 +917,9 @@ export class RouteExplorationEngine {
 
     // 8. Buildings (Pokémon Center, Poké Mart, Gym, Route Gate, Houses)
     for (const b of route.buildings) {
-      this.renderBuilding(ctx, b);
+      if (this.isInViewport(b.x + b.w / 2, b.y + b.h / 2, Math.max(b.w, b.h))) {
+        this.renderBuilding(ctx, b);
+      }
     }
 
     // 8.5 Ornate City Streetlamps with Warm Radial Glow
@@ -915,7 +927,7 @@ export class RouteExplorationEngine {
 
     // 9. Ground Items (3D Poké Balls with Sparkle)
     for (const it of route.items) {
-      if (!it.collected) {
+      if (!it.collected && this.isInViewport(it.x, it.y, 50)) {
         this.renderGroundItem(ctx, it);
       }
     }
@@ -925,7 +937,9 @@ export class RouteExplorationEngine {
 
     // 11. NPCs with Animated Interaction Prompts
     for (const npc of route.npcs) {
-      this.renderNPC(ctx, npc);
+      if (this.isInViewport(npc.x, npc.y, 60)) {
+        this.renderNPC(ctx, npc);
+      }
     }
 
     // 12. Grass Particles
@@ -2630,6 +2644,7 @@ export class RouteExplorationEngine {
     if (!route.signposts || route.signposts.length === 0) return;
 
     for (const sp of route.signposts) {
+      if (!this.isInViewport(sp.x, sp.y, 70)) continue;
       ctx.save();
 
       // 1. Contact Drop Shadow
@@ -3197,6 +3212,7 @@ export class RouteExplorationEngine {
     if (!route.fountains || route.fountains.length === 0) return;
 
     for (const f of route.fountains) {
+      if (!this.isInViewport(f.x, f.y, 90)) continue;
       ctx.save();
       const x = f.x;
       const y = f.y;
@@ -3298,6 +3314,7 @@ export class RouteExplorationEngine {
     if (!route.streetlamps || route.streetlamps.length === 0) return;
 
     for (const lamp of route.streetlamps) {
+      if (!this.isInViewport(lamp.x, lamp.y, 90)) continue;
       ctx.save();
       const lx = lamp.x;
       const ly = lamp.y;
@@ -3374,6 +3391,7 @@ export class RouteExplorationEngine {
     if (!route.benches || route.benches.length === 0) return;
 
     for (const b of route.benches) {
+      if (!this.isInViewport(b.x, b.y, 60)) continue;
       ctx.save();
       const bx = b.x;
       const by = b.y;
@@ -3414,6 +3432,7 @@ export class RouteExplorationEngine {
   private renderStones(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     const stones = this.getRouteStones(route);
     for (const s of stones) {
+      if (!this.isInViewport(s.x, s.y, 50)) continue;
       this.drawStone(ctx, s);
     }
   }
@@ -3508,6 +3527,7 @@ export class RouteExplorationEngine {
     ctx.save();
 
     for (const f of fences) {
+      if (!this.isInViewport(f.x + f.w / 2, f.y + 7, Math.max(f.w / 2, 35))) continue;
       // 1. Soft Drop Shadow cast beneath fence rails & posts
       ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
       ctx.fillRect(f.x, f.y + 14, f.w, 4);
@@ -3566,6 +3586,7 @@ export class RouteExplorationEngine {
     const playerFootY = this.player.y + 8;
 
     for (const t of trees) {
+      if (!this.isInViewport(t.x, t.y, 80)) continue;
       const trunkFootY = this.getTreeTrunkFootY(t);
       const isBehind = trunkFootY <= playerFootY;
       if ((layer === 'behind' && isBehind) || (layer === 'front' && !isBehind)) {

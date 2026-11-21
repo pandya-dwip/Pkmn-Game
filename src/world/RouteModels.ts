@@ -509,7 +509,14 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
     const s = sized('k:sign', 'y', 26);
     put('k:sign', { x: sp.x, z: sp.y + 12, rot: 0, sx: s, sy: s, sz: s });
   }
+  // Plaza fountains: every city has its own model (sized to the fountain's collision footprint)
   for (const f of route.fountains || []) {
+    const own = zoneAt(env, f.x).fountain;
+    if (own && has(own)) {
+      const s = sized(own, 'xz', f.radius * 2.5);
+      put(own, { x: f.x, z: f.y, rot: 0, sx: s, sy: s, sz: s });
+      continue;
+    }
     const s = sized('t:fountain-round-detail', 'xz', f.radius * 2.3);
     put('t:fountain-round-detail', { x: f.x, z: f.y, rot: 0, sx: s, sy: s * 1.6, sz: s });
   }

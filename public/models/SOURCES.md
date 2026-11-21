@@ -86,3 +86,12 @@ Downloaded from [poly.pizza](https://poly.pizza). Embedded textures were downsca
 | `water_tower.glb` | Water Tower | Quaternius | CC0 1.0 | https://poly.pizza/m/tMK8bhapAK |
 | `willow.glb` | Weeping willow | Poly by Google | CC-BY 3.0 | https://poly.pizza/m/74_FuSwEd0E |
 | `willow_big.glb` | Willow | Quaternius | CC0 1.0 | https://poly.pizza/m/mBrUbIp9Zd |
+| `fountain_blue.glb` | Fountain | Poly by Google | CC-BY 3.0 | https://poly.pizza/m/4KKY7CmNe_r |
+| `fountain_garden.glb` | Garden with Pond and Arches | Bruno Oliveira | CC-BY 3.0 | https://poly.pizza/m/52RaBNIylW7 |
+| `fountain_grand.glb` | Santo Spirito Fountain | Don Carson | CC-BY 3.0 | https://poly.pizza/m/7b_tCaBRLCI |
+| `fountain_grass.glb` | Fountain | Poly by Google | CC-BY 3.0 | https://poly.pizza/m/7AydBrjR2Ss |
+| `fountain_iron.glb` | Water Fountain | Zsky | CC-BY 3.0 | https://poly.pizza/m/2guUSHGDPZ |
+| `fountain_rockpool.glb` | Pond | Poly by Google | CC-BY 3.0 | https://poly.pizza/m/5rf3YuZfJAW |
+| `fountain_statue.glb` | Town Center | Quaternius | CC0 1.0 | https://poly.pizza/m/cuQuFJEIfH |
+| `fountain_waterfall.glb` | Waterfall | Poly by Google | CC-BY 3.0 | https://poly.pizza/m/7mrPbZToHh2 |
+| `well_stone.glb` | Well | Poly by Google | CC-BY 3.0 | https://poly.pizza/m/an8wpvcJi8X |

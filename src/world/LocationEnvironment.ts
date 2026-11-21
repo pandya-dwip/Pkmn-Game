@@ -78,6 +78,8 @@ export interface ZoneEnv {
   ground?: LocationEnv['baseGround'];
   /** Model used for knee-high encounter grass. */
   tallGrass?: string;
+  /** Model for the plaza fountain(s) in this zone (each city has its own). */
+  fountain?: string;
   /** Scenic water just beyond the walkable edge: a river to the north or open sea to the south. */
   edgeWater?: { side: 'north' | 'south'; kind: 'river' | 'sea' };
 }
@@ -284,6 +286,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
     zone(1340, 'Deep Ancient Sanctuary', { filler: [['conifer', 'dark', 0.4], ['dense_forest', 'dark', 0.3]] }),
     // Viridian: a green woodland town of timber cottages and log cabins
     zone(1920, 'Viridian City', {
+        fountain: 'p:fountain_grass',
       treeSkin: { '*': VIRIDIAN_TREES },
       houses: ['p:cottage', 'p:timber_house', 'p:log_cabin', 'p:hut_b'],
       houseSkins: [],
@@ -310,6 +313,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1620, 'Pewter City', {
+        fountain: 'p:well_stone',
         ground: 'rock',
         treeSkin: { '*': PEWTER_TREES },
         filler: [['conifer', 'standard', 0.35], ['mature', 'standard', 0.2]],
@@ -346,6 +350,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1560, 'Cerulean City', {
+        fountain: 'p:fountain_blue',
         treeSkin: { '*': CERULEAN_TREES },
         ringTrees: CERULEAN_TREES,
         houses: S('a', 'i', 'm', 'o', 'q', 'r'),
@@ -356,7 +361,6 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
           { models: [['p:bridge_small', 1, 60]], density: 0.6, where: 'shore', fit: 'xz' },
           { models: LILIES, density: 30, where: 'water', fit: 'xz' },
           { models: [['p:gazebo', 1, 40]], density: 1, where: 'open', solid: 18 },
-          { models: [['p:fountain_tiered', 1, 34]], density: 1, where: 'open', fit: 'xz', solid: 16 },
           { models: BUSHES, density: 20, where: 'building', fit: 'xz' },
           { models: URBAN_PROPS, density: 6, where: 'roadside' },
         ],
@@ -378,6 +382,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1600, 'Vermilion City', {
+        fountain: 'p:fountain_iron',
         treeSkin: { '*': PALMS },
         filler: [['coastal', 'coastal', 0.2]],
         ringTrees: PALMS,
@@ -416,6 +421,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1680, 'Celadon City', {
+        fountain: 'p:fountain_garden',
         treeSkin: { '*': CELADON_TREES },
         filler: [['decorative', 'standard', 0.15]],
         ringTrees: CELADON_TREES,
@@ -455,6 +461,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1700, 'Fuchsia City', {
+        fountain: 'p:fountain_waterfall',
         ground: 'meadow',
         treeSkin: { '*': FUCHSIA_TREES },
         filler: [['dense_forest', 'standard', 0.35], ['broadleaf', 'standard', 0.2]],
@@ -494,6 +501,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1780, 'Saffron City', {
+        fountain: 'p:fountain_grand',
         treeSkin: { '*': SAFFRON_TREES },
         filler: [],
         ringTrees: SAFFRON_TREES,
@@ -527,6 +535,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1760, 'Cinnabar Island', {
+        fountain: 'p:fountain_rockpool',
         ground: 'ash',
         treeSkin: { '*': VOLCANIC_TREES },
         filler: [['coastal', 'coastal', 0.08]],
@@ -571,6 +580,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1840, 'Indigo Plateau', {
+        fountain: 'p:fountain_statue',
         treeSkin: { '*': INDIGO_TREES },
         filler: [['conifer', 'standard', 0.15]],
         ringTrees: INDIGO_TREES,
@@ -781,6 +791,7 @@ export function modelKeysFor(env: LocationEnv): Set<string> {
     z.houses.forEach(h => keys.add(h));
     Object.values(z.civic || {}).forEach(c => c && keys.add(c));
     if (z.tallGrass) keys.add(z.tallGrass);
+    if (z.fountain) keys.add(z.fountain);
   }
   return keys;
 }

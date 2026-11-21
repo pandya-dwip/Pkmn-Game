@@ -319,6 +319,26 @@ export function buildGround(scene: THREE.Scene, route: RouteDefinition, snapshot
   }
   ctx.restore();
 
+  // The 2D fountain basin is painted into the ground art; each city now has its own 3D
+  // fountain model on top, so cover the old painting with the surrounding plaza paving.
+  for (const f of route.fountains || []) {
+    const r = f.radius + 12;
+    const sx = Math.round(Math.min(W - 1, f.x + r + 10));
+    const sy = Math.round(Math.min(H - 1, f.y));
+    const px = ctx.getImageData(sx, sy, 1, 1).data;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(f.x, f.y + f.radius * 0.2, r, r, 0, 0, Math.PI * 2);
+    if (px[3] < 128) {
+      ctx.globalCompositeOperation = 'destination-out'; // lawn: let the 3D ground show
+      ctx.fill();
+    } else {
+      ctx.fillStyle = `rgb(${px[0]}, ${px[1]}, ${px[2]})`;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   // 3) Natural dirt on trails, with ragged grassy edges
   const dirt = ctx.createPattern(dirtTile(), 'repeat')!;
   const rr = rng(5);

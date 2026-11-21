@@ -25,8 +25,6 @@ import { createCharacter, modelForTrainer, modelForNpc, Character3D } from './Ch
 import { Pokemon3DLoader } from '../systems/Pokemon3DLoader';
 import { pokemon3DManager } from '../systems/Pokemon3DManager';
 import { RouteTree } from '../systems/RouteExplorationEngine';
-import { POKEMON_SPECIES_MAP } from '../data/pokemon';
-import { buildEncounterMon } from '../systems/EncounterSystem';
 
 const ROUTE_ID = 0;
 const WALK = 165;
@@ -63,25 +61,6 @@ function getPokemonVisualHeight(speciesId: number, sizeClass: 0 | 1 | 2 = 0): nu
   return [18, 26, 38][sizeClass];
 }
 
-interface OverworldPokemonEntity {
-  id: string;
-  speciesId: number;
-  name: string;
-  x: number;
-  z: number;
-  baseY: number;
-  size: number;
-  sprite: THREE.Sprite;
-  shadow: THREE.Mesh;
-  tag?: THREE.Sprite | null;
-  model3D?: { obj: THREE.Object3D; mixer: THREE.AnimationMixer };
-  phase: number;
-  isStatic?: boolean;
-  isLost?: boolean;
-  isWild?: boolean;
-  encData?: any;
-}
-
 class FirstPersonCity {
   public active = false;
   /** Remembered so the 3D view comes back after battles, shops and menus. */
@@ -90,8 +69,6 @@ class FirstPersonCity {
   private scene: THREE.Scene | null = null;
   private camera = new THREE.PerspectiveCamera(58, 1, 8, 2600);
   private npcGroup = new THREE.Group();
-  private pokemonGroup = new THREE.Group();
-  private overworldPokemon: OverworldPokemonEntity[] = [];
   private pokemonTexCache = new Map<number, THREE.Texture>();
   private partner: THREE.Sprite | null = null;
   private partnerShadow: THREE.Mesh | null = null;
@@ -248,7 +225,6 @@ class FirstPersonCity {
       this.fenceMeshes.push(mesh);
     }
     scene.add(this.npcGroup);
-    scene.add(this.pokemonGroup);
 
     this.heroShadow = this.blobShadow(11 * PEOPLE);
     this.partnerShadow = this.blobShadow(9);
@@ -472,9 +448,6 @@ class FirstPersonCity {
     for (const o of this.npcGroup.children) {
       if (o.userData.isTag) (o as THREE.Sprite).scale.set((h * o.userData.ratio) / this.camera.aspect, h, 1);
     }
-    for (const o of this.pokemonGroup.children) {
-      if (o.userData.isTag) (o as THREE.Sprite).scale.set((h * o.userData.ratio) / this.camera.aspect, h, 1);
-    }
   }
 
   /** Loads high-definition 3D illustration / HOME CG model render with caching and transparent linear filtering. */
@@ -506,92 +479,6 @@ class FirstPersonCity {
       );
     };
     tryUrl(0);
-  }
-
-  /** Spawns a Pokemon entity in 3D: High-res 3D illustration billboard + animated 3D GLB model fallback + shadow & name tag. */
-  private spawnOverworldPokemon(cfg: {
-    id: string;
-    speciesId: number;
-    name: string;
-    x: number;
-    z: number;
-    scale?: number;
-    isStatic?: boolean;
-    isLost?: boolean;
-    isWild?: boolean;
-    encData?: any;
-  }): void {
-    const vHeight = getPokemonVisualHeight(cfg.speciesId) * (cfg.scale || 1);
-    const size = vHeight / 0.55;
-    const shadow = this.blobShadow(vHeight * 0.4);
-    shadow.position.set(cfg.x, 0.2, cfg.z);
-    this.pokemonGroup.add(shadow);
-
-    const mat = new THREE.SpriteMaterial({ alphaTest: 0.35, transparent: true });
-    const sprite = new THREE.Sprite(mat);
-    sprite.center.set(0.5, 0.10);
-    sprite.scale.set(size, size, 1);
-    sprite.position.set(cfg.x, 0, cfg.z);
-    this.pokemonGroup.add(sprite);
-    this.occluders.push(sprite);
-
-    let tag: THREE.Sprite | null = null;
-    if (cfg.isStatic || cfg.isLost) {
-      tag = this.nameTag(cfg.name, cfg.x, cfg.z, Math.max(16, vHeight + 6));
-      this.pokemonGroup.add(tag);
-    }
-
-    const mon: OverworldPokemonEntity = {
-      id: cfg.id,
-      speciesId: cfg.speciesId,
-      name: cfg.name,
-      x: cfg.x,
-      z: cfg.z,
-      baseY: 0,
-      size,
-      sprite,
-      shadow,
-      tag,
-      phase: Math.random() * Math.PI * 2,
-      isStatic: cfg.isStatic,
-      isLost: cfg.isLost,
-      isWild: cfg.isWild,
-      encData: cfg.encData,
-    };
-    this.overworldPokemon.push(mon);
-
-    // 1. High-Resolution 3D illustration texture
-    this.loadPokemonTexture(cfg.speciesId, tex => {
-      if (sprite.material) {
-        (sprite.material as THREE.SpriteMaterial).map = tex;
-        (sprite.material as THREE.SpriteMaterial).needsUpdate = true;
-      }
-    });
-
-    // 2. Real animated 3D mesh model if enabled and available
-    if (pokemon3DManager.isEnabled()) {
-      Pokemon3DLoader.getInstance()
-        .loadPokemon(cfg.speciesId)
-        .then(({ model, animations }) => {
-          if (!this.overworldPokemon.includes(mon)) return;
-          const box = new THREE.Box3().setFromObject(model);
-          const k = vHeight / Math.max(0.001, box.max.y - box.min.y);
-          model.scale.multiplyScalar(k);
-          model.position.y = -box.min.y * k;
-          const obj = new THREE.Group();
-          obj.add(model);
-          obj.position.set(cfg.x, 0, cfg.z);
-          obj.rotation.y = Math.PI * 0.2;
-          const mixer = new THREE.AnimationMixer(model);
-          const clip = (re: RegExp) => animations.find(a => re.test(a.name.toLowerCase()));
-          const idleClip = clip(/idle|wait/) || animations[0];
-          if (idleClip) mixer.clipAction(idleClip).play();
-          mon.model3D = { obj, mixer };
-          this.pokemonGroup.add(obj);
-          sprite.visible = false;
-        })
-        .catch(() => { });
-    }
   }
 
   private heroTexture(dir: Dir, frame: number): THREE.CanvasTexture {
@@ -654,16 +541,6 @@ class FirstPersonCity {
       this.npcGroup.remove(o);
       this.occluders = this.occluders.filter(x => x !== o);
     }
-
-    // Reset overworld Pokemon
-    for (const mon of this.overworldPokemon) {
-      if (mon.model3D) this.scene?.remove(mon.model3D.obj);
-      this.occluders = this.occluders.filter(x => x !== mon.sprite);
-    }
-    while (this.pokemonGroup.children.length > 0) {
-      this.pokemonGroup.remove(this.pokemonGroup.children[0]);
-    }
-    this.overworldPokemon = [];
 
     for (const n of eng.visibleNPCs()) {
       const w = 110;
@@ -736,66 +613,6 @@ class FirstPersonCity {
           })
           .catch(() => { }); // no model for this species: keep the 3D illustration
       }
-    }
-
-    // --------------------------------------------------------------------------
-    // Overworld Pokémon in 3D Chase Camera
-    // --------------------------------------------------------------------------
-    // 1. Static route encounters (Snorlax, legendaries, Lapras, etc.)
-    for (const enc of route.staticEncounters || []) {
-      if (eng.getFlag(enc.doneFlag) || !eng.isConditionMet(enc.requires)) continue;
-      const spec = POKEMON_SPECIES_MAP[enc.speciesId];
-      const name = spec?.name || 'Wild Pokémon';
-      this.spawnOverworldPokemon({
-        id: 'static_' + enc.speciesId,
-        speciesId: enc.speciesId,
-        name: `${name} Lv.${enc.level || 30}`,
-        x: enc.x,
-        z: enc.y + 8,
-        scale: 1.0,
-        isStatic: true,
-        encData: enc,
-      });
-    }
-
-    // 2. Lost Pokémon sidequests
-    for (const lost of route.lostPokemon || []) {
-      if (eng.getFlag(lost.foundFlag) || !eng.isConditionMet(lost.requires)) continue;
-      const spec = POKEMON_SPECIES_MAP[lost.speciesId];
-      const name = spec?.name || 'Lost Pokémon';
-      this.spawnOverworldPokemon({
-        id: 'lost_' + lost.speciesId,
-        speciesId: lost.speciesId,
-        name: `Lost ${name} ❓`,
-        x: lost.x,
-        z: lost.y + 8,
-        scale: 1.0,
-        isLost: true,
-        encData: lost,
-      });
-    }
-
-    // 3. Ambient Wild Pokémon roaming in Route 1 & Viridian natural habitats
-    const ambientSpawns = [
-      { speciesId: 16, x: 260, z: 270, level: 3, name: 'Pidgey' },
-      { speciesId: 19, x: 440, z: 660, level: 3, name: 'Rattata' },
-      { speciesId: 10, x: 520, z: 290, level: 2, name: 'Caterpie' },
-      { speciesId: 60, x: 910, z: 630, level: 5, name: 'Poliwag' },
-      { speciesId: 54, x: 1120, z: 740, level: 6, name: 'Psyduck' },
-      { speciesId: 43, x: 940, z: 210, level: 5, name: 'Oddish' },
-      { speciesId: 25, x: 1640, z: 310, level: 9, name: 'Pikachu' },
-      { speciesId: 133, x: 1470, z: 190, level: 10, name: 'Eevee' },
-    ];
-    for (const sp of ambientSpawns) {
-      this.spawnOverworldPokemon({
-        id: `wild_${sp.speciesId}_${sp.x}`,
-        speciesId: sp.speciesId,
-        name: `${sp.name} Lv.${sp.level}`,
-        x: sp.x,
-        z: sp.z,
-        isWild: true,
-        encData: sp,
-      });
     }
 
     this.sizeTags();
@@ -942,22 +759,6 @@ class FirstPersonCity {
     }
     eng.refreshPrompt();
 
-    // Overworld Pokémon animations, mixers and wild encounter proximity
-    for (const mon of this.overworldPokemon) {
-      if (mon.model3D) {
-        mon.model3D.mixer.update(dt);
-      } else if (mon.sprite) {
-        mon.sprite.position.y = mon.baseY + Math.max(0, Math.sin(this.walkPhase * 2.2 + mon.x * 0.05) * 1.8);
-      }
-      if (mon.isWild && mon.encData && !busy && eng.onTriggerEncounter) {
-        const dist = Math.hypot(p.x - mon.x, p.y - mon.z);
-        if (dist < 28) {
-          eng.onTriggerEncounter(buildEncounterMon(mon.speciesId, mon.encData.level, 15), Math.round(p.x), Math.round(p.y));
-          break;
-        }
-      }
-    }
-
     this.placeCamera(1 - Math.exp(-dt * 5), 1 - Math.exp(-dt * 8));
     // Anything standing right in front of the lens is hidden so it never blocks the view of the trainer
     const cp = this.camera.position;
@@ -969,20 +770,6 @@ class FirstPersonCity {
       if (o.userData.isTag) {
         const d = Math.hypot(o.position.x - cp.x, o.position.z - cp.z);
         o.visible = d > clear && d < 650;
-      }
-    }
-    for (const mon of this.overworldPokemon) {
-      const d = Math.hypot(mon.x - cp.x, mon.z - cp.z);
-      const visible = d > clear && d < 750;
-      if (mon.sprite) mon.sprite.visible = visible && !mon.model3D;
-      if (mon.model3D) mon.model3D.obj.visible = visible;
-      if (mon.shadow) mon.shadow.visible = visible;
-      if (mon.tag) mon.tag.visible = visible && d < 350;
-    }
-    for (const o of this.pokemonGroup.children) {
-      if (o.userData.isTag) {
-        const d = Math.hypot(o.position.x - cp.x, o.position.z - cp.z);
-        o.visible = d > clear && d < 350;
       }
     }
     this.renderer!.render(this.scene!, this.camera);

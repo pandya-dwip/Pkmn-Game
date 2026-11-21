@@ -8536,7 +8536,7 @@ tr:last-child td {
 .evo-cine.summary .evo-stage { gap: 10px; justify-content: center; }
 .evo-cine.summary .evo-mon { width: min(34vw, 150px); }
 .evo-cine.summary .evo-caption { min-height: 0; font-size: 15px; }
-.evo-continue { display: flex !important; justify-content: center; text-align: center; }
+.evo-continue { display: flex !important; align-items: center; justify-content: center; text-align: center; }
 
 /* Scope out the global Pokédex button chrome (46px pills, lift-on-hover) from the new components */
 .xp-sheet button, .evo-cine button, .hud-quest, .kanto-area-pin { min-height: 0; box-shadow: none; transform: none; }

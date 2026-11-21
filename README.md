@@ -88,6 +88,17 @@ An immersive Gen 1 Pokémon adventure and tournament game built with **TypeScrip
 
 ---
 
+### 🗺️ 2.5D World Expansion
+- **2.5D renderer for every location:** pitched perspective camera, depth-sorted billboards, buildings with extruded side walls and receding roofs (with parallax), x-ray fade when walking behind objects, cloud shadows, atmospheric haze and cave lighting.
+- **Walking partner:** any party Pokémon follows along the trainer's own path (never through solids), with idle, hop, run, celebrate, alert and sleep states. Set it from the HUD paw button or the hub.
+- **Nine new areas:** Whispering Thicket (hidden), Mossveil Grove, Glimmerstone Cavern 1F/B1 (boulder puzzle, lantern), Saltwind Shore (fishing, piers, ferry), Coral Isle, Tidewhisper Grotto, Skyreach Trail and Summit. Each has its own encounter tables, items and landmarks, and appears on the world map once discovered.
+- **Side quests:** 16 quests from NPCs and notice boards (collection, exploration, trainer, assistance, Pokémon), with a Quest Journal, a tracked-quest HUD line and rewards that are granted once and persist.
+- **Evolution cinematic:** a journaled save means an interrupted evolution is completed safely on the next load.
+- **Trainer Style:** curated outfits, hats, hairstyles, hair colours, backpacks and accessories, some unlocked by badges, quests or the championship. Your look is used in the world, hub, battle and Hall of Fame.
+- **Save compatibility:** older saves migrate automatically to v2; the original is kept under `kantoCupSave_v1_backup_v1`.
+
+---
+
 ## 🛠️ Tech Stack
 
 | Layer | Technology |

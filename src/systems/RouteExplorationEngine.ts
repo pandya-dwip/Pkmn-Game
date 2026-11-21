@@ -1280,41 +1280,12 @@ export class RouteExplorationEngine {
     g.fillStyle = this.backdropColor(route);
     g.fillRect(0, 0, gw, gh);
 
-<<<<<<< HEAD
     const sx = Math.max(0, ox);
     const sy = Math.max(0, oy);
     const ex = Math.min(route.worldWidth, ox + gw);
     const ey = Math.min(route.worldHeight, oy + gh);
     if (this.staticCanvas && ex > sx && ey > sy) {
       g.drawImage(this.staticCanvas, sx, sy, ex - sx, ey - sy, sx - ox, sy - oy, ex - sx, ey - sy);
-=======
-    // 4. Paths & Cobblestone Avenues
-    this.renderPaths(ctx, route);
-
-    // 4.5 City Fountains
-    this.renderFountains(ctx, route);
-
-    // 4.6 City Benches
-    this.renderBenches(ctx, route);
-
-    // 5. Tall Grass with Wind Sway Animation & Wildflowers (Special mystical grass in Rare Sanctuary!)
-    this.renderTallGrass(ctx, route);
-
-    // 6. Natural Stones & Boulders
-    this.renderStones(ctx, route);
-
-    // 6.5 Carved Wooden Signposts
-    this.renderSignposts(ctx, route);
-
-    // 7. Wooden Post-and-Rail Fences
-    this.renderFences(ctx, route);
-
-    // 8. Buildings (Pokémon Center, Poké Mart, Gym, Route Gate, Houses)
-    for (const b of route.buildings) {
-      if (this.isInViewport(b.x + b.w / 2, b.y + b.h / 2, Math.max(b.w, b.h))) {
-        this.renderBuilding(ctx, b);
-      }
->>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
     }
 
     g.setTransform(1, 0, 0, 1, -ox, -oy);
@@ -1322,7 +1293,6 @@ export class RouteExplorationEngine {
     this.camY = oy;
     const vis = (r: Rect, m = 40) => r.x + r.w > ox - m && r.x < ox + gw + m && r.y + r.h > oy - m && r.y < oy + gh + m;
 
-<<<<<<< HEAD
     for (const w of route.waters || []) if (vis(w)) drawWater(g, w, this.time);
     for (const b of route.bridges || []) if (vis(b)) drawBridge(g, b);
     this.renderPonds(g, route);
@@ -1343,12 +1313,6 @@ export class RouteExplorationEngine {
         g.ellipse(cx, cy, 190, 70, 0.12, 0, Math.PI * 2);
         g.ellipse(cx + 120, cy + 26, 120, 50, 0, 0, Math.PI * 2);
         g.fill();
-=======
-    // 9. Ground Items (3D Poké Balls with Sparkle)
-    for (const it of route.items) {
-      if (!it.collected && this.isInViewport(it.x, it.y, 50)) {
-        this.renderGroundItem(ctx, it);
->>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
       }
     }
   }
@@ -1398,7 +1362,6 @@ export class RouteExplorationEngine {
     }
   }
 
-<<<<<<< HEAD
   /** Every upright object is collected, depth-sorted by its ground anchor and drawn as a billboard. */
   private renderSortedWorld(ctx: CanvasRenderingContext2D, route: RouteDefinition, rect: { x: number; y: number; w: number; h: number }): void {
     const cam = this.cam;
@@ -1426,13 +1389,6 @@ export class RouteExplorationEngine {
         ctx.globalAlpha = 1;
         labels.push({ x: labelAnchor.x, y: labelAnchor.y, text: b.label, kind: b.type, d: Math.hypot(p.x - (b.x + b.w / 2), p.y - ay) });
       }, b.w);
-=======
-    // 11. NPCs with Animated Interaction Prompts
-    for (const npc of route.npcs) {
-      if (this.isInViewport(npc.x, npc.y, 60)) {
-        this.renderNPC(ctx, npc);
-      }
->>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
     }
 
     for (const t of this.treeCache) {
@@ -3203,12 +3159,7 @@ export class RouteExplorationEngine {
   private renderSignposts(ctx: CanvasRenderingContext2D, route: RouteDefinition, list = route.signposts): void {
     if (!list || list.length === 0) return;
 
-<<<<<<< HEAD
     for (const sp of list) {
-=======
-    for (const sp of route.signposts) {
-      if (!this.isInViewport(sp.x, sp.y, 70)) continue;
->>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
       ctx.save();
 
       // 1. Contact Drop Shadow
@@ -3781,12 +3732,7 @@ export class RouteExplorationEngine {
   private renderStreetlamps(ctx: CanvasRenderingContext2D, route: RouteDefinition, list = route.streetlamps): void {
     if (!list || list.length === 0) return;
 
-<<<<<<< HEAD
     for (const lamp of list) {
-=======
-    for (const lamp of route.streetlamps) {
-      if (!this.isInViewport(lamp.x, lamp.y, 90)) continue;
->>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
       ctx.save();
       const lx = lamp.x;
       const ly = lamp.y;
@@ -3862,12 +3808,7 @@ export class RouteExplorationEngine {
   private renderBenches(ctx: CanvasRenderingContext2D, route: RouteDefinition, list = route.benches): void {
     if (!list || list.length === 0) return;
 
-<<<<<<< HEAD
     for (const b of list) {
-=======
-    for (const b of route.benches) {
-      if (!this.isInViewport(b.x, b.y, 60)) continue;
->>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
       ctx.save();
       const bx = b.x;
       const by = b.y;
@@ -4057,34 +3998,6 @@ export class RouteExplorationEngine {
     ctx.restore();
   }
 
-<<<<<<< HEAD
-=======
-  private renderTreesLayer(ctx: CanvasRenderingContext2D, route: RouteDefinition, layer: 'behind' | 'front'): void {
-    const trees = this.getRouteTrees(route);
-    const playerFootY = this.player.y + 8;
-
-    for (const t of trees) {
-      if (!this.isInViewport(t.x, t.y, 80)) continue;
-      const trunkFootY = this.getTreeTrunkFootY(t);
-      const isBehind = trunkFootY <= playerFootY;
-      if ((layer === 'behind' && isBehind) || (layer === 'front' && !isBehind)) {
-        if (layer === 'front') {
-          // If player is behind foreground tree canopy, subtly soften alpha so player remains readable
-          const distToCanopy = Math.hypot(this.player.x - t.x, this.player.y - (t.y - 8));
-          if (distToCanopy < 38 * (t.scale || 1.0)) {
-            ctx.save();
-            ctx.globalAlpha = 0.82;
-            this.drawTree(ctx, t.x, t.y, t.scale || 1.0, t.type || 'broadleaf', t.colorVariant);
-            ctx.restore();
-            continue;
-          }
-        }
-        this.drawTree(ctx, t.x, t.y, t.scale || 1.0, t.type || 'broadleaf', t.colorVariant);
-      }
-    }
-  }
-
->>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
   private renderPonds(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     if (!route.ponds || route.ponds.length === 0) return;
 

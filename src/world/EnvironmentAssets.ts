@@ -10,6 +10,8 @@
  * Model keys carry a prefix naming their kit:
  *   (none) Quaternius   k: Kenney Nature   t: Kenney Fantasy Town
  *   s: Kenney Suburban  c: Kenney Commercial
+ *   p: poly.pizza (Quaternius, Poly by Google and other CC0 / CC-BY authors;
+ *      see public/models/SOURCES.md for each model's author and licence)
  * A "#variant" suffix recolours foliage (e.g. "CommonTree_5#blossom").
  *
  * Loading is lazy and per location: only the keys a location asks for are
@@ -25,6 +27,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 const BASE = import.meta.env.BASE_URL;
 const KENNEY = `${BASE}models/kenney/`;
 const QUAT = `${BASE}models/quaternius/`;
+const POLY = `${BASE}models/polypizza/`;
 
 // ---------------------------------------------------------------------------
 // Wind: shared clock + vertex shader sway for foliage / grass materials
@@ -108,6 +111,7 @@ function urlFor(key: string): string {
   if (n.startsWith('t:')) return `${KENNEY}town/${n.slice(2)}.glb`;
   if (n.startsWith('s:')) return `${KENNEY}suburban/${n.slice(2)}.glb`;
   if (n.startsWith('c:')) return `${KENNEY}commercial/${n.slice(2)}.glb`;
+  if (n.startsWith('p:')) return `${POLY}${n.slice(2)}.glb`;
   return `${QUAT}${n}.gltf`;
 }
 
@@ -181,7 +185,10 @@ class EnvironmentAssetManager {
   private async loadRaw(name: string): Promise<Loaded> {
     const gltf = await this.loader.loadAsync(urlFor(name));
     const isNatureKit = name.startsWith('k:');
-    const isPlant = /tree|bush|plant|flower|grass|fern|clover|crop|lily|cactus|pine|palm|hedge/i.test(name);
+    const isPoly = name.startsWith('p:');
+    const isPlant = /tree|bush|plant|flower|grass|fern|clover|crop|lily|cactus|pine|palm|hedge|willow|birch|spruce|cypress|poplar|maple|autumn|acacia|savanna|flattop|bamboo|oak|cherry|blossom/i.test(name);
+    // Mixed-author models: whole-model sway for foliage (their material names are not standardised)
+    const polySway = isPoly && isPlant && !/dead|bonsai/i.test(name);
     const deepen = name.startsWith('t:') || name.startsWith('s:') || name.startsWith('c:') || isNatureKit ? 0.85 : 1;
     gltf.scene.traverse(o => {
       const m = o as THREE.Mesh;
@@ -195,11 +202,15 @@ class EnvironmentAssetManager {
           map: std.map,
           vertexColors: std.vertexColors,
           alphaTest: std.alphaTest,
-          transparent: false,
+          // Glass (greenhouses, windows) stays see-through on poly.pizza models
+          transparent: isPoly && std.transparent,
+          opacity: isPoly && std.transparent ? Math.max(0.35, std.opacity) : 1,
+          depthWrite: !(isPoly && std.transparent),
           side: std.side,
         });
         l.name = std.name;
         if (isPlant && /leaf|leaves|flower|grass|fern/i.test(std.name)) addWindSway(l, /grass|flower/i.test(std.name) ? 0.05 : 0.018);
+        else if (polySway) addWindSway(l, 0.012);
         markShared(l);
         markShared(std.map);
         return l;
@@ -207,6 +218,18 @@ class EnvironmentAssetManager {
       m.material = Array.isArray(m.material) ? m.material.map(toLambert) : toLambert(m.material);
     });
     gltf.scene.updateMatrixWorld(true);
+    if (isPoly) {
+      // Authors use any origin and unit: stand the model on y=0, centred on its footprint
+      const raw = new THREE.Box3().setFromObject(gltf.scene);
+      const c = raw.getCenter(new THREE.Vector3());
+      const root = new THREE.Group();
+      gltf.scene.position.x -= c.x;
+      gltf.scene.position.y -= raw.min.y;
+      gltf.scene.position.z -= c.z;
+      root.add(gltf.scene);
+      root.updateMatrixWorld(true);
+      return { scene: root, box: new THREE.Box3().setFromObject(root) };
+    }
     return { scene: gltf.scene, box: new THREE.Box3().setFromObject(gltf.scene) };
   }
 

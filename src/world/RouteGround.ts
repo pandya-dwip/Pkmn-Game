@@ -427,7 +427,8 @@ export function buildWater(scene: THREE.Scene, route: RouteDefinition, env?: Loc
   const H = route.worldHeight;
   const EXT = 1600;
   const seaRing = env?.ring === 'sea' && !waters.some(w => w.kind === 'sea');
-  if (!ponds.length && !waters.length && !seaRing) return () => {};
+  const edges = env ? edgeWaters(route, env) : [];
+  if (!ponds.length && !waters.length && !seaRing && !edges.length) return () => {};
 
   const nTex = new THREE.CanvasTexture(waterNormalTile());
   nTex.wrapS = nTex.wrapT = THREE.RepeatWrapping;
@@ -535,6 +536,17 @@ export function buildWater(scene: THREE.Scene, route: RouteDefinition, env?: Loc
     }
   }
 
+  // Scenic edge water per zone: a river beyond the northern edge, a harbour sea to the south
+  for (const e of edges) {
+    const bank = new THREE.Mesh(new THREE.PlaneGeometry(e.w, 26), new THREE.MeshLambertMaterial({ color: e.kind === 'sea' ? 0xd9c48f : 0x8a7a5c }));
+    bank.rotation.x = -Math.PI / 2;
+    const landY = e.side === 'north' ? e.y + e.h + 10 : e.y - 10;
+    bank.position.set(e.x + e.w / 2, 0.2, landY);
+    scene.add(bank);
+    body(e.x, e.y, e.w, e.h, e.kind, e.kind === 'river' ? 0.05 : 0);
+    foamRim(e.x, e.y, e.w, e.h, [e.side === 'south' || e.kind === 'river', e.side === 'north', false, false]);
+  }
+
   // Open sea beyond the southern shore (sea-ringed locations without their own sea)
   if (seaRing) {
     const sand = new THREE.Mesh(new THREE.PlaneGeometry(W + EXT * 2, 70), new THREE.MeshLambertMaterial({ color: 0xd9c48f }));
@@ -559,10 +571,49 @@ export function buildWater(scene: THREE.Scene, route: RouteDefinition, env?: Loc
   };
 }
 
-/** True when (x, y) lies on any water body (pond, sea, lake, river, chasm). */
-export function isOnWater(route: RouteDefinition, x: number, y: number, margin = 0): boolean {
+export interface SceneryWater {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  kind: 'sea' | 'river';
+  side: 'north' | 'south';
+}
+
+/** Scenic water strips just beyond the walkable edge, one per zone that asks for it (never walkable). */
+export function edgeWaters(route: RouteDefinition, env: LocationEnv): SceneryWater[] {
+  const W = route.worldWidth;
+  const H = route.worldHeight;
+  const EXT = 1600;
+  const out: SceneryWater[] = [];
+  env.zones.forEach((z, i) => {
+    if (!z.edgeWater) return;
+    const x0 = i === 0 ? -EXT : z.from + 40;
+    const x1 = i + 1 < env.zones.length ? env.zones[i + 1].from : W + EXT;
+    const { side, kind } = z.edgeWater;
+    // North: a river between the map edge and the far bank; south: open sea to the horizon
+    if (side === 'north') out.push({ x: x0, y: -95, w: x1 - x0, h: 140, kind, side });
+    else out.push({ x: x0, y: H - 18, w: x1 - x0, h: EXT, kind, side });
+  });
+  return out;
+}
+
+/** Every water body boats and docks may use: the route's own seas / lakes / rivers plus scenic edge water. */
+export function sceneryWaters(route: RouteDefinition, env: LocationEnv): { x: number; y: number; w: number; h: number; kind: string }[] {
+  const H = route.worldHeight;
+  const W = route.worldWidth;
+  const list: { x: number; y: number; w: number; h: number; kind: string }[] = [
+    ...(route.waters || []).filter(w => w.kind === 'sea' || w.kind === 'lake' || w.kind === 'river'),
+    ...edgeWaters(route, env),
+  ];
+  if (env.ring === 'sea' && !(route.waters || []).some(w => w.kind === 'sea')) list.push({ x: -1600, y: H + 40, w: W + 3200, h: 1600, kind: 'sea' });
+  return list;
+}
+
+/** True when (x, y) lies on any water body (pond, sea, lake, river, chasm, scenic edge water). */
+export function isOnWater(route: RouteDefinition, x: number, y: number, margin = 0, env?: LocationEnv): boolean {
   const inR = (r: { x: number; y: number; w: number; h: number }) => x > r.x - margin && x < r.x + r.w + margin && y > r.y - margin && y < r.y + r.h + margin;
-  return (route.ponds || []).some(inR) || (route.waters || []).some(w => w.kind !== 'shallows' && inR(w));
+  return (route.ponds || []).some(inR) || (route.waters || []).some(w => w.kind !== 'shallows' && inR(w)) || (!!env && edgeWaters(route, env).some(inR));
 }
 
 /**
@@ -625,7 +676,7 @@ export function planFillerTrees(
     const h = hash(x * 1.3, y * 0.7);
     const px = x + (h - 0.5) * 30;
     const py = y + (hash(y, x) - 0.5) * 24;
-    if (isOnWater(route, px, py, 10)) return;
+    if (isOnWater(route, px, py, 10, env)) return;
     if (env.ring === 'sea' && py > H) return; // open sea to the south
     const kind = pick(x, h) || { type: 'conifer', colorVariant: 'standard' };
     ring.push({ x: px, y: py, scale: 1 + h * 0.45, ...kind } as RouteTree);

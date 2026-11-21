@@ -10,7 +10,8 @@
  * to change how a place looks, edit its entry here.
  *
  * Model keys: (none) Quaternius, k: Kenney Nature, t: Kenney Fantasy Town,
- * s: Kenney Suburban, c: Kenney Commercial; "#variant" recolours foliage.
+ * s: Kenney Suburban, c: Kenney Commercial, p: poly.pizza (mixed CC0 / CC-BY
+ * authors, see public/models/SOURCES.md); "#variant" recolours foliage.
  */
 
 import type { RouteTreeType, FoliageColorVariant, RouteDefinition } from '../systems/RouteExplorationEngine';
@@ -31,7 +32,12 @@ export interface CameraConfig {
   minDist: number;
 }
 
-export type DecorPlacement = 'open' | 'roadside' | 'building' | 'water' | 'edge';
+/**
+ * open: free lawn · roadside: beside paths · building: around houses · water: on ponds / lakes ·
+ * edge: just beyond the walkable boundary · offshore: out on the zone's sea / river ·
+ * shore: straddling the water's edge (docks, bridges) · backdrop: huge landmark on the northern skyline
+ */
+export type DecorPlacement = 'open' | 'roadside' | 'building' | 'water' | 'edge' | 'offshore' | 'shore' | 'backdrop';
 
 export interface DecorRule {
   models: WeightedModel[];
@@ -56,6 +62,8 @@ export interface ZoneEnv {
   ringTrees?: WeightedModel[];
   /** Spacing of the filler grid (default 68). */
   fillSpacing?: number;
+  /** Fraction of ring positions that get a tree (default all): sparse for barren places. */
+  ringDensity?: number;
   /** Models for ordinary houses, and the colour-map variations they may wear. */
   houses: string[];
   houseSkins: string[];
@@ -70,6 +78,8 @@ export interface ZoneEnv {
   ground?: LocationEnv['baseGround'];
   /** Model used for knee-high encounter grass. */
   tallGrass?: string;
+  /** Scenic water just beyond the walkable edge: a river to the north or open sea to the south. */
+  edgeWater?: { side: 'north' | 'south'; kind: 'river' | 'sea' };
 }
 
 export interface LocationEnv {
@@ -108,67 +118,105 @@ const CAMERA_CAVE: CameraConfig = { dist: 84, height: 50, lookAhead: 40, lookHei
 const SKY_DAY: [string, string, string] = ['#5fb4ea', '#a9dcf3', '#e6f6ea'];
 const LIGHT_DAY = { hemi: { sky: 0xeaf6ff, ground: 0x4a6b3a, intensity: 2.2 }, sun: { color: 0xfff1d6, intensity: 2.4, dir: [-1, 2.2, -0.8] as [number, number, number] } };
 
+// --- Trees (Quaternius MegaKit = no prefix, poly.pizza = p:) ---------------
 const FOREST_TREES: WeightedModel[] = [
   ['CommonTree_4#dark', 3, 94],
-  ['k:tree_detailed_dark', 2, 96],
-  ['k:tree_tall_dark', 2, 108],
-  ['Pine_4', 1, 98],
-  ['k:tree_oak_dark', 2, 88],
   ['CommonTree_3', 1, 96],
+  ['Pine_4', 1, 98],
+  ['p:spruce', 2, 104],
+  ['p:willow_big', 1, 92],
 ];
 const FOREST_CONIFERS: WeightedModel[] = [
   ['Pine_4', 2, 100],
   ['Pine_5', 2, 104],
-  ['k:tree_pineTallB_detailed', 1, 116],
-  ['k:tree_pineRoundA', 1, 96],
+  ['p:spruce', 2, 108],
 ];
 const MOUNTAIN_TREES: WeightedModel[] = [
   ['Pine_2', 2, 92],
   ['Pine_5', 2, 100],
-  ['k:tree_pineRoundC', 2, 94],
-  ['k:tree_pineTallA_detailed', 1, 104],
-  ['k:tree_cone_dark', 1, 86],
+  ['p:spruce', 3, 104],
 ];
 const PALMS: WeightedModel[] = [
-  ['k:tree_palmTall', 2, 92],
-  ['k:tree_palm', 2, 90],
-  ['k:tree_palmBend', 2, 86],
-  ['k:tree_palmDetailedTall', 1, 94],
-  ['k:tree_palmShort', 1, 66],
+  ['p:palm_a', 3, 96],
+  ['p:palm_b', 2, 92],
+  ['p:palm_lean', 2, 98],
+  ['p:palm_tall', 1, 106],
+  ['p:palm_bent', 1, 82],
 ];
-const CITY_TREES: WeightedModel[] = [
-  ['t:tree-high-round', 3, 74],
-  ['t:tree', 2, 60],
-  ['k:tree_default', 2, 78],
-  ['CommonTree_5', 1, 66],
-  ['k:tree_cone', 1, 70],
-];
-const GARDEN_TREES: WeightedModel[] = [
-  ['k:tree_fat', 2, 72],
-  ['k:tree_detailed', 2, 86],
+// Faceted 'blob canopy' species (cherry, willow, maple, round oak) read much bulkier than the
+// airy Quaternius trees, so they are kept smaller and used as accents.
+const VIRIDIAN_TREES: WeightedModel[] = [
+  ['CommonTree_2', 2, 88],
   ['CommonTree_3', 2, 92],
-  ['k:tree_oak', 2, 84],
-  ['CommonTree_4#dark', 1, 92],
+  ['CommonTree_4#dark', 1, 90],
+  ['p:willow', 1, 56],
+];
+const PEWTER_TREES: WeightedModel[] = [
+  ['p:spruce', 3, 98],
+  ['Pine_2', 2, 90],
+  ['CommonTree_4#dark', 1, 88],
+];
+const CERULEAN_TREES: WeightedModel[] = [
+  ['p:willow', 2, 56],
+  ['p:willow_big', 1, 84],
+  ['CommonTree_5', 2, 66],
+  ['CommonTree_3', 2, 90],
+  ['p:cherry', 1, 50],
+];
+const LAVENDER_TREES: WeightedModel[] = [
+  ['p:autumn', 2, 86],
+  ['p:birch', 2, 92],
+  ['p:maple_red', 1, 58],
+  ['CommonTree_2', 2, 88],
+];
+const CELADON_TREES: WeightedModel[] = [
+  ['p:cherry', 3, 52],
+  ['p:blossom_white', 2, 58],
+  ['p:cypress', 2, 92],
+  ['p:poplar', 1, 96],
 ];
 const SAVANNA_TREES: WeightedModel[] = [
-  ['k:tree_plateau', 4, 88],
-  ['k:tree_fat', 1, 70],
-  ['CommonTree_2#olive', 1, 84],
+  ['p:acacia', 3, 86],
+  ['p:savanna', 2, 80],
+  ['p:flattop', 2, 78],
+];
+const FUCHSIA_TREES: WeightedModel[] = [
+  ['p:bamboo', 3, 84],
+  ['CommonTree_3', 2, 92],
+  ['p:cherry', 1, 52],
+  ['CommonTree_4#dark', 1, 90],
+];
+const SILPH_TREES: WeightedModel[] = [
+  ['p:poplar', 3, 96],
+  ['p:oak_round', 1, 54],
+  ['p:birch', 2, 90],
+];
+const SAFFRON_TREES: WeightedModel[] = [
+  ['p:poplar', 3, 96],
+  ['p:cypress', 2, 92],
 ];
 const VOLCANIC_TREES: WeightedModel[] = [
-  ['k:tree_palmShort', 2, 64],
-  ['k:tree_thin#ash', 2, 78],
-  ['k:tree_simple#ash', 1, 70],
-  ['k:tree_palmBend', 1, 80],
+  ['p:dead_pale', 3, 74],
+  ['p:dead_dark', 2, 80],
+  ['p:palm_bent', 1, 80],
+];
+const INDIGO_TREES: WeightedModel[] = [
+  ['p:cypress', 3, 98],
+  ['p:spruce', 2, 100],
+  ['CommonTree_5', 1, 66],
 ];
 const SNOW_TREES: WeightedModel[] = [
-  ['k:tree_pineRoundA#snow', 2, 96],
-  ['k:tree_pineTallA_detailed#snow', 2, 104],
-  ['Pine_4', 1, 96],
-  ['k:tree_pineSmallA#snow', 1, 64],
+  ['p:pine_snow', 3, 100],
+  ['p:birch_snow', 2, 90],
+  ['Pine_4#snow', 1, 96],
+];
+const GROVE_TREES: WeightedModel[] = [
+  ['CommonTree_4#dark', 3, 104],
+  ['p:willow_big', 2, 100],
+  ['p:dead_dark', 1, 92],
 ];
 
-// Decoration sets
+// --- Decoration sets ---------------------------------------------------------
 const ROCKS_SMALL: WeightedModel[] = [['k:rock_smallA', 1, 10], ['k:rock_smallC', 1, 9], ['k:rock_smallFlatA', 1, 6]];
 const BOULDERS: WeightedModel[] = [['k:rock_largeA', 1, 22], ['k:rock_largeB', 1, 26], ['k:rock_largeD', 1, 30], ['k:rock_largeC', 1, 22]];
 const SPIRES: WeightedModel[] = [['k:rock_tallA', 2, 58], ['k:rock_tallB', 1, 52], ['k:rock_tallC', 1, 64], ['k:rock_tallE', 1, 34]];
@@ -180,20 +228,21 @@ const FOREST_FLOOR: WeightedModel[] = [
   ['k:stump_old', 2, 12],
   ['k:stump_round', 1, 10],
   ['Fern_1', 3, 22],
-  ['k:plant_bushDetailed', 2, 18],
+  ['Bush_Common_Flowers', 2, 20],
 ];
 const FLOWERS: WeightedModel[] = [['k:flower_redA', 1, 12], ['k:flower_yellowA', 1, 11], ['k:flower_purpleA', 1, 12], ['Flower_3_Group', 2, 14], ['Flower_4_Group', 2, 14]];
-const BUSHES: WeightedModel[] = [['k:plant_bush', 2, 16], ['k:plant_bushLarge', 2, 18], ['k:plant_bushDetailed', 1, 20], ['Bush_Common_Flowers', 2, 20]];
-const URBAN_PROPS: WeightedModel[] = [['t:lantern', 3, 50], ['s:planter', 2, 14], ['t:stall-bench', 1, 16]];
-const MARKET: WeightedModel[] = [['t:stall', 1, 40], ['t:stall-red', 1, 40], ['t:stall-green', 1, 40], ['t:cart', 1, 26]];
-const HARBOUR: WeightedModel[] = [['k:canoe', 2, 9], ['k:log_stack', 2, 18], ['k:pot_large', 1, 10], ['t:cart', 1, 24]];
+const BUSHES: WeightedModel[] = [['Bush_Common_Flowers', 3, 20], ['k:plant_bushLarge', 1, 18], ['k:plant_bushDetailed', 1, 20]];
+const URBAN_PROPS: WeightedModel[] = [['p:streetlight', 3, 52], ['s:planter', 2, 14], ['t:stall-bench', 1, 16]];
+const LANTERNS: WeightedModel[] = [['p:lantern_post', 1, 34]];
+const HARBOUR: WeightedModel[] = [['p:container_red', 2, 22], ['p:container_grey', 2, 22], ['k:log_stack', 1, 18], ['t:cart', 1, 24]];
 const RUINS: WeightedModel[] = [['k:statue_column', 2, 56], ['k:statue_columnDamaged', 3, 40], ['k:statue_block', 2, 16], ['k:statue_head', 1, 40]];
 const CAMP: WeightedModel[] = [['k:tent_detailedOpen', 1, 34], ['k:tent_smallClosed', 1, 30], ['k:campfire_stones', 1, 6], ['k:log_large', 1, 14]];
 const FARM: WeightedModel[] = [['k:crops_cornStageD', 3, 30], ['k:crops_wheatStageB', 3, 18], ['k:crop_pumpkin', 2, 10]];
 const CACTI: WeightedModel[] = [['k:cactus_short', 1, 18], ['k:cactus_tall', 1, 28]];
 const LILIES: WeightedModel[] = [['k:lily_large', 2, 14], ['k:lily_small', 1, 10]];
+const SMALL_BOATS: WeightedModel[] = [['p:sailboat', 2, 40], ['k:canoe', 1, 10]];
 
-/** Route 0's reference zones (Pallet Valley / Route 1 / Viridian). Do not restyle: other places are tuned against it. */
+/** Route 0's reference zones (Pallet Valley / Route 1). Do not restyle: other places are tuned against it. */
 const REFERENCE_MEADOW: ZoneEnv['filler'] = [['conifer', 'standard', 0.25], ['mature', 'standard', 0.3], ['broadleaf', 'standard', 0.15]];
 
 function zone(from: number, label: string, z: Partial<ZoneEnv>): ZoneEnv {
@@ -228,15 +277,26 @@ function outdoor(zones: ZoneEnv[], o: Partial<LocationEnv> = {}): LocationEnv {
 // ---------------------------------------------------------------------------
 
 const ENVIRONMENTS: Record<number, LocationEnv> = {
-  // Pallet Valley -> Route 1 -> Viridian City: the reference implementation
+  // Pallet Valley -> Route 1 -> Viridian City (the route sections are the reference implementation)
   0: outdoor([
     zone(0, 'Pallet Valley', {}),
     zone(640, 'Blossom Terrace / Clear Creek', { filler: [['blossom', 'blossom', 0.6], ['broadleaf', 'standard', 0.1]] }),
     zone(1340, 'Deep Ancient Sanctuary', { filler: [['conifer', 'dark', 0.4], ['dense_forest', 'dark', 0.3]] }),
-    zone(1920, 'Viridian City', {}),
+    // Viridian: a green woodland town of timber cottages and log cabins
+    zone(1920, 'Viridian City', {
+      treeSkin: { '*': VIRIDIAN_TREES },
+      houses: ['p:cottage', 'p:timber_house', 'p:log_cabin', 'p:hut_b'],
+      houseSkins: [],
+      decor: [
+        { models: BUSHES, density: 20, where: 'building', fit: 'xz' },
+        { models: FLOWERS, density: 30, where: 'building' },
+        { models: [['p:market_stand', 1, 34]], density: 2, where: 'roadside', solid: 12 },
+        { models: [['p:willow', 1, 56]], density: 3, where: 'open', solid: 10 },
+      ],
+    }),
   ]),
 
-  // Viridian Forest (Route 2) -> Pewter City
+  // Viridian Forest (Route 2) -> Pewter City (grey stone town in the mountains)
   1: outdoor(
     [
       zone(0, 'Viridian Forest', {
@@ -250,15 +310,19 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1620, 'Pewter City', {
-        treeSkin: { '*': [['k:tree_cone', 2, 78], ['Pine_2', 2, 88], ['CommonTree_2', 1, 86], ['k:tree_oak', 1, 82]] },
+        ground: 'rock',
+        treeSkin: { '*': PEWTER_TREES },
         filler: [['conifer', 'standard', 0.35], ['mature', 'standard', 0.2]],
-        houses: S('b', 'e', 'g', 'j', 'l', 'c'),
-        houseSkins: SKIN('variation-c', 'variation-c', 'variation-b'),
+        ringTrees: PEWTER_TREES,
+        houses: ['p:stone_house', 'p:stone_house', 'p:timber_tall'],
+        houseSkins: [],
+        civic: { gym: 'p:stone_house' },
         decor: [
-          { models: STONE_SPIRES, density: 7, where: 'edge', solid: 18 },
+          { models: STONE_SPIRES, density: 8, where: 'edge', solid: 18 },
           { models: BOULDERS, density: 8, where: 'open', fit: 'xz', solid: 14 },
           { models: ROCKS_SMALL, density: 40, where: 'roadside', fit: 'xz' },
           { models: [['k:statue_column', 1, 54], ['k:statue_obelisk', 1, 46]], density: 3, where: 'building', solid: 8 },
+          { models: LANTERNS, density: 6, where: 'roadside' },
         ],
         lawn: 'sparse',
       }),
@@ -266,7 +330,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
     { fog: { color: 0xc5e2d6, near: 380, far: 880 }, camera: CAMERA_FOREST, hemi: { sky: 0xdff2e8, ground: 0x3b5a30, intensity: 2.0 } }
   ),
 
-  // Mt. Moon Foothills (Routes 3 & 4) -> Cerulean City
+  // Mt. Moon Foothills (Routes 3 & 4) -> Cerulean City (river town)
   2: outdoor(
     [
       zone(0, 'Mt. Moon Foothills', {
@@ -282,12 +346,17 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1560, 'Cerulean City', {
-        treeSkin: { '*': [['k:tree_default', 2, 80], ['CommonTree_5', 2, 66], ['CommonTree_3', 1, 92], ['k:tree_oak', 1, 84]] },
+        treeSkin: { '*': CERULEAN_TREES },
+        ringTrees: CERULEAN_TREES,
         houses: S('a', 'i', 'm', 'o', 'q', 'r'),
         houseSkins: SKIN('variation-a', 'variation-a', 'colormap'),
+        edgeWater: { side: 'north', kind: 'river' },
         decor: [
+          { models: SMALL_BOATS, density: 3, where: 'offshore' },
+          { models: [['p:bridge_small', 1, 60]], density: 0.6, where: 'shore', fit: 'xz' },
           { models: LILIES, density: 30, where: 'water', fit: 'xz' },
-          { models: [['k:canoe', 1, 9]], density: 3, where: 'water', fit: 'y' },
+          { models: [['p:gazebo', 1, 40]], density: 1, where: 'open', solid: 18 },
+          { models: [['p:fountain_tiered', 1, 34]], density: 1, where: 'open', fit: 'xz', solid: 16 },
           { models: BUSHES, density: 20, where: 'building', fit: 'xz' },
           { models: URBAN_PROPS, density: 6, where: 'roadside' },
         ],
@@ -296,11 +365,11 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
     { ring: 'cliffs', camera: CAMERA_MOUNTAIN, baseGround: 'meadow' }
   ),
 
-  // Routes 5 & 6 coastal trail -> Vermilion City (port)
+  // Routes 5 & 6 coastal trail -> Vermilion City (harbour)
   3: outdoor(
     [
       zone(0, 'Coastal Trail', {
-        treeSkin: { '*': [...PALMS, ['k:tree_default', 2, 80], ['CommonTree_5', 1, 66]] },
+        treeSkin: { '*': [...PALMS, ['CommonTree_5', 2, 66]] },
         filler: [['coastal', 'coastal', 0.25], ['broadleaf', 'standard', 0.2]],
         ringTrees: PALMS,
         decor: [
@@ -310,44 +379,56 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
       }),
       zone(1600, 'Vermilion City', {
         treeSkin: { '*': PALMS },
-        filler: [['coastal', 'coastal', 0.25]],
+        filler: [['coastal', 'coastal', 0.2]],
+        ringTrees: PALMS,
         houses: S('a', 'h', 'p', 's', 'u', 'c'),
         houseSkins: SKIN('variation-a', 'variation-c', 'colormap'),
         civic: { gym: 'c:building-l' },
+        edgeWater: { side: 'south', kind: 'sea' },
         decor: [
-          { models: [['c:low-detail-building-wide-a', 1, 52], ['c:low-detail-building-wide-b', 1, 56], ['c:low-detail-building-d', 1, 60]], density: 4, where: 'edge', solid: 40 },
-          { models: HARBOUR, density: 14, where: 'roadside' },
-          { models: [['t:lantern', 1, 50]], density: 6, where: 'roadside' },
+          { models: [['p:liner', 1, 70]], density: 0.6, where: 'offshore' },
+          { models: [['p:tugboat', 1, 34], ['p:sailboat', 1, 40]], density: 2, where: 'offshore' },
+          { models: [['p:dock_long', 1, 90], ['p:port', 1, 110]], density: 1.2, where: 'shore', fit: 'xz' },
+          { models: [['p:lighthouse', 1, 120]], density: 0.6, where: 'edge', solid: 20 },
+          { models: [['p:container_red', 1, 30], ['p:container_grey', 1, 30]], density: 6, where: 'edge', fit: 'xz', solid: 22 },
+          { models: [['c:low-detail-building-wide-a', 1, 52], ['c:low-detail-building-wide-b', 1, 56]], density: 2, where: 'edge', solid: 40 },
+          { models: HARBOUR, density: 10, where: 'roadside' },
+          { models: [['p:streetlight', 1, 52]], density: 6, where: 'roadside' },
         ],
       }),
     ],
     { sky: ['#4aa8ec', '#9fd8f5', '#eaf8f6'], fog: { color: 0xd2ecf5, near: 440, far: 960 } }
   ),
 
-  // Lavender outskirts & meadows (Routes 7-9) -> Celadon City
+  // Lavender outskirts & meadows (Routes 7-9) -> Celadon City (garden city)
   4: outdoor(
     [
       zone(0, 'Lavender Meadows', {
-        treeSkin: { '*': [['k:tree_oak', 2, 84], ['CommonTree_2', 2, 88], ['k:tree_detailed', 1, 86], ['k:tree_fat_fall', 0.4, 72], ['CommonTree_5#blossom', 0.6, 78]] },
+        treeSkin: { '*': LAVENDER_TREES },
         filler: [['oak', 'standard', 0.25], ['broadleaf', 'standard', 0.2]],
+        ringTrees: LAVENDER_TREES,
         lawn: 'meadow',
         decor: [
           { models: FLOWERS, density: 60, where: 'open' },
           { models: [['t:windmill', 1, 120]], density: 0.7, where: 'edge', solid: 30 },
+          { models: [['p:barn', 1, 70], ['p:silo', 1, 90]], density: 1.2, where: 'edge', solid: 34 },
           { models: [['k:fence_simple', 1, 14]], density: 6, where: 'roadside', fit: 'y' },
         ],
       }),
       zone(1680, 'Celadon City', {
-        treeSkin: { '*': CITY_TREES },
+        treeSkin: { '*': CELADON_TREES },
         filler: [['decorative', 'standard', 0.15]],
+        ringTrees: CELADON_TREES,
         houses: ['c:building-a', 'c:building-b', 'c:building-d', 'c:building-f', 'c:building-g', 'c:building-h'],
         houseSkins: CSKIN('colormap', 'variation-a', 'colormap'),
         maxBuildingHeight: 150,
         civic: { mart: 'c:building-k', gym: 'c:building-m' },
         decor: [
+          { models: [['p:greenhouse', 1, 46]], density: 2, where: 'open', fit: 'xz', solid: 24 },
+          { models: [['p:fountain_tiered', 1, 40]], density: 1.2, where: 'open', fit: 'xz', solid: 20 },
+          { models: [['p:gazebo', 1, 40]], density: 1, where: 'open', solid: 18 },
           { models: [['t:hedge-large', 1, 18]], density: 10, where: 'building', fit: 'y' },
-          { models: FLOWERS, density: 40, where: 'building' },
-          { models: [['t:fountain-square-detail', 1, 48]], density: 1, where: 'open', fit: 'xz', solid: 22 },
+          { models: FLOWERS, density: 50, where: 'building' },
           { models: [['c:detail-parasol-a', 1, 26], ['c:detail-parasol-b', 1, 26]], density: 5, where: 'roadside' },
           { models: URBAN_PROPS, density: 10, where: 'roadside' },
         ],
@@ -356,10 +437,11 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
     { ring: 'skyline' }
   ),
 
-  // Cycling Road & savannah plains -> Fuchsia City
+  // Cycling Road & savannah plains -> Fuchsia City (Japanese-style forest town)
   5: outdoor(
     [
       zone(0, 'Savannah Plains', {
+        ground: 'dry',
         treeSkin: { '*': SAVANNA_TREES },
         filler: [['broadleaf', 'olive', 0.18]],
         fillSpacing: 90,
@@ -369,19 +451,25 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         decor: [
           { models: [['k:grass_large', 3, 16], ['k:grass_leafs', 2, 12], ['k:plant_bushSmall', 1, 12]], density: 60, where: 'open', fit: 'y' },
           { models: BOULDERS, density: 5, where: 'open', fit: 'xz', solid: 14 },
+          { models: [['p:water_tower', 1, 70]], density: 0.6, where: 'edge', solid: 16 },
         ],
       }),
       zone(1700, 'Fuchsia City', {
         ground: 'meadow',
-        treeSkin: { '*': GARDEN_TREES },
+        treeSkin: { '*': FUCHSIA_TREES },
         filler: [['dense_forest', 'standard', 0.35], ['broadleaf', 'standard', 0.2]],
         fillSpacing: 60,
-        houses: S('b', 'f', 'j', 'n', 't', 'k'),
-        houseSkins: SKIN('variation-b', 'colormap', 'variation-b'),
+        ringTrees: FUCHSIA_TREES,
+        houses: ['p:hut_b', 'p:log_cabin', 'p:cottage'],
+        houseSkins: [],
+        civic: { gym: 'p:station' },
         decor: [
-          { models: FARM, density: 14, where: 'open' },
-          { models: [['k:fence_planks', 1, 13]], density: 6, where: 'building', fit: 'y' },
-          { models: BUSHES, density: 30, where: 'building', fit: 'xz' },
+          { models: [['p:pagoda', 1, 150]], density: 0.6, where: 'edge', solid: 30 },
+          { models: [['p:torii', 1, 56]], density: 2, where: 'edge', solid: 10 },
+          { models: [['p:fox_statue', 1, 26], ['p:bonsai_pot', 1, 18]], density: 5, where: 'building', solid: 8 },
+          { models: [['p:bamboo', 1, 70]], density: 12, where: 'open', solid: 8 },
+          { models: LANTERNS, density: 8, where: 'roadside' },
+          { models: FARM, density: 8, where: 'open' },
           { models: [['t:watermill', 1, 70]], density: 0.5, where: 'edge', solid: 28 },
         ],
         lawn: 'meadow',
@@ -394,24 +482,27 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
   6: outdoor(
     [
       zone(0, 'Silph Tech Outskirts', {
-        treeSkin: { '*': [['s:tree-large', 2, 72], ['s:tree-small', 1, 52], ['k:tree_default', 2, 80], ['t:tree-high-round', 1, 74]] },
+        treeSkin: { '*': SILPH_TREES },
         filler: [['broadleaf', 'standard', 0.2]],
+        ringTrees: SILPH_TREES,
         houses: S('g', 'i', 'l', 'm', 'q', 'u'),
         houseSkins: SKIN('colormap', 'variation-c', 'variation-a'),
         decor: [
-          { models: [['t:lantern', 1, 50]], density: 8, where: 'roadside' },
-          { models: [['c:low-detail-building-a', 1, 80], ['c:low-detail-building-g', 1, 90]], density: 3, where: 'edge', solid: 34 },
+          { models: [['p:streetlight', 1, 52]], density: 8, where: 'roadside' },
+          { models: [['p:office_a', 1, 90], ['p:office_b', 1, 80]], density: 3, where: 'edge', solid: 34 },
           { models: [['s:fence-low', 1, 10]], density: 8, where: 'building', fit: 'y' },
         ],
       }),
       zone(1780, 'Saffron City', {
-        treeSkin: { '*': CITY_TREES },
+        treeSkin: { '*': SAFFRON_TREES },
         filler: [],
-        houses: ['c:building-skyscraper-a', 'c:building-skyscraper-b', 'c:building-skyscraper-c', 'c:building-skyscraper-e', 'c:building-i', 'c:building-l'],
+        ringTrees: SAFFRON_TREES,
+        houses: ['c:building-skyscraper-a', 'c:building-skyscraper-b', 'c:building-skyscraper-c', 'c:building-skyscraper-e', 'p:office_a', 'p:office_b'],
         houseSkins: CSKIN('colormap', 'variation-a', 'variation-b'),
         maxBuildingHeight: 230,
         civic: { gym: 'c:building-skyscraper-d', mart: 'c:building-k' },
         decor: [
+          { models: [['p:station', 1, 60]], density: 0.6, where: 'edge', fit: 'y', solid: 40 },
           { models: URBAN_PROPS, density: 16, where: 'roadside' },
           { models: [['c:detail-awning-wide', 1, 10]], density: 3, where: 'building' },
           { models: [['t:hedge', 1, 14]], density: 8, where: 'building', fit: 'y' },
@@ -430,6 +521,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         filler: [['coastal', 'coastal', 0.18]],
         ringTrees: PALMS,
         decor: [
+          { models: SMALL_BOATS, density: 3, where: 'offshore' },
           { models: BOULDERS, density: 6, where: 'edge', fit: 'xz', solid: 14 },
           { models: [['k:grass_leafs', 1, 12], ['k:plant_bushSmall', 1, 12]], density: 30, where: 'open' },
         ],
@@ -439,13 +531,17 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         treeSkin: { '*': VOLCANIC_TREES },
         filler: [['coastal', 'coastal', 0.08]],
         ringTrees: VOLCANIC_TREES,
-        houses: S('c', 'h', 'k', 'r'),
+        ringDensity: 0.3,
+        houses: ['p:lab_a', 'p:lab_b', ...S('c', 'k')],
         houseSkins: SKIN('variation-c', 'variation-b'),
+        civic: { gym: 'p:lab_b' },
         lawn: 'dry',
         decor: [
-          { models: [['k:rock_tallA#ash', 2, 70], ['k:rock_tallB', 1, 60], ['k:rock_tallC', 1, 76]], density: 10, where: 'edge', solid: 20 },
+          { models: [['p:volcano', 1, 420]], density: 0.6, where: 'backdrop', fit: 'y' },
+          { models: [['p:lighthouse_b', 1, 110]], density: 0.6, where: 'edge', solid: 18 },
+          { models: [['k:rock_tallA#ash', 2, 70], ['k:rock_tallB', 1, 60], ['k:rock_tallC', 1, 76]], density: 8, where: 'edge', solid: 20 },
           { models: BOULDERS, density: 8, where: 'open', fit: 'xz', solid: 14 },
-          { models: CACTI, density: 6, where: 'open' },
+          { models: CACTI, density: 4, where: 'open' },
           { models: ROCKS_SMALL, density: 40, where: 'roadside', fit: 'xz' },
         ],
       }),
@@ -459,7 +555,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
     }
   ),
 
-  // Victory Road summit -> Indigo Plateau
+  // Victory Road summit -> Indigo Plateau (the League)
   8: outdoor(
     [
       zone(0, 'Victory Road', {
@@ -475,17 +571,19 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1840, 'Indigo Plateau', {
-        treeSkin: { '*': [['t:tree-high-round', 2, 76], ['k:tree_cone', 2, 74], ['Pine_5', 1, 96]] },
+        treeSkin: { '*': INDIGO_TREES },
         filler: [['conifer', 'standard', 0.15]],
+        ringTrees: INDIGO_TREES,
         houses: ['c:building-a', 'c:building-d', 'c:building-h'],
         houseSkins: CSKIN('colormap', 'colormap', 'variation-a'),
         maxBuildingHeight: 140,
         civic: { gym: 'c:building-j' },
         decor: [
+          { models: [['p:stadium', 1, 460]], density: 0.6, where: 'backdrop', fit: 'xz' },
           { models: [['k:statue_column', 2, 60], ['k:statue_obelisk', 1, 54]], density: 5, where: 'roadside', solid: 8 },
           { models: [['t:hedge-large', 1, 18]], density: 10, where: 'building', fit: 'y' },
           { models: [['t:banner-red', 1, 40], ['t:banner-green', 1, 40]], density: 3, where: 'building' },
-          { models: [['t:lantern', 1, 50]], density: 8, where: 'roadside' },
+          { models: [['p:streetlight', 1, 52]], density: 8, where: 'roadside' },
         ],
       }),
     ],
@@ -515,8 +613,9 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
   102: outdoor(
     [
       zone(0, 'Mossveil Grove', {
-        treeSkin: { '*': [['CommonTree_4#dark', 3, 104], ['k:tree_thin_dark', 2, 100], ['k:tree_detailed_dark', 2, 104], ['k:tree_tall_dark', 1, 116]] },
+        treeSkin: { '*': GROVE_TREES },
         filler: [],
+        ringTrees: GROVE_TREES,
         lawn: 'meadow',
         decor: [
           { models: FOREST_FLOOR, density: 90, where: 'open' },
@@ -524,7 +623,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1640, 'Mossveil Ruins', {
-        treeSkin: { '*': [['CommonTree_4#dark', 1, 104], ['k:tree_thin_dark', 1, 100]] },
+        treeSkin: { '*': GROVE_TREES },
         filler: [],
         lawn: 'meadow',
         decor: [{ models: RUINS, density: 24, where: 'open', solid: 9 }],
@@ -549,11 +648,12 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         treeSkin: { '*': PALMS },
         filler: [],
         ringTrees: PALMS,
-        houses: S('h', 'k', 'c', 'r'),
-        houseSkins: SKIN('variation-b', 'variation-a'),
+        houses: ['p:hut_b', 'p:cottage', 'p:log_cabin'],
+        houseSkins: [],
         lawn: 'sparse',
         decor: [
-          { models: HARBOUR, density: 10, where: 'roadside' },
+          { models: [['p:sailboat', 2, 40], ['p:tugboat', 1, 34]], density: 3, where: 'offshore' },
+          { models: HARBOUR, density: 8, where: 'roadside' },
           { models: [['k:grass_leafs', 1, 12]], density: 30, where: 'open' },
         ],
       }),
@@ -562,7 +662,19 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
   ),
 
   106: outdoor(
-    [zone(0, 'Coral Isle', { treeSkin: { '*': PALMS }, filler: [], ringTrees: PALMS, lawn: 'sparse', decor: [{ models: [['k:grass_leafs', 1, 12], ['k:plant_bushSmall', 1, 12]], density: 30, where: 'open' }, { models: BOULDERS, density: 4, where: 'edge', fit: 'xz', solid: 14 }] })],
+    [
+      zone(0, 'Coral Isle', {
+        treeSkin: { '*': PALMS },
+        filler: [],
+        ringTrees: PALMS,
+        lawn: 'sparse',
+        decor: [
+          { models: [['p:sailboat', 1, 40]], density: 2, where: 'offshore' },
+          { models: [['k:grass_leafs', 1, 12], ['k:plant_bushSmall', 1, 12]], density: 30, where: 'open' },
+          { models: BOULDERS, density: 4, where: 'edge', fit: 'xz', solid: 14 },
+        ],
+      }),
+    ],
     { baseGround: 'grass', ring: 'sea', sky: ['#43a3ea', '#9ad6f6', '#eefaf6'], fog: { color: 0xd4eef7, near: 460, far: 1000 } }
   ),
 
@@ -584,8 +696,8 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ground: 'dry',
         treeSkin: { '*': MOUNTAIN_TREES },
         filler: [],
-        houses: S('h', 'k'),
-        houseSkins: SKIN('variation-b'),
+        houses: ['p:log_cabin', 'p:hut_b'],
+        houseSkins: [],
         lawn: 'dry',
         decor: [{ models: CAMP, density: 6, where: 'open', solid: 12 }],
       }),

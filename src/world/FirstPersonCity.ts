@@ -23,7 +23,7 @@ import { inputManager } from '../systems/InputManager';
 import { drawTrainerSpriteCached, getTrainerById, TrainerCustomization } from '../data/characters';
 import { specFor } from './BuildingVolume';
 import { loadRouteModels, RouteModelsHandle, addWindSway, windTime, Solid } from './RouteModels';
-import { buildGround, buildWater, planFillerTrees, GroundInfo, isOnWater } from './RouteGround';
+import { buildGround, buildWater, planFillerTrees, GroundInfo, isOnWater, sceneryWaters } from './RouteGround';
 import { createCharacter, modelForTrainer, modelForNpc, Character3D } from './Characters3D';
 import { Pokemon3DLoader } from '../systems/Pokemon3DLoader';
 import { pokemon3DManager } from '../systems/Pokemon3DManager';
@@ -84,6 +84,16 @@ const MOBILE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)
 function lighterForMobile(env: LocationEnv): LocationEnv {
   const k = 0.8;
   return { ...env, drawDistance: env.drawDistance * k, fog: { ...env.fog, near: env.fog.near * k, far: env.fog.far * k } };
+}
+
+/** World-space bounds of a model as rendered: skinned meshes use their current bone pose. */
+function renderedBounds(root: THREE.Object3D): THREE.Box3 {
+  root.updateMatrixWorld(true);
+  root.traverse(o => {
+    const sk = (o as THREE.SkinnedMesh).skeleton;
+    if ((o as THREE.SkinnedMesh).isSkinnedMesh && sk) sk.update();
+  });
+  return new THREE.Box3().setFromObject(root, true);
 }
 
 function readPref(): boolean {
@@ -431,6 +441,7 @@ class FirstPersonCity {
       isRoad: (x, y) => eng.isPointOnRoad(x, y, route),
       scale: { trees: 1.6, props: SMALL_PROPS },
       groundCover: MOBILE ? 0.6 : 1,
+      waters: sceneryWaters(route, env),
       extraTrees,
       isDirtPath: p => (p.style ?? 'dirt') === 'dirt',
       signText: b => (b.type === 'center' ? 'Pokémon Center' : b.type === 'mart' ? 'Poké Mart' : b.label.replace(/\s*\(.*\)\s*/, '')),
@@ -818,16 +829,23 @@ class FirstPersonCity {
           .loadPokemon(species)
           .then(({ model, animations }) => {
             if (this.partner3DSpecies !== species || !this.scene) return;
-            const box = new THREE.Box3().setFromObject(model);
-            const k = vHeight / Math.max(0.001, box.max.y - box.min.y);
-            model.scale.multiplyScalar(k);
-            model.position.y = -box.min.y * k;
             const obj = new THREE.Group();
             obj.add(model);
             const mixer = new THREE.AnimationMixer(model);
             const clip = (re: RegExp) => animations.find(a => re.test(a.name.toLowerCase()));
             const idleClip = clip(/idle|wait/) || animations[0];
             const walkClip = clip(/walk|run|move/);
+            // Size from the posed, skinned model as it is actually drawn (the raw bind-pose
+            // bounds of these models are far larger than the rendered body, which made partners tiny)
+            if (idleClip) mixer.clipAction(idleClip).play();
+            mixer.update(0);
+            const box = renderedBounds(model);
+            const k = vHeight / Math.max(0.001, box.max.y - box.min.y);
+            model.scale.multiplyScalar(k);
+            model.updateMatrixWorld(true);
+            const grounded = renderedBounds(model);
+            model.position.y -= grounded.min.y;
+            mixer.stopAllAction();
             this.partner3D = { obj, mixer, idle: idleClip && mixer.clipAction(idleClip), walk: walkClip && mixer.clipAction(walkClip) };
             this.scene.add(obj);
             if (this.partner) this.partner.visible = false;

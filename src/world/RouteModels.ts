@@ -28,6 +28,9 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const COMMERCIAL_ROTATION = Math.PI; // Kenney commercial storefronts face -Z
 /** Which way the suburban houses' front doors face in model space (radians about Y). */
 const HOUSE_ROTATION = 0;
+/** poly.pizza buildings whose front door does not face +Z (checked by rendering each from four sides). */
+const MODEL_ROTATION: Record<string, number> = { 'p:lab_b': Math.PI };
+const rotationFor = (key: string) => MODEL_ROTATION[key] ?? (key.startsWith('c:') ? COMMERCIAL_ROTATION : HOUSE_ROTATION);
 
 /** A sign board (4:1) rendered to a canvas: coloured panel, optional Poké Ball emblem, bold label. */
 function signBoard(text: string, bg: string, ink: string, band: string, ball: boolean): THREE.Mesh {
@@ -143,6 +146,8 @@ export interface RouteModelInput {
   scale: { trees: number; props: number };
   /** Ground-cover density multiplier (lighter on phones). */
   groundCover?: number;
+  /** Seas / rivers that boats and docks may use (route waters + scenic edge water). */
+  waters?: { x: number; y: number; w: number; h: number; kind: string }[];
   /** Extra trees: `inner` fill open lawn, `ring` is the forest beyond the edges (drawn with lighter models). */
   extraTrees?: { inner: RouteTree[]; ring: RouteTree[] };
   /** Dirt trails get pebbles along their edges. */
@@ -353,9 +358,15 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
   }
 
   // Beyond the edges: forest ring, cliff walls or a distant skyline
+  const ringItems = new Set<Placement>();
+  const putRing = (n: string, p: Placement) => {
+    ringItems.add(p);
+    put(n, p);
+  };
   for (const t of input.extraTrees?.ring || []) {
     const h = hash(t.x, t.y);
     const z = zoneAt(env, Math.max(0, Math.min(W - 1, t.x)));
+    if (z.ringDensity !== undefined && hash(t.y, t.x) > z.ringDensity) continue;
     const cityZone = z.houses.some(m => m.startsWith('c:'));
     const outside = t.y < 0 || t.y > H;
     if (env.ring === 'skyline' && cityZone && t.y < 0) {
@@ -365,7 +376,7 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
         const n = names[Math.floor(h * 60) % names.length];
         if (has(n)) {
           const s = sized(n, 'xz', 60 + h * 30);
-          put(n, { x: t.x, z: t.y - 120, rot: Math.round(h * 4) * (Math.PI / 2), sx: s, sy: s * (1 + h), sz: s, far: 1400 });
+          putRing(n, { x: t.x, z: t.y - 120, rot: Math.round(h * 4) * (Math.PI / 2), sx: s, sy: s * (1 + h), sz: s, far: 1400 });
         }
       }
       continue;
@@ -374,7 +385,7 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
       const n = h < 0.15 ? 'k:rock_tallA' : h < 0.3 ? 'k:rock_tallC' : 'k:rock_tallB';
       if (has(n)) {
         const s = sized(n, 'y', 120 + h * 160);
-        put(n, { x: t.x, z: t.y + (t.y < 0 ? -40 : 40), rot: h * 9, sx: s * 1.4, sy: s, sz: s * 1.4, far: 1400 });
+        putRing(n, { x: t.x, z: t.y + (t.y < 0 ? -40 : 40), rot: h * 9, sx: s * 1.4, sy: s, sz: s * 1.4, far: 1400 });
         continue;
       }
     }
@@ -382,7 +393,7 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
     let { name, height } = pick ? { name: pick[0], height: pick[2] + 6 } : referenceRingModel(t, h);
     if (!has(name)) ({ name, height } = referenceRingModel(t, h));
     const s = sized(name, 'y', height * (t.scale || 1) * input.scale.trees);
-    put(name, { x: t.x, z: t.y, rot: h * Math.PI * 2, sx: s, sy: s, sz: s, far: FAR + 50 });
+    putRing(name, { x: t.x, z: t.y, rot: h * Math.PI * 2, sx: s, sy: s, sz: s, far: FAR + 50 });
   }
 
   // Lawn: grass clumps, clover, flowers or dry tufts on open lawn, per zone style
@@ -533,6 +544,32 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
   const nearPoi = (x: number, y: number, d: number) => poi.some(o => Math.hypot(o.x - x, o.y - y) < d);
   const nearSolid = (x: number, y: number, d: number) => solids.some(s => Math.hypot(s.x - x, s.z - y) < s.r + d);
   const roadWithin = (x: number, y: number, d: number) => [[d, 0], [-d, 0], [0, d], [0, -d]].some(([ox, oy]) => input.isRoad(x + ox, y + oy));
+  const skyline: { x: number; half: number }[] = [];
+  const zoneWaters = (x0: number, x1: number) =>
+    (input.waters || []).filter(w => (w.kind === 'sea' || w.kind === 'river' || w.kind === 'lake') && w.x < x1 - 60 && w.x + w.w > x0 + 60);
+  /** Fog-free copy of a model (aerial-perspective tint instead) for skyline landmarks. */
+  const fogColor = new THREE.Color(env.fog.color);
+  const noFog = (n: string): string => {
+    const key = n + '@nofog';
+    if (!loaded.has(key)) {
+      const src = model(n);
+      const scene = src.scene.clone(true);
+      scene.traverse(o => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        const conv = (mat: THREE.Material) => {
+          const c = (mat as THREE.MeshLambertMaterial).clone();
+          c.fog = false;
+          c.color.lerp(fogColor, 0.3);
+          return c;
+        };
+        m.material = Array.isArray(m.material) ? m.material.map(conv) : conv(m.material);
+      });
+      scene.updateMatrixWorld(true);
+      loaded.set(key, { scene, box: src.box });
+    }
+    return key;
+  };
   env.zones.forEach((z, zi) => {
     const x0 = z.from;
     const x1 = zoneEnd(z);
@@ -579,9 +616,44 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
             if (pier && x > pier.x - 16 && x < pier.x + pier.w + 16 && y > pier.y - 16 && y < pier.y + pier.h + 16) continue;
             break;
           }
+          case 'offshore':
+          case 'shore': {
+            const pools = zoneWaters(x0, x1);
+            if (!pools.length) return;
+            const w = pools[Math.floor(h1 * 991) % pools.length];
+            const lo = Math.max(w.x + 40, x0 + 30);
+            const hi = Math.min(w.x + w.w - 40, x1 - 30);
+            if (hi <= lo) return;
+            x = lo + h1 * (hi - lo);
+            const northBank = w.y + w.h <= 80; // river / sea along the north edge
+            const [name0, , target0] = pickWeighted(rule.models, hash(x, w.y));
+            if (!has(name0)) continue;
+            const sz = model(name0).box.getSize(new THREE.Vector3());
+            const longZ = sz.z > sz.x;
+            if (rule.where === 'offshore') {
+              // Out on the water, broadside to the shore, clear of the bank
+              y = northBank ? w.y + 20 + h2 * Math.max(10, w.h - 70) : Math.max(w.y, H) + 60 + h2 * 220;
+              if (w.w < 200 && w.h < 200) y = w.y + w.h / 2;
+              rot = (longZ ? Math.PI / 2 : 0) + (h2 < 0.5 ? 0 : Math.PI);
+            } else {
+              // Docks / bridges run out from the shore across the water
+              const s0 = sized(name0, rule.fit || 'y', target0);
+              const len = (longZ ? sz.z : sz.x) * s0;
+              y = northBank ? w.y + w.h / 2 : w.y + len / 2 - 6;
+              rot = longZ ? 0 : Math.PI / 2;
+            }
+            if (nearSolid(x, y, 60)) continue;
+            break;
+          }
+          case 'backdrop': {
+            // A landmark on the northern skyline, behind the ring of trees
+            y = -190 - h2 * 70;
+            x = x0 + (x1 - x0) * (0.45 + h1 * 0.1);
+            break;
+          }
           case 'edge': {
             // Just beyond the walkable boundary, so landmarks frame the route without blocking it
-            const north = h2 < 0.55;
+            const north = z.edgeWater ? z.edgeWater.side === 'south' : h2 < 0.55;
             y = north ? 10 + h2 * 80 : H - 20 + (h2 - 0.55) * 120;
             if ((route.portals || []).some(p => Math.abs(p.x - x) < 120 && Math.abs(p.y - y) < 160)) continue;
             if (route.buildings.some(b => x > b.x - 60 && x < b.x + b.w + 60 && Math.abs(y - (b.y + b.h / 2)) < b.h / 2 + 60)) continue;
@@ -590,17 +662,35 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
             break;
           }
         }
-        const [name, , target] = pickWeighted(rule.models, hash(x, y));
+        const onWater = rule.where === 'offshore' || rule.where === 'shore';
+        const [name, , target] = pickWeighted(rule.models, onWater ? hash(x, zoneWaters(x0, x1)[0]?.y ?? 0) : hash(x, y));
         if (!has(name)) continue;
-        const s = sized(name, rule.fit || 'y', target * (0.85 + h2 * 0.3));
-        put(name, { x, z: y, rot, sx: s, sy: s, sz: s, far: rule.solid ? FAR + 100 : Math.min(FAR, 640) });
+        const big = rule.where === 'backdrop' || onWater;
+        const s = sized(name, rule.fit || 'y', target * (big ? 1 : 0.85 + h2 * 0.3));
+        // Skyline landmarks are drawn without fog so they read from across the map
+        const key = rule.where === 'backdrop' ? noFog(name) : name;
+        put(key, { x, z: y, rot, sx: s, sy: s, sz: s, far: rule.where === 'backdrop' ? 4000 : onWater ? FAR + 300 : rule.solid ? FAR + 100 : Math.min(FAR, 640) });
+        if (rule.where === 'backdrop') {
+          const bs = model(name).box.getSize(new THREE.Vector3());
+          skyline.push({ x, half: (Math.max(bs.x, bs.z) * s) / 2 + 60 });
+        }
         if (rule.solid) solids.push({ x, z: y, r: rule.solid });
         placed++;
       }
     });
   });
 
-  for (const [name, items] of bucket) sets.push(instance(model(name), items, group));
+  // Nothing on the northern ring may hide a skyline landmark
+  for (const c of skyline) {
+    for (const items of bucket.values()) {
+      for (let i = items.length - 1; i >= 0; i--) {
+        const it = items[i];
+        if (ringItems.has(it) && it.z < 0 && Math.abs(it.x - c.x) < c.half) items.splice(i, 1);
+      }
+    }
+  }
+
+  for (const [name, items] of bucket) if (items.length) sets.push(instance(model(name), items, group));
 
   // Houses: per-zone models fitted to each house footprint, door facing the street (south)
   const houses = new Set<RouteBuilding>();
@@ -616,7 +706,7 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
         mesh.material = mat;
       });
     }
-    obj.rotation.y = key.startsWith('c:') ? COMMERCIAL_ROTATION : HOUSE_ROTATION;
+    obj.rotation.y = rotationFor(key);
     obj.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(obj);
     const size = box.getSize(new THREE.Vector3());
@@ -636,7 +726,9 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
     if (!z.houses.length) continue;
     const h = hash(b.x, b.y);
     const key = z.houses[Math.floor(h * z.houses.length) % z.houses.length];
-    const skins = z.houseSkins.filter(p => p.startsWith(key.startsWith('c:') ? 'commercial' : 'suburban'));
+    // Colour-map variations only exist for the Kenney kits
+    const kit = key.startsWith('c:') ? 'commercial' : key.startsWith('s:') ? 'suburban' : null;
+    const skins = kit ? z.houseSkins.filter(p => p.startsWith(kit)) : [];
     const skin = skins.length ? environmentAssets.texture(skins[Math.floor(h * 97) % skins.length]) : null;
     place(b, key, skin, z.maxBuildingHeight);
   }

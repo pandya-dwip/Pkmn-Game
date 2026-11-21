@@ -388,8 +388,8 @@ export const KANTO_JOURNEY_ROUTES: RouteDefinition[] = [
       },
       {
         id: 'r0_money2',
-        x: 2180,
-        y: 560,
+        x: 2150,
+        y: 628,
         name: 'Poké Dollars',
         type: 'money',
         amount: 800,

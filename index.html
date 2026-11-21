@@ -80,6 +80,12 @@
             </svg>
             <span>MAP</span>
           </button>
+          <button id="hud-quest-btn" class="hud-btn hud-icon-btn" title="Quest Journal" aria-label="Quest Journal">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"><path d="M6 3h10a2 2 0 0 1 2 2v14l-3-2-3 2-3-2-3 2V5a2 2 0 0 1 2-2z"/><path d="M9 8h6M9 12h6"/></svg>
+          </button>
+          <button id="hud-partner-btn" class="hud-btn hud-icon-btn" title="Walking Partner" aria-label="Walking Partner">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><ellipse cx="7" cy="9" rx="2" ry="2.6"/><ellipse cx="12" cy="6.5" rx="2" ry="2.6"/><ellipse cx="17" cy="9" rx="2" ry="2.6"/><path d="M12 11c-3 0-6 3.5-6 6 0 1.7 1.4 2.5 3 2.5 1.2 0 2-.6 3-.6s1.8.6 3 .6c1.6 0 3-.8 3-2.5 0-2.5-3-6-6-6z"/></svg>
+          </button>
           <button id="hud-menu-btn" class="hud-btn" title="Party & Bag">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2">
               <line x1="3" y1="12" x2="21" y2="12" />
@@ -93,6 +99,8 @@
 
       <div id="route-viewport">
         <canvas id="route-canvas" width="800" height="480"></canvas>
+        <button id="hud-quest" class="hud-quest hidden" title="Open Quest Journal"></button>
+        <div id="route-fade" class="route-fade" aria-hidden="true"></div>
         <div id="route-prompt" class="route-prompt hidden"></div>
         <!-- Modern Dynamic Virtual Touch Joystick -->
         <div id="touch-joystick" class="touch-joystick hidden">
@@ -395,6 +403,7 @@
           <div class="dots" id="fd"></div>
         </div>
         <div class="info p">
+          <canvas id="p-trainer" class="battle-trainer" width="36" height="44" aria-hidden="true"></canvas>
           <div class="nm"><span id="pn"></span><span id="pl"></span></div>
           <div class="bar"><i id="pb"></i></div>
           <div id="ph"></div>

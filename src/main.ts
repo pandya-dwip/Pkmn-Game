@@ -31,7 +31,33 @@ import { ICONS } from './ui/icons';
 import { KANTO_CITIES, KantoCityInfo, getFurthestUnlockedCityIndex } from './data/cities';
 import { characterSelectionView } from './ui/CharacterSelectionView';
 import { kantoWorldMapView } from './ui/KantoWorldMapView';
-import { getTrainerCharacter } from './data/characters';
+import { getTrainerCharacter, drawCustomTrainerSprite, TrainerCustomization } from './data/characters';
+import { getRouteDefinition, AREA_INFO, SPECIAL_AREAS } from './data/specialAreas';
+import { QUESTS, QuestReward, getQuestDef } from './data/quests';
+import {
+  QuestLog,
+  QuestWorld,
+  QuestEvent,
+  acceptQuest,
+  completeQuest,
+  recordQuestEvent,
+  questsForSource,
+  markerForSource,
+  isReady,
+  objectiveProgress,
+} from './systems/QuestSystem';
+import { migrateSave, CURRENT_SAVE_VERSION } from './systems/SaveMigration';
+import { PlayerAppearance, UnlockContext, resolveAppearance } from './data/cosmetics';
+import { openQuestJournal, rewardChips } from './ui/QuestJournalView';
+import { openCompanionPicker } from './ui/CompanionPicker';
+import { openCustomization } from './ui/CustomizationView';
+import { playEvolutionCinematic } from './ui/EvolutionCinematic';
+import { UI_ICONS } from './ui/Sheet';
+import { MapAreaPin } from './ui/KantoWorldMapView';
+import { CompanionInfo } from './world/CompanionController';
+import { WorldCondition } from './world/WorldTypes';
+import { RouteNPC } from './systems/RouteExplorationEngine';
+import { buildEncounterMon } from './systems/EncounterSystem';
 
 // ============================================================================
 // GLOBAL CONFIGURATION & TYPES
@@ -146,6 +172,19 @@ export interface GameSaveState {
   currentRouteId?: number;
   currentCityIndex?: number;
   wildBattlesCount?: number;
+
+  // ---- World expansion (save v2) ----
+  saveVersion?: number;
+  companion?: { uid: string | null; following: boolean };
+  quests?: QuestLog;
+  trackedQuest?: string | null;
+  flags?: Record<string, boolean>;
+  keyItems?: string[];
+  visitedAreas?: number[];
+  collected?: string[];
+  appearance?: PlayerAppearance;
+  unlockedCosmetics?: string[];
+  pendingEvolution?: { uid: string; from: number; to: number; stone?: string | null } | null;
 }
 
 export function getTrainingXpMultiplier(state?: GameSaveState | null): number {
@@ -305,6 +344,8 @@ export const save = () => {
   } catch { }
 };
 
+const isKnownLocation = (id: number) => (id >= 0 && id < KANTO_JOURNEY_ROUTES.length) || SPECIAL_AREAS.some(a => a.id === id);
+
 export const load = (): GameSaveState | null => {
   try {
     const raw = localStorage.getItem(KEY);
@@ -339,6 +380,13 @@ export const load = (): GameSaveState | null => {
       g.team.forEach(m => {
         m.uid = m.uid || nu();
       });
+      // Preserve the untouched original before the first migration to v2
+      if ((g.saveVersion ?? 1) < CURRENT_SAVE_VERSION) {
+        try {
+          if (!localStorage.getItem(KEY + '_backup_v1')) localStorage.setItem(KEY + '_backup_v1', raw);
+        } catch { }
+      }
+      migrateSave(g as any, isKnownLocation, nu);
       return g;
     }
     return null;
@@ -399,6 +447,7 @@ export const mvh = (v: any, e: number = 1) => {
 
 export const show = (id: string) => {
   document.querySelectorAll('.scr').forEach(e => e.classList.toggle('on', e.id === id));
+  if (id !== 'route') sound.ambient(null);
   if (id !== 'bat') {
     pokemon3DManager.stop();
   }
@@ -513,9 +562,11 @@ export function titleScr(): void {
     </div>
   `;
 
-  $('#bc').onclick = () => {
+  $('#bc').onclick = async () => {
     G = load()!;
-    routeExplorationEngine.selectedTrainerId = G.selectedTrainerId || 'male_red';
+    save(); // persist the migrated (v2) save; the original v1 copy is kept as a backup
+    applyWorldPresentation();
+    await recoverPendingEvolution();
     if (G.phase === 'INTRO' || G.phase === 'NAMING') characterSelectionScr(G.trainerName);
     else if (G.phase === 'STARTER_SELECTION') starterScr(G.trainerName, G.selectedTrainerId);
     else if (G.phase === 'ROUTE_ENCOUNTER') routeEncounterScr();
@@ -766,7 +817,9 @@ export function starterScr(trainerName: string = 'DWIP', selectedTrainerId: stri
           defeated: false,
         };
 
-        routeExplorationEngine.selectedTrainerId = G.selectedTrainerId || 'male_red';
+        migrateSave(G as any, isKnownLocation, nu);
+        G.companion = { uid: starterMon.uid, following: true };
+        applyWorldPresentation();
         pokedexManager.recordCaught(chosen.id);
         save();
 
@@ -794,6 +847,506 @@ export function starterScr(trainerName: string = 'DWIP', selectedTrainerId: stri
 // ============================================================================
 // SCREEN 5: ROUTE EXPLORATION LAYER (Interactive Kanto Travel)
 // ============================================================================
+// ============================================================================
+// WORLD EXPANSION: COMPANION, QUESTS, EXPLORATION, COSMETICS, EVOLUTION
+// ============================================================================
+const collectedKey = (routeId: number, id: string) => `${routeId}:${id}`;
+
+function hasFlag(f: string): boolean {
+  return !!G?.flags?.[f];
+}
+
+function setFlag(f: string): void {
+  if (!G) return;
+  G.flags = G.flags || {};
+  if (!G.flags[f]) {
+    G.flags[f] = true;
+    save();
+  }
+}
+
+let questWorldCache: { t: number; w: QuestWorld } | null = null;
+/** Progress snapshot used by quests; briefly cached because world markers query it every frame. */
+export function questWorld(fresh = false): QuestWorld {
+  const now = performance.now();
+  if (!fresh && questWorldCache && now - questWorldCache.t < 250) return questWorldCache.w;
+  const w: QuestWorld = {
+    badges: (G?.badges || []).length,
+    flags: G?.flags || {},
+    keyItems: G?.keyItems || [],
+    visited: G?.visitedAreas || [],
+    party: (G?.team || []).map(m => ({ id: m.id, lv: m.lv, types: POKEMON_SPECIES_MAP[m.id]?.typesShort || [] })),
+    bag: { b: G?.b || 0, b50: G?.b50 || 0, balls: G?.balls || 0 },
+  };
+  questWorldCache = { t: now, w };
+  return w;
+}
+
+export function isConditionMet(c?: WorldCondition): boolean {
+  if (!c || !G) return true;
+  if (c.flag && !hasFlag(c.flag)) return false;
+  if (c.notFlag && hasFlag(c.notFlag)) return false;
+  if (c.minBadges !== undefined && (G.badges || []).length < c.minBadges) return false;
+  if (c.keyItem && !(G.keyItems || []).includes(c.keyItem)) return false;
+  const q = G.quests || {};
+  if (c.questActive && q[c.questActive]?.status !== 'active') return false;
+  if (c.questCompleted && q[c.questCompleted]?.status !== 'completed') return false;
+  if (c.questNotCompleted && q[c.questNotCompleted]?.status === 'completed') return false;
+  return true;
+}
+
+export function isChampion(): boolean {
+  if (!G) return false;
+  if (['ELITE_FOUR_HUB', 'ELITE_FOUR_BATTLE', 'HALL_OF_FAME', 'CHAMPIONSHIP_VICTORY'].includes(G.phase)) return true;
+  if ((G.eliteFour?.defeated || []).length >= 4) return true;
+  try {
+    return JSON.parse(localStorage.getItem('kantoChampionshipRecords') || '[]').length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export function unlockContext(): UnlockContext {
+  return { badges: (G?.badges || []).length, champion: isChampion(), rewards: G?.unlockedCosmetics || [] };
+}
+
+/** The trainer's full look (base character + cosmetics) used everywhere the trainer is drawn. */
+export function playerLook(): TrainerCustomization {
+  return resolveAppearance(G?.selectedTrainerId, G?.appearance, unlockContext());
+}
+
+function companionInfoFor(m: MonInstance): CompanionInfo {
+  const spec = POKEMON_SPECIES_MAP[m.id];
+  const total = spec ? calculateBaseStatTotal(spec) : 300;
+  return {
+    uid: m.uid,
+    speciesId: m.id,
+    name: spec?.name || 'Partner',
+    sizeClass: total < 330 ? 0 : total < 470 ? 1 : 2,
+    flies: (spec?.typesShort || []).some(t => t === 'Fl' || t === 'Gh') || [81, 82, 109, 110].includes(m.id),
+  };
+}
+
+/** The companion always references the live party instance (by uid); never a copy. */
+export function syncCompanion(): void {
+  const c = G?.companion;
+  const mon = c && c.following && c.uid ? G.team.find(m => m.uid === c.uid) : undefined;
+  routeExplorationEngine.companion.setCompanion(mon ? companionInfoFor(mon) : null);
+}
+
+function applyWorldPresentation(): void {
+  routeExplorationEngine.selectedTrainerId = G?.selectedTrainerId || 'male_red';
+  routeExplorationEngine.playerAppearance = playerLook();
+  routeExplorationEngine.hasLantern = (G?.keyItems || []).includes('lantern');
+  syncCompanion();
+}
+
+function refreshHudCounters(): void {
+  const ballsVal = $('#hud-balls-val');
+  const moneyVal = $('#hud-money-val');
+  if (ballsVal) ballsVal.textContent = String(G.balls || 0);
+  if (moneyVal) moneyVal.textContent = (G.money || 0).toLocaleString();
+}
+
+const escH = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+const dlg = (speaker: string, line: string) => `<div class="dlg-head">${escH(speaker)}</div><p class="dlg">"${escH(line)}"</p>`;
+
+function questToast(title: string, sub: string): void {
+  const host = document.getElementById('g');
+  if (!host) return;
+  const el = document.createElement('div');
+  el.className = 'quest-toast';
+  el.innerHTML = `<b>${escH(title)}</b><span>${escH(sub)}</span>`;
+  host.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('on'));
+  setTimeout(() => {
+    el.classList.remove('on');
+    setTimeout(() => el.remove(), 320);
+  }, 2800);
+}
+
+const readyAnnounced = new Set<string>();
+function announceReadyQuests(): void {
+  if (!G?.quests) return;
+  const w = questWorld(true);
+  for (const def of QUESTS) {
+    const st = G.quests[def.id];
+    if (st?.status === 'active' && isReady(def, st, w)) {
+      if (!readyAnnounced.has(def.id)) {
+        readyAnnounced.add(def.id);
+        questToast('Objectives complete', `${def.title} · see ${(def.turnIn || def.giver).name}`);
+        sound.questAccept();
+      }
+    } else readyAnnounced.delete(def.id);
+  }
+}
+
+/** Compact tracked-quest line on the exploration HUD. */
+export function updateQuestHud(): void {
+  const el = document.getElementById('hud-quest');
+  if (!el || !G) return;
+  announceReadyQuests();
+  const id = G.trackedQuest;
+  const def = id ? getQuestDef(id) : undefined;
+  const st = id ? G.quests?.[id] : undefined;
+  if (!def || !st || st.status !== 'active') {
+    el.classList.add('hidden');
+    return;
+  }
+  const w = questWorld(true);
+  const ready = isReady(def, st, w);
+  let line = `Return to ${(def.turnIn || def.giver).name}`;
+  if (!ready) {
+    const idx = def.objectives.findIndex((_, i) => !objectiveProgress(def, i, st, w).done);
+    const p = objectiveProgress(def, idx, st, w);
+    line = def.objectives[idx].label + (p.need > 1 ? ` (${p.cur}/${p.need})` : '');
+  }
+  el.innerHTML = `<span class="hq-title">${escH(def.title)}</span><span class="hq-line">${escH(line)}</span>`;
+  el.classList.toggle('ready', ready);
+  el.classList.remove('hidden');
+}
+
+function noteQuestEvent(ev: QuestEvent): void {
+  if (!G) return;
+  G.quests = G.quests || {};
+  const touched = recordQuestEvent(G.quests, ev);
+  if (touched.length) {
+    save();
+    for (const t of touched) questToast('Quest updated', t);
+  }
+  updateQuestHud();
+}
+
+/** Apply quest rewards to the bag. Called once per quest, guarded by completeQuest(). */
+function grantQuestReward(r: QuestReward): string[] {
+  G.money = (G.money || 0) + (r.money || 0);
+  G.balls = (G.balls || 0) + (r.balls || 0);
+  G.greatBalls = (G.greatBalls || 0) + (r.greatBalls || 0);
+  G.ultraBalls = (G.ultraBalls || 0) + (r.ultraBalls || 0);
+  G.b = (G.b || 0) + (r.oran || 0);
+  G.b50 = (G.b50 || 0) + (r.sitrus || 0);
+  G.rv = (G.rv || 0) + (r.revives || 0);
+  for (const [k, v] of Object.entries(r.stones || {})) G.st[k] = (G.st[k] || 0) + v;
+  G.unlockedCosmetics = G.unlockedCosmetics || [];
+  for (const c of r.cosmetics || []) if (!G.unlockedCosmetics.includes(c)) G.unlockedCosmetics.push(c);
+  G.flags = G.flags || {};
+  for (const f of r.flags || []) G.flags[f] = true;
+  return rewardChips(r);
+}
+
+/**
+ * Quest interactions for an NPC or notice board, in priority order:
+ * delivery/talk objectives -> turn-ins -> new offers -> reminders.
+ * Returns true if a quest interaction happened.
+ */
+async function handleQuestSource(kind: 'npc' | 'board', id: string, name: string): Promise<boolean> {
+  G.quests = G.quests || {};
+  const w = questWorld(true);
+  const qs = questsForSource(kind, id, G.quests, w);
+
+  for (const q of qs.filter(x => x.role === 'talk')) {
+    const flag = 'talk:' + q.def.id + ':' + id;
+    if (!hasFlag(flag)) {
+      setFlag(flag);
+      await note([dlg(name, q.def.talkLine || 'Thank you!')]);
+      questToast('Quest updated', q.def.title);
+      updateQuestHud();
+      return true;
+    }
+  }
+
+  for (const q of qs.filter(x => x.role !== 'talk' && x.status === 'ready')) {
+    const reward = completeQuest(G.quests, q.def.id, w);
+    if (!reward) continue;
+    for (const o of q.def.objectives) {
+      if (o.kind === 'have_item' && o.consume) (G as any)[o.item] = Math.max(0, ((G as any)[o.item] || 0) - o.count);
+    }
+    const chips = grantQuestReward(reward);
+    if (G.trackedQuest === q.def.id) G.trackedQuest = null;
+    save(); // completion + rewards persist together
+    sound.questComplete();
+    await note([
+      dlg(name, q.def.dialogue.complete),
+      `<div class="reward-box"><div class="reward-title">Quest complete · ${escH(q.def.title)}</div>${chips.map(c => `<span class="reward-chip">${escH(c)}</span>`).join('')}</div>`,
+    ]);
+    applyWorldPresentation();
+    refreshHudCounters();
+    updateQuestHud();
+    return true;
+  }
+
+  const offer = qs.find(x => x.role === 'giver' && x.status === 'available');
+  if (offer) {
+    const choice = await pick(
+      `${dlg(name, offer.def.dialogue.offer)}<div class="quest-offer"><span class="qo-cat">${escH(offer.def.category)}</span><b>${escH(offer.def.title)}</b><small>${rewardChips(offer.def.rewards).map(escH).join(' · ')}</small></div>`,
+      [{ h: 'ACCEPT QUEST' }, { h: 'NOT NOW' }]
+    );
+    if (choice === 0) {
+      acceptQuest(G.quests, offer.def.id);
+      if (!G.trackedQuest) G.trackedQuest = offer.def.id;
+      save();
+      sound.questAccept();
+      questToast('New quest', offer.def.title);
+      updateQuestHud();
+    }
+    return true;
+  }
+
+  const active = qs.find(x => x.role !== 'talk' && x.status === 'active');
+  if (active) {
+    await note([dlg(name, active.def.dialogue.reminder)]);
+    return true;
+  }
+  return false;
+}
+
+export function openQuestJournalScr(onClose?: () => void): void {
+  G.quests = G.quests || {};
+  openQuestJournal({
+    log: G.quests,
+    world: questWorld(true),
+    tracked: G.trackedQuest || null,
+    onTrack: id => {
+      G.trackedQuest = id;
+      save();
+      updateQuestHud();
+    },
+    onClose,
+  });
+}
+
+export function openCompanionScr(onClose?: () => void): void {
+  G.companion = G.companion || { uid: G.team[0]?.uid ?? null, following: true };
+  openCompanionPicker({
+    party: G.team.map(m => ({ uid: m.uid, id: m.id, lv: m.lv, name: POKEMON_SPECIES_MAP[m.id]?.name || 'Pokémon', fainted: m.hp <= 0 })),
+    currentUid: G.companion.uid,
+    following: G.companion.following,
+    spriteUrl: id => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`,
+    onSelect: uid => {
+      G.companion = { uid, following: true };
+      save();
+      syncCompanion();
+      const p = routeExplorationEngine.player;
+      if (routeExplorationEngine.currentRoute) {
+        const r = routeExplorationEngine.currentRoute;
+        routeExplorationEngine.companion.snapBehind(p.x, p.y, p.dir, (x, y) => !routeExplorationEngine.isBlocked(x, y, r));
+      }
+      const m = G.team.find(x => x.uid === uid);
+      if (m) sound.cry(m.id, 'in');
+    },
+    onToggleFollow: follow => {
+      G.companion!.following = follow;
+      save();
+      syncCompanion();
+      if (follow && routeExplorationEngine.currentRoute) {
+        const p = routeExplorationEngine.player;
+        const r = routeExplorationEngine.currentRoute;
+        routeExplorationEngine.companion.snapBehind(p.x, p.y, p.dir, (x, y) => !routeExplorationEngine.isBlocked(x, y, r));
+      }
+    },
+    onClose,
+  });
+}
+
+export function openCustomizeScr(onClose?: () => void): void {
+  openCustomization({
+    baseId: G.selectedTrainerId || 'male_red',
+    appearance: G.appearance || {},
+    unlock: unlockContext(),
+    onConfirm: (baseId, appearance) => {
+      G.selectedTrainerId = baseId;
+      G.appearance = appearance;
+      save();
+      applyWorldPresentation();
+      sound.beep(880, 0.15, 'triangle');
+    },
+    onClose,
+  });
+}
+
+/** Small trainer portrait used on the hub, in battle and in the Hall of Fame. */
+export function drawTrainerPortrait(canvas: HTMLCanvasElement, dir: 'down' | 'left' | 'right' = 'down'): void {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const s = canvas.height / 44;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawCustomTrainerSprite(ctx, canvas.width / 2, canvas.height * 0.62, dir, 0, playerLook(), false, 0, s, true);
+}
+
+/** Fade the exploration view, switch location, and fade back in. */
+async function travelTo(target: number, x: number, y: number): Promise<void> {
+  routeExplorationEngine.isPaused = true;
+  const fade = document.getElementById('route-fade');
+  fade?.classList.add('on');
+  await sleep(240);
+  G.currentRouteId = target;
+  G.savedRoutePos = { routeId: target, x, y };
+  save();
+  enterRouteExploration(target, x, y);
+  await sleep(80);
+  fade?.classList.remove('on');
+}
+
+/** Trainer battle for NPC challengers and quest rematches (reuses the full battle engine). */
+export async function battleTrainer(npc: RouteNPC, back: { routeId: number; x: number; y: number }): Promise<void> {
+  const tr = npc.trainer!;
+  const pl = G.team.filter(m => m.hp > 0);
+  if (!pl.length) {
+    await note(['Your Pokémon are too tired to battle. Rest at a Pokémon Center first.']);
+    enterRouteExploration(back.routeId, back.x, back.y);
+    return;
+  }
+  const elite = tr.id.startsWith('rematch');
+  sound.music(elite ? 'intense' : 'battle');
+  show('bat');
+  $('#ctl').innerHTML = '';
+  $('#msg').textContent = '';
+  $('#fld').className = 'env-grass';
+  pokemon3DManager.init($('#world'));
+  pokemon3DManager.start();
+
+  const sq = pl.slice(0, MAX_ACTIVE_TEAM);
+  B = {
+    r: back.routeId,
+    tn: npc.name,
+    ai: elite ? 3 : 2,
+    fb: elite ? 2 : 1,
+    foe: tr.team.map(m => mk(m.id, m.lv)),
+    tm: sq,
+    fu: null,
+    pu: null,
+    get fi() {
+      return this.foe.findIndex((m: MonInstance) => m.uid === this.fu);
+    },
+    set fi(v: number) {
+      this.fu = this.foe[v].uid;
+    },
+    get pi() {
+      return this.tm.findIndex((m: MonInstance) => m.uid === this.pu);
+    },
+    set pi(v: number) {
+      this.pu = this.tm[v].uid;
+    },
+    gain: 0,
+    sent: 0,
+    part: new Set<number>(),
+  };
+  B.fi = 0;
+  B.pi = 0;
+  ['p', 'f'].forEach(s => ($('#' + s + 's').dataset.k = ''));
+  ui();
+  if (sq.length > 1) {
+    B.pi = await pickTeam('Choose your lead Pokémon', false);
+    ui();
+  }
+  B.part.add(B.pi);
+
+  await say(`${npc.name} wants to battle!`);
+  await say(`${npc.name} sent out ${POKEMON_SPECIES_MAP[F().id]?.name.toUpperCase()}!`);
+  await say(`Go! ${POKEMON_SPECIES_MAP[P().id]?.name.toUpperCase()}!`);
+  let res: string | null = null;
+  while (!res) res = await turn(await menu());
+  pokemon3DManager.stop();
+
+  if (res === 'lose') {
+    G.team.forEach(m => (m.hp = st(m).max));
+    save();
+    sound.music('menu');
+    await note([`<h1>DEFEATED</h1>`, dlg(npc.name, 'Better luck next time!'), 'You hurried back and rested your team. They are fully healed.']);
+    enterRouteExploration(back.routeId, back.x, back.y);
+    return;
+  }
+
+  G.money = (G.money || 0) + tr.reward;
+  setFlag('trainer:' + tr.id);
+  noteQuestEvent({ kind: 'defeat_trainer', trainerId: tr.id });
+  save();
+  sound.music('victory');
+  await note([`<h1>VICTORY!</h1>`, dlg(npc.name, tr.defeat), `Prize money: <b>₽${tr.reward.toLocaleString()}</b>`]);
+  enterRouteExploration(back.routeId, back.x, back.y);
+}
+
+// ---------------------------------------------------------------------------
+// Evolution: journaled so an interrupted cinematic can never leave a Pokémon
+// half-evolved. The pending record is written before the cinematic and the
+// species change + stone use + journal clear are saved together.
+// ---------------------------------------------------------------------------
+function findMon(uid: string): MonInstance | undefined {
+  return G.team.find(m => m.uid === uid) || G.pcBox.find(m => m.uid === uid);
+}
+
+function commitEvolution(p: { uid: string; from: number; to: number; stone?: string | null }): { before: Record<string, number>; after: Record<string, number> } {
+  const m = findMon(p.uid);
+  const before = m ? { ...st(m) } : {};
+  if (m && m.id === p.from) {
+    m.id = p.to;
+    // Full restore on evolution (existing rule)
+    m.hp = st(m).max;
+    if (p.stone && (G.st[p.stone] || 0) > 0) G.st[p.stone]--;
+    pokedexManager.recordCaught(p.to);
+  }
+  G.pendingEvolution = null;
+  save();
+  if (G.companion?.uid === p.uid) syncCompanion();
+  return { before, after: m ? { ...st(m) } : {} };
+}
+
+export async function runEvolution(m: MonInstance, toId: number, stoneKey?: string): Promise<void> {
+  const from = m.id;
+  G.pendingEvolution = { uid: m.uid, from, to: toId, stone: stoneKey || null };
+  save();
+  const fromName = POKEMON_SPECIES_MAP[from]?.name.toUpperCase() || 'POKÉMON';
+  const toName = POKEMON_SPECIES_MAP[toId]?.name.toUpperCase() || 'POKÉMON';
+  try {
+    await playEvolutionCinematic({
+      fromId: from,
+      toId,
+      fromName,
+      toName,
+      artUrl: U,
+      typesHtml: id => (POKEMON_SPECIES_MAP[id]?.typesShort || []).map(t => `<span class="t-badge t-${t.toLowerCase()}">${TYPE_NAMES[t as keyof typeof TYPE_NAMES] || t}</span>`).join(' '),
+      applyEvolution: () => commitEvolution({ uid: m.uid, from, to: toId, stone: stoneKey || null }),
+    });
+  } catch (e) {
+    console.warn('Evolution cinematic failed; applying evolution directly.', e);
+    if (G.pendingEvolution) commitEvolution(G.pendingEvolution);
+  }
+  ui();
+  if (HUB) HUB.push(`${fromName} evolved into ${toName}!`);
+}
+
+/** Finish an evolution that was interrupted by a refresh or crash. */
+async function recoverPendingEvolution(): Promise<void> {
+  const p = G?.pendingEvolution;
+  if (!p) return;
+  const m = findMon(p.uid);
+  if (!m) {
+    G.pendingEvolution = null;
+    save();
+    return;
+  }
+  const already = m.id === p.to;
+  commitEvolution(p);
+  if (!already) {
+    await note([`<h3>Evolution completed</h3>`, `Your ${POKEMON_SPECIES_MAP[p.from]?.name} finished evolving into <b>${POKEMON_SPECIES_MAP[p.to]?.name}</b> while you were away.`]);
+  }
+}
+
+function areaPinsForMap(): MapAreaPin[] {
+  const visited = G?.visitedAreas || [];
+  const here = G?.savedRoutePos?.routeId ?? G?.currentRouteId;
+  return AREA_INFO.filter(a => a.map && visited.includes(a.id)).map(a => ({
+    id: a.id,
+    name: a.name,
+    kind: a.kind,
+    mapX: a.map![0],
+    mapY: a.map![1],
+    canTravel: a.fastTravel,
+    current: here === a.id,
+  }));
+}
+
 export function saveCurrentRoutePosition(): void {
   if (routeExplorationEngine.currentRoute && G) {
     G.currentRouteId = routeExplorationEngine.currentRoute.id;
@@ -841,6 +1394,16 @@ export function openTownMapModal(): void {
     currentCityIndex: currentCityIdx,
     gymIndex: G.gymIndex,
     has8Badges: (G.badges || []).length >= 8,
+    areas: areaPinsForMap(),
+    onAreaTravel: async (areaId: number) => {
+      const def = getRouteDefinition(areaId);
+      sound.beep(523, 0.15, 'sine');
+      sound.beep(784, 0.25, 'sine', 0.15, 0.2);
+      G.savedRoutePos = { routeId: def.id, x: def.startX, y: def.startY };
+      G.currentRouteId = def.id;
+      save();
+      enterRouteExploration(def.id, def.startX, def.startY);
+    },
     onTravel: async (targetCityIdx: number) => {
       const targetCity = KANTO_CITIES[targetCityIdx];
       if (targetCity.index === currentCityIdx) {
@@ -886,7 +1449,7 @@ export function openTownMapModal(): void {
 }
 
 export function enterRouteExploration(routeId?: number, resumeX?: number, resumeY?: number): void {
-  // Determine active route: explicit param > G.savedRoutePos.routeId > G.currentRouteId > G.gymIndex
+  // Determine active location: explicit param > G.savedRoutePos.routeId > G.currentRouteId > G.gymIndex
   const rId =
     routeId !== undefined
       ? routeId
@@ -896,33 +1459,45 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
           ? G.currentRouteId
           : Math.min(KANTO_JOURNEY_ROUTES.length - 1, G?.gymIndex || 0)));
 
-  if (G) {
-    G.currentRouteId = rId;
-  }
-
-  const routeDef = KANTO_JOURNEY_ROUTES[rId] || KANTO_JOURNEY_ROUTES[0];
+  const routeDef = getRouteDefinition(rId);
+  if (G) G.currentRouteId = routeDef.id;
 
   // Resume saved position if returning to route without explicit coordinates
-  if (resumeX === undefined && resumeY === undefined && G?.savedRoutePos && G.savedRoutePos.routeId === rId) {
+  if (resumeX === undefined && resumeY === undefined && G?.savedRoutePos && G.savedRoutePos.routeId === routeDef.id) {
     resumeX = G.savedRoutePos.x;
     resumeY = G.savedRoutePos.y;
   }
 
-  sound.music('menu');
+  // Persistent world state: collected items and one-time NPC gifts never respawn
+  G.collected = G.collected || [];
+  for (const it of routeDef.items) it.collected = G.collected.includes(collectedKey(routeDef.id, it.id));
+  for (const n of routeDef.npcs) {
+    if (n.gift) n.given = G.collected.includes('npc:' + collectedKey(routeDef.id, n.id)) || (n.gift.type === 'key' && (G.keyItems || []).includes(n.gift.detail || ''));
+  }
+
+  // First visit to an exploration area
+  let firstVisit = false;
+  if (routeDef.isSpecialArea) {
+    G.visitedAreas = G.visitedAreas || [];
+    if (!G.visitedAreas.includes(routeDef.id)) {
+      G.visitedAreas.push(routeDef.id);
+      firstVisit = true;
+      save();
+    }
+  }
+
+  const kind = routeDef.areaKind || (routeDef.theme === 'forest' ? 'forest' : routeDef.theme === 'water' ? 'coast' : null);
+  sound.music(routeDef.music || 'menu');
   show('route');
+  sound.ambient(kind);
 
   // Update HUD elements
   const locEl = $('#hud-location');
   const destEl = $('#hud-destination');
-  const ballsVal = $('#hud-balls-val');
-  const moneyVal = $('#hud-money-val');
   const encDots = $('#hud-enc-dots');
-
   if (locEl) locEl.textContent = routeDef.name;
-  if (destEl) destEl.textContent = `➔ ${routeDef.destinationLabel}`;
-  if (ballsVal) ballsVal.textContent = String(G?.balls || 0);
-  if (moneyVal) moneyVal.textContent = (G?.money || 0).toLocaleString();
-
+  if (destEl) destEl.textContent = routeDef.isSpecialArea ? routeDef.locationLabel : `➔ ${routeDef.destinationLabel}`;
+  refreshHudCounters();
   if (encDots) {
     const doneCount = Math.min(5, G?.routeEncountersDone || 0);
     encDots.innerHTML = Array.from({ length: 5 })
@@ -930,57 +1505,79 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
       .join('');
   }
 
+  const eng = routeExplorationEngine;
+  eng.isConditionMet = isConditionMet;
+  eng.getFlag = hasFlag;
+  eng.setFlag = setFlag;
+  eng.questMarkerFor = npc => markerForSource('npc', npc.id, G.quests || {}, questWorld());
+  eng.noticeBoardHasNew = nb => markerForSource('board', nb.id, G.quests || {}, questWorld()) !== null;
+  applyWorldPresentation();
+
   const canvas = $('#route-canvas') as HTMLCanvasElement;
   if (canvas) {
-    routeExplorationEngine.init(canvas);
-    routeExplorationEngine.selectedTrainerId = G?.selectedTrainerId || 'male_red';
-    routeExplorationEngine.loadRoute(routeDef, resumeX, resumeY);
-    routeExplorationEngine.start();
+    eng.init(canvas);
+    eng.loadRoute(routeDef, resumeX, resumeY);
+    eng.start();
+  }
+  updateQuestHud();
+  if (firstVisit) {
+    eng.showToast('New area discovered', routeDef.name);
+    sound.discovery();
+    G.quests = G.quests || {};
+    announceReadyQuests();
   }
 
-  // Connect engine callbacks
-  routeExplorationEngine.onTriggerEncounter = (wildMon, x, y) => {
-    saveCurrentRoutePosition();
-    routeExplorationEngine.stop();
-    battleWild(wildMon, { routeId: rId, x, y });
+  const here = () => ({ routeId: routeDef.id, x: Math.round(eng.player.x), y: Math.round(eng.player.y) });
+  const pauseFor = async (fn: () => Promise<void>) => {
+    eng.isPaused = true;
+    try {
+      await fn();
+    } finally {
+      if (eng.currentRoute === routeDef) eng.isPaused = false;
+    }
   };
 
-  routeExplorationEngine.onEnterGym = (gymIndex) => {
+  // Connect engine callbacks
+  eng.onTriggerEncounter = (wildMon, x, y) => {
     saveCurrentRoutePosition();
-    routeExplorationEngine.stop();
+    eng.stop();
+    battleWild(wildMon, { routeId: routeDef.id, x, y });
+  };
+
+  eng.onEnterGym = (gymIndex) => {
+    saveCurrentRoutePosition();
+    eng.stop();
     gymBattleScr(gymIndex);
   };
 
-  routeExplorationEngine.onEnterCenter = async () => {
-    routeExplorationEngine.isPaused = true;
-    await visitPokemonCenter();
-    routeExplorationEngine.isPaused = false;
+  eng.onEnterCenter = async () => {
+    await pauseFor(() => visitPokemonCenter());
   };
 
-  routeExplorationEngine.onEnterMart = () => {
+  eng.onEnterMart = () => {
     saveCurrentRoutePosition();
-    routeExplorationEngine.stop();
+    eng.stop();
     shopScr();
   };
 
-  routeExplorationEngine.onEnterHouse = async (building) => {
-    routeExplorationEngine.isPaused = true;
-    sound.beep(659, 0.15, 'sine');
-    sound.beep(880, 0.2, 'sine', 0.08, 0.1);
-    await note([
-      `<h3>🏡 ${building.label}</h3>`,
-      building.occupant ? `<p style="font-weight:700;color:#38bdf8;margin:6px 0;">Resident: ${building.occupant}</p>` : '',
-      building.dialogue
-        ? `<p style="font-style:italic;line-height:1.5;margin-top:10px;">"${building.dialogue}"</p>`
-        : `<p style="line-height:1.5;margin-top:10px;">A cozy Kanto home with a warm hearth, bookshelf filled with Pokémon field guides, and fresh tea.</p>`,
-    ].filter(Boolean));
-    routeExplorationEngine.isPaused = false;
+  eng.onEnterHouse = async (building) => {
+    await pauseFor(async () => {
+      sound.beep(659, 0.15, 'sine');
+      sound.beep(880, 0.2, 'sine', 0.08, 0.1);
+      await note([
+        `<h3>${escH(building.label)}</h3>`,
+        building.occupant ? `<p class="dlg-sub">Resident: ${escH(building.occupant)}</p>` : '',
+        building.dialogue
+          ? `<p class="dlg">"${escH(building.dialogue)}"</p>`
+          : `<p class="dlg">A cozy home with a warm hearth, a bookshelf of Pokémon field guides, and fresh tea.</p>`,
+      ].filter(Boolean));
+    });
   };
 
-  routeExplorationEngine.onEnterGate = async (building) => {
-    routeExplorationEngine.isPaused = true;
+  eng.onEnterGate = async (building) => {
+    eng.isPaused = true;
     sound.beep(880, 0.15, 'sine');
-    const curRouteId = routeExplorationEngine.currentRoute ? routeExplorationEngine.currentRoute.id : 0;
+    const curRouteId = eng.currentRoute ? eng.currentRoute.id : 0;
     const nextRouteIdx = curRouteId + 1;
     const nextRouteDef = KANTO_JOURNEY_ROUTES[nextRouteIdx];
     const prevRouteIdx = curRouteId - 1;
@@ -988,57 +1585,30 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
 
     type GateAction = 'next' | 'prev' | 'map' | 'hub' | 'cancel';
     const gateOptions: { label: string; action: GateAction }[] = [];
-
-    if (nextRouteDef) {
-      gateOptions.push({
-        label: `PROCEED FORWARD TO ${nextRouteDef.name.toUpperCase()} ➔`,
-        action: 'next',
-      });
-    }
-    if (prevRouteDef) {
-      gateOptions.push({
-        label: `⬅ RETURN BACKWARD TO ${prevRouteDef.name.toUpperCase()}`,
-        action: 'prev',
-      });
-    }
-    gateOptions.push({
-      label: `🗺️ OPEN TOWN MAP & FAST TRAVEL`,
-      action: 'map',
-    });
-    gateOptions.push({
-      label: `RETURN TO CITY HUB`,
-      action: 'hub',
-    });
-    gateOptions.push({
-      label: `CANCEL (Stay on current route)`,
-      action: 'cancel',
-    });
+    if (nextRouteDef) gateOptions.push({ label: `PROCEED FORWARD TO ${nextRouteDef.name.toUpperCase()} ➔`, action: 'next' });
+    if (prevRouteDef) gateOptions.push({ label: `⬅ RETURN BACKWARD TO ${prevRouteDef.name.toUpperCase()}`, action: 'prev' });
+    gateOptions.push({ label: `OPEN TOWN MAP & FAST TRAVEL`, action: 'map' });
+    gateOptions.push({ label: `RETURN TO CITY HUB`, action: 'hub' });
+    gateOptions.push({ label: `CANCEL (Stay on current route)`, action: 'cancel' });
 
     const choiceIdx = await pick(
       `<b>${building.label}</b><br><br>Officer Jenny: "Halt, Trainer! This checkpoint gatehouse connects routes and cities across Kanto.<br>Where would you like to travel?"`,
       gateOptions.map((o) => ({ h: o.label })),
       false
     );
-
     const chosen = choiceIdx >= 0 && choiceIdx < gateOptions.length ? gateOptions[choiceIdx].action : 'cancel';
 
     if (chosen === 'next') {
       if (G) {
         G.currentRouteId = nextRouteIdx;
-        G.savedRoutePos = {
-          routeId: nextRouteIdx,
-          x: nextRouteDef ? nextRouteDef.startX : 70,
-          y: nextRouteDef ? nextRouteDef.startY : 230,
-        };
-        if (G.currentCityIndex !== undefined) {
-          G.currentCityIndex = Math.min(KANTO_CITIES.length - 1, nextRouteIdx);
-        }
+        G.savedRoutePos = { routeId: nextRouteIdx, x: nextRouteDef ? nextRouteDef.startX : 70, y: nextRouteDef ? nextRouteDef.startY : 230 };
+        if (G.currentCityIndex !== undefined) G.currentCityIndex = Math.min(KANTO_CITIES.length - 1, nextRouteIdx);
         // Award 5 fresh training sessions for reaching a new area/city!
         G.tk = (G.tk || 0) + 5;
         G.tmax = Math.max(G.tmax || 5, G.tk);
         save();
       }
-      routeExplorationEngine.stop();
+      eng.stop();
       sound.beep(659, 0.15, 'sine');
       sound.beep(880, 0.25, 'sine', 0.1, 0.12);
       await note([
@@ -1047,114 +1617,244 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
         `<b>+5 fresh training sessions have been granted for reaching a new area!</b> (Total: ${G?.tk || 5})`,
         `Explore the city, visit the Pokémon Center and Poké Mart, and prepare for the Gym challenge!`,
       ]);
-      if (nextRouteIdx < KANTO_JOURNEY_ROUTES.length) {
-        enterRouteExploration(nextRouteIdx);
-      } else {
-        journeyHubScr();
-      }
+      if (nextRouteIdx < KANTO_JOURNEY_ROUTES.length) enterRouteExploration(nextRouteIdx);
+      else journeyHubScr();
     } else if (chosen === 'prev') {
       if (prevRouteDef) {
-        const spawnX = Math.max(80, (prevRouteDef.exitX > 0 ? prevRouteDef.exitX - 60 : prevRouteDef.worldWidth - 150));
+        const spawnX = Math.max(80, prevRouteDef.exitX > 0 ? prevRouteDef.exitX - 60 : prevRouteDef.worldWidth - 150);
         const spawnY = prevRouteDef.startY;
         if (G) {
           G.currentRouteId = prevRouteIdx;
           G.currentCityIndex = Math.min(KANTO_CITIES.length - 1, prevRouteIdx);
-          G.savedRoutePos = {
-            routeId: prevRouteIdx,
-            x: spawnX,
-            y: spawnY,
-          };
+          G.savedRoutePos = { routeId: prevRouteIdx, x: spawnX, y: spawnY };
           save();
         }
-        routeExplorationEngine.stop();
+        eng.stop();
         sound.beep(784, 0.15, 'sine');
         sound.beep(659, 0.2, 'sine', 0.08, 0.1);
-        await note([
-          `<h1>⬅ RETURNED TO ${prevRouteDef.name.toUpperCase()}</h1>`,
-          `You have passed backwards through the gatehouse to <b>${prevRouteDef.name}</b>!`,
-        ]);
+        await note([`<h1>⬅ RETURNED TO ${prevRouteDef.name.toUpperCase()}</h1>`, `You have passed backwards through the gatehouse to <b>${prevRouteDef.name}</b>!`]);
         enterRouteExploration(prevRouteIdx, spawnX, spawnY);
       } else {
-        routeExplorationEngine.isPaused = false;
+        eng.isPaused = false;
       }
     } else if (chosen === 'map') {
       saveCurrentRoutePosition();
-      routeExplorationEngine.stop();
+      eng.stop();
       await openTownMapModal();
     } else if (chosen === 'hub') {
       saveCurrentRoutePosition();
-      routeExplorationEngine.stop();
+      eng.stop();
       journeyHubScr();
     } else {
-      routeExplorationEngine.isPaused = false;
+      eng.isPaused = false;
     }
   };
 
-  routeExplorationEngine.onPickItem = async (it) => {
-    if (it.type === 'ball') G.balls = (G.balls || 0) + it.amount;
-    else if (it.type === 'berry') G.b = (G.b || 0) + it.amount;
-    else if (it.type === 'money') G.money = (G.money || 0) + it.amount;
+  eng.onPickItem = async (it) => {
+    G.collected = G.collected || [];
+    const key = collectedKey(routeDef.id, it.id);
+    if (!G.collected.includes(key)) G.collected.push(key);
+    const n = it.amount;
+    let extra = '';
+    switch (it.type) {
+      case 'ball':
+        if (/ultra/i.test(it.name)) G.ultraBalls = (G.ultraBalls || 0) + n;
+        else if (/great/i.test(it.name)) G.greatBalls = (G.greatBalls || 0) + n;
+        else G.balls = (G.balls || 0) + n;
+        break;
+      case 'greatBall':
+        G.greatBalls = (G.greatBalls || 0) + n;
+        break;
+      case 'ultraBall':
+        G.ultraBalls = (G.ultraBalls || 0) + n;
+        break;
+      case 'berry':
+        if (/sitrus/i.test(it.name)) G.b50 = (G.b50 || 0) + n;
+        else G.b = (G.b || 0) + n;
+        break;
+      case 'sitrus':
+        G.b50 = (G.b50 || 0) + n;
+        break;
+      case 'revive':
+        G.rv = (G.rv || 0) + n;
+        break;
+      case 'money':
+        G.money = (G.money || 0) + n;
+        break;
+      case 'stone':
+        if (it.detail) G.st[it.detail] = (G.st[it.detail] || 0) + n;
+        break;
+      case 'key':
+        G.keyItems = G.keyItems || [];
+        if (it.detail && !G.keyItems.includes(it.detail)) G.keyItems.push(it.detail);
+        if (it.detail === 'lantern') {
+          eng.hasLantern = true;
+          extra = 'Its warm glow will light up dark caves.';
+        } else extra = 'Stored with your key items.';
+        break;
+    }
     save();
-
-    const ballsVal = $('#hud-balls-val');
-    const moneyVal = $('#hud-money-val');
-    if (ballsVal) ballsVal.textContent = String(G.balls || 0);
-    if (moneyVal) moneyVal.textContent = (G.money || 0).toLocaleString();
-
-    await note([`Found <b>${it.name}</b> (×${it.amount}) on the route!`]);
+    refreshHudCounters();
+    await pauseFor(async () => {
+      if (it.type === 'key') sound.discovery();
+      await note([`Found <b>${escH(it.name)}</b>${n > 1 ? ` ×${n}` : ''}!`, extra ? `<p class="dlg-sub">${extra}</p>` : '']);
+    });
+    updateQuestHud();
   };
 
-  routeExplorationEngine.onTalkNPC = async (npc) => {
-    routeExplorationEngine.isPaused = true;
-    await note([
-      `<h3>${npc.avatar} ${npc.name}</h3>`,
-      `<p style="font-style:italic">"${npc.dialogue}"</p>`,
-      ...(npc.gift && !npc.given
-        ? [`<b>${npc.name} handed you a gift: ${npc.gift.name} ×${npc.gift.amount}!</b>`]
-        : []),
-    ]);
+  eng.onTalkNPC = async (npc) => {
+    eng.isPaused = true;
+    let leaving = false;
+    try {
+      if (await handleQuestSource('npc', npc.id, npc.name)) return;
 
-    if (npc.gift && !npc.given) {
-      npc.given = true;
-      if (npc.gift.type === 'ball') G.balls = (G.balls || 0) + npc.gift.amount;
-      else if (npc.gift.type === 'berry') G.b = (G.b || 0) + npc.gift.amount;
-      else if (npc.gift.type === 'money') G.money = (G.money || 0) + npc.gift.amount;
-      save();
-      const ballsVal = $('#hud-balls-val');
-      const moneyVal = $('#hud-money-val');
-      if (ballsVal) ballsVal.textContent = String(G.balls || 0);
-      if (moneyVal) moneyVal.textContent = (G.money || 0).toLocaleString();
+      if (npc.trainer && !hasFlag('trainer:' + npc.trainer.id)) {
+        const c = await pick(dlg(npc.name, npc.trainer.intro), [{ h: 'BATTLE!' }, { h: 'NOT NOW' }]);
+        if (c === 0) {
+          leaving = true;
+          saveCurrentRoutePosition();
+          eng.stop();
+          await battleTrainer(npc, here());
+        }
+        return;
+      }
+
+      if (npc.ferry) {
+        const f = npc.ferry;
+        if (f.requires && !isConditionMet(f.requires)) {
+          await note([dlg(npc.name, 'The bay is rough. I only take experienced trainers across. Come back with three badges.')]);
+          return;
+        }
+        const c = await pick(dlg(npc.name, npc.dialogue), [{ h: `SAIL TO ${f.label.toUpperCase()}` }, { h: 'STAY HERE' }]);
+        if (c === 0) {
+          leaving = true;
+          sound.beep(523, 0.2, 'triangle');
+          await travelTo(f.target, f.x, f.y);
+        }
+        return;
+      }
+
+      const giftKey = 'npc:' + collectedKey(routeDef.id, npc.id);
+      const giving = !!npc.gift && !npc.given;
+      await note([`<div class="dlg-head">${escH(npc.name)}</div>`, `<p class="dlg">"${escH(npc.dialogue)}"</p>`, ...(giving ? [`<b>${escH(npc.name)} handed you: ${escH(npc.gift!.name)}${npc.gift!.amount > 1 ? ' ×' + npc.gift!.amount : ''}!</b>`] : [])]);
+      if (giving && npc.gift) {
+        npc.given = true;
+        (G.collected = G.collected || []).push(giftKey);
+        const g = npc.gift;
+        if (g.type === 'ball') G.balls = (G.balls || 0) + g.amount;
+        else if (g.type === 'berry') {
+          if (/sitrus/i.test(g.name)) G.b50 = (G.b50 || 0) + g.amount;
+          else G.b = (G.b || 0) + g.amount;
+        } else if (g.type === 'money') G.money = (G.money || 0) + g.amount;
+        else if (g.type === 'key' && g.detail) {
+          G.keyItems = G.keyItems || [];
+          if (!G.keyItems.includes(g.detail)) G.keyItems.push(g.detail);
+        }
+        save();
+        refreshHudCounters();
+      }
+    } finally {
+      if (!leaving && eng.currentRoute === routeDef) eng.isPaused = false;
     }
-    routeExplorationEngine.isPaused = false;
   };
 
-  routeExplorationEngine.onReadSignpost = async (sp) => {
-    routeExplorationEngine.isPaused = true;
-    await note([
-      `<h3>📋 ${sp.title}</h3>`,
-      ...sp.lines.map((l) => `<p style="font-weight:600;margin:6px 0;line-height:1.4;">${l}</p>`),
-    ]);
-    routeExplorationEngine.isPaused = false;
+  eng.onReadSignpost = async (sp) => {
+    await pauseFor(async () => {
+      await note([`<h3>${escH(sp.title)}</h3>`, ...sp.lines.map((l) => `<p class="dlg">${escH(l)}</p>`)]);
+    });
   };
 
-  routeExplorationEngine.onRouteExit = async (nextRouteId) => {
+  eng.onUsePortal = async (portal) => {
+    if (portal.requires && !isConditionMet(portal.requires)) {
+      await pauseFor(async () => {
+        await note([`<h3>${escH(portal.label)}</h3>`, `<p class="dlg">${escH(portal.lockedText || 'The way is blocked for now.')}</p>`]);
+      });
+      return;
+    }
+    sound.beep(660, 0.12, 'sine');
+    await travelTo(portal.target, portal.targetX, portal.targetY);
+  };
+
+  eng.onLandmark = async (lm) => {
+    await pauseFor(async () => {
+      const first = !hasFlag('landmark:' + lm.id);
+      setFlag('landmark:' + lm.id);
+      if (first) sound.discovery();
+      await note([`<h3>${escH(lm.title)}</h3>`, ...lm.lines.map(l => `<p class="dlg">${escH(l)}</p>`), first ? '<p class="dlg-sub">Landmark recorded.</p>' : '']);
+    });
+    updateQuestHud();
+  };
+
+  eng.onNoticeBoard = async (nb) => {
+    await pauseFor(async () => {
+      if (!(await handleQuestSource('board', nb.id, nb.title))) {
+        await note([`<h3>${escH(nb.title)}</h3>`, '<p class="dlg">Nothing new is posted right now. Check back after your next badge.</p>']);
+      }
+    });
+  };
+
+  eng.onStaticEncounter = async (enc) => {
+    eng.isPaused = true;
+    const c = await pick(`<p class="dlg">${escH(enc.intro)}</p>`, [{ h: 'BATTLE' }, { h: 'LEAVE IT BE' }]);
+    if (c !== 0) {
+      eng.isPaused = false;
+      return;
+    }
+    saveCurrentRoutePosition();
+    eng.stop();
+    battleWild(buildEncounterMon(enc.speciesId, enc.level, 15), here(), { staticFlag: enc.doneFlag });
+  };
+
+  eng.onLostPokemon = async (lost) => {
+    await pauseFor(async () => {
+      setFlag(lost.foundFlag);
+      sound.cry(lost.speciesId, 'win');
+      await note([`<p class="dlg">${escH(lost.text)}</p>`, '<p class="dlg">It hops happily and scampers off toward home!</p>']);
+    });
+    updateQuestHud();
+  };
+
+  eng.onFishStart = (spot) => {
+    if ((G.keyItems || []).includes('rod')) return true;
+    pauseFor(async () => {
+      await note(['<h3>Fishing Spot</h3>', '<p class="dlg">Ripples hint at Pokémon below, but you have no fishing rod. Anglers on the coast might lend one.</p>']);
+    });
+    void spot;
+    return false;
+  };
+
+  eng.onFishBite = (spot) => {
+    saveCurrentRoutePosition();
+    eng.stop();
+    const mon = generateEncounterMon(routeDef.id, Math.random() < 0.06, spot.zone);
+    battleWild(mon, here());
+  };
+
+  eng.onCompanionInteract = () => {
+    const info = eng.companion.info;
+    if (!info) return;
+    sound.cry(info.speciesId, 'in');
+    const lines = ['looks happy to be with you!', 'nuzzles your hand.', 'is eager to keep exploring.', 'lets out a cheerful cry!', 'is watching the scenery.'];
+    eng.showToast(info.name, `${info.name} ${lines[Math.floor(Math.random() * lines.length)]}`);
+  };
+
+  eng.onPuzzleSolved = () => {
+    save();
+    updateQuestHud();
+  };
+
+  eng.onRouteExit = async (nextRouteId) => {
     if (nextRouteId < KANTO_JOURNEY_ROUTES.length) {
       const nextRouteDef = KANTO_JOURNEY_ROUTES[nextRouteId];
       if (G) {
         G.currentRouteId = nextRouteId;
-        G.savedRoutePos = {
-          routeId: nextRouteId,
-          x: nextRouteDef.startX,
-          y: nextRouteDef.startY,
-        };
-        if (G.currentCityIndex !== undefined) {
-          G.currentCityIndex = Math.min(KANTO_CITIES.length - 1, nextRouteId);
-        }
+        G.savedRoutePos = { routeId: nextRouteId, x: nextRouteDef.startX, y: nextRouteDef.startY };
+        if (G.currentCityIndex !== undefined) G.currentCityIndex = Math.min(KANTO_CITIES.length - 1, nextRouteId);
         G.tk = (G.tk || 0) + 5;
         G.tmax = Math.max(G.tmax || 5, G.tk);
         save();
       }
-      routeExplorationEngine.stop();
+      eng.stop();
       sound.beep(659, 0.15, 'sine');
       sound.beep(880, 0.25, 'sine', 0.1, 0.12);
       await note([
@@ -1164,27 +1864,23 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
       ]);
       enterRouteExploration(nextRouteId);
     } else {
-      routeExplorationEngine.stop();
+      eng.stop();
       journeyHubScr();
     }
   };
 
-  routeExplorationEngine.onRoutePreviousExit = async (prevRouteId) => {
+  eng.onRoutePreviousExit = async (prevRouteId) => {
     if (prevRouteId >= 0 && prevRouteId < KANTO_JOURNEY_ROUTES.length) {
       const prevRouteDef = KANTO_JOURNEY_ROUTES[prevRouteId];
-      const spawnX = Math.max(80, (prevRouteDef.exitX > 0 ? prevRouteDef.exitX - 60 : prevRouteDef.worldWidth - 150));
+      const spawnX = Math.max(80, prevRouteDef.exitX > 0 ? prevRouteDef.exitX - 60 : prevRouteDef.worldWidth - 150);
       const spawnY = prevRouteDef.startY;
       if (G) {
         G.currentRouteId = prevRouteId;
         G.currentCityIndex = Math.min(KANTO_CITIES.length - 1, prevRouteId);
-        G.savedRoutePos = {
-          routeId: prevRouteId,
-          x: spawnX,
-          y: spawnY,
-        };
+        G.savedRoutePos = { routeId: prevRouteId, x: spawnX, y: spawnY };
         save();
       }
-      routeExplorationEngine.stop();
+      eng.stop();
       sound.beep(784, 0.15, 'sine');
       sound.beep(659, 0.2, 'sine', 0.08, 0.1);
       await note([
@@ -1194,14 +1890,14 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
       ]);
       enterRouteExploration(prevRouteId, spawnX, spawnY);
     } else {
-      routeExplorationEngine.stop();
+      eng.stop();
       journeyHubScr();
     }
   };
 
-  routeExplorationEngine.onOpenMap = async () => {
+  eng.onOpenMap = async () => {
     saveCurrentRoutePosition();
-    routeExplorationEngine.stop();
+    eng.stop();
     await openTownMapModal();
   };
 
@@ -1209,14 +1905,31 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
   if (hudMapBtn) {
     hudMapBtn.onclick = async () => {
       saveCurrentRoutePosition();
-      routeExplorationEngine.stop();
+      eng.stop();
       await openTownMapModal();
     };
   }
 
-  routeExplorationEngine.onOpenMenu = () => {
+  // Quick menus open over the live world; the engine pauses while they are up
+  const overWorld = (open: (onClose: () => void) => void) => () => {
+    if (eng.isPaused) return;
+    eng.isPaused = true;
     saveCurrentRoutePosition();
-    routeExplorationEngine.stop();
+    open(() => {
+      if (eng.currentRoute === routeDef) eng.isPaused = false;
+      updateQuestHud();
+    });
+  };
+  const qBtn = document.getElementById('hud-quest-btn');
+  if (qBtn) qBtn.onclick = overWorld(openQuestJournalScr);
+  const pBtn = document.getElementById('hud-partner-btn');
+  if (pBtn) pBtn.onclick = overWorld(openCompanionScr);
+  const hq = document.getElementById('hud-quest');
+  if (hq) hq.onclick = overWorld(openQuestJournalScr);
+
+  eng.onOpenMenu = () => {
+    saveCurrentRoutePosition();
+    eng.stop();
     journeyHubScr();
   };
 }
@@ -1245,7 +1958,7 @@ export function journeyHubScr(): void {
   const gymIdx = G.gymIndex;
   const currentGym = gymIdx < 8 ? KANTO_GYMS[gymIdx] : null;
   const activeRouteId = G?.savedRoutePos?.routeId ?? G?.currentRouteId ?? currentCity.routeId;
-  const currentRouteDef = KANTO_JOURNEY_ROUTES[activeRouteId] || KANTO_JOURNEY_ROUTES[currentCity.routeId] || KANTO_JOURNEY_ROUTES[0];
+  const currentRouteDef = getRouteDefinition(activeRouteId ?? currentCity.routeId);
   const cityName = currentCity.name;
   const trainerChar = getTrainerCharacter(G.selectedTrainerId);
 
@@ -1359,6 +2072,7 @@ export function journeyHubScr(): void {
   $('#map').innerHTML = `
     <h1>${cityName.toUpperCase()}</h1>
     <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <canvas id="hub-trainer-portrait" class="trainer-portrait" width="44" height="52" aria-hidden="true"></canvas>
       <span style="font-size:13px;color:#cbd5e1">Trainer: <b>${G.trainerName.toUpperCase()}</b></span>
       <span style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);padding:2px 8px;border-radius:12px;font-size:11.5px;font-weight:700;color:${trainerChar.gender === 'male' ? '#38bdf8' : '#f472b6'}">${trainerChar.gender === 'male' ? '♂' : '♀'} ${trainerChar.name} · ${trainerChar.title}</span>
       <span style="font-size:13px;color:#94a3b8">· Party: ${G.team.length}/6</span>
@@ -1384,6 +2098,15 @@ export function journeyHubScr(): void {
       <button id="qh-train" class="qpm-btn qpm-train" style="flex:1;min-width:130px;display:flex;align-items:center;justify-content:center;gap:6px" title="Select a Pokémon to train">
         ${ICONS.train(16)} TRAIN (${G.tk || 0}/${G.tmax || 5})${getTrainingXpMultiplier(G) > 1.0 ? ' <span class="boost-badge">2× XP</span>' : ''}
       </button>
+    </div>
+
+    <div class="adventure-actions" role="group" aria-label="Adventure">
+      <button id="qh-quests" class="adv-btn">${UI_ICONS.quest}<span>Quests</span>${(() => {
+        const n = QUESTS.filter(q => { const s = G.quests?.[q.id]; return s?.status === 'active' && isReady(q, s, questWorld(true)); }).length;
+        return n ? `<i class="adv-dot">${n}</i>` : '';
+      })()}</button>
+      <button id="qh-partner" class="adv-btn">${UI_ICONS.paw}<span>Partner</span></button>
+      <button id="qh-style" class="adv-btn">${UI_ICONS.shirt}<span>Style</span></button>
     </div>
 
     <div class="party-list-container">
@@ -1471,6 +2194,12 @@ export function journeyHubScr(): void {
   };
 
   $('#btn-open-team').onclick = () => teamScr();
+
+  const portrait = document.getElementById('hub-trainer-portrait') as HTMLCanvasElement | null;
+  if (portrait) drawTrainerPortrait(portrait);
+  $('#qh-quests').onclick = () => openQuestJournalScr(() => journeyHubScr());
+  $('#qh-partner').onclick = () => openCompanionScr(() => journeyHubScr());
+  $('#qh-style').onclick = () => openCustomizeScr(() => journeyHubScr());
 
   // Individual Pokémon Row Action Buttons
   document.querySelectorAll<HTMLButtonElement>('.ind-train').forEach(btn => {
@@ -2097,7 +2826,8 @@ export async function gymVictoryScr(gymIndex: number): Promise<void> {
 // ============================================================================
 export async function battleWild(
   wildMon: EncounterMon,
-  returnCoords?: { routeId: number; x: number; y: number }
+  returnCoords?: { routeId: number; x: number; y: number },
+  opts?: { staticFlag?: string }
 ): Promise<void> {
   const pl = G.team.filter(m => m.hp > 0);
   if (!pl.length) {
@@ -2162,11 +2892,15 @@ export async function battleWild(
 
   pokemon3DManager.stop();
 
+  // Static (one-off) encounters are done once defeated or caught
+  if (opts?.staticFlag && (res === 'win' || res === 'caught')) setFlag(opts.staticFlag);
+
   if (res === 'lose') {
     return showWildDefeat(wildMon, returnCoords);
   }
 
   if (res === 'win') {
+    noteQuestEvent({ kind: 'wild_win', areaId: returnCoords ? returnCoords.routeId : -1 });
     const rewardMoney = Math.floor(wildMon.lv * 35 + ri(35, 75));
     G.money = (G.money || 0) + rewardMoney;
     save();
@@ -3037,6 +3771,7 @@ export async function hallOfFameScr(): Promise<void> {
     <div class="hof-container">
       <div class="hof-trophy">${ICONS.crown(44)}</div>
       <div class="hof-header">HALL OF FAME</div>
+      <canvas id="hof-trainer-portrait" class="trainer-portrait hof" width="88" height="104" aria-hidden="true"></canvas>
       <div class="hof-trainer-title">
         GRAND CHAMPION: <b>${G.trainerName.toUpperCase()}</b>
         <div style="font-size:13px;font-weight:700;color:${trainerChar.gender === 'male' ? '#38bdf8' : '#f472b6'};margin-top:4px">
@@ -3069,6 +3804,8 @@ export async function hallOfFameScr(): Promise<void> {
     </div>
   `;
 
+  const hofPortrait = document.getElementById('hof-trainer-portrait') as HTMLCanvasElement | null;
+  if (hofPortrait) drawTrainerPortrait(hofPortrait);
   $('#btn-hof-finish').onclick = () => titleScr();
 }
 
@@ -3434,36 +4171,13 @@ export async function evo(m: MonInstance): Promise<void> {
         { h: `${img(136)}<span><b>FLAREON</b><small>Fire Type</small></span>` },
       ]
     );
-    const evoId = choice === 0 ? 134 : choice === 1 ? 135 : 136;
-    m.id = evoId;
-    m.hp = st(m).max;
-    ui();
-    sound.beep(880, 0.3);
-    await say(`Eevee evolved into ${POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase()}!`);
+    await runEvolution(m, choice === 0 ? 134 : choice === 1 ? 135 : 136);
     return;
   }
 
   const d = POKEMON_SPECIES_MAP[m.id];
   if (!(d.evolutionLevel && m.lv >= d.evolutionLevel && d.evolvesTo)) return;
-
-  await say(`${d.name.toUpperCase()} is evolving!`, 300);
-  if (!HUB && B && B.tm && B.tm[B.pi] === m) {
-    await $('#ps').animate(
-      [
-        { filter: 'brightness(0)' },
-        { filter: 'brightness(5)' },
-        { filter: 'brightness(0)' },
-        { filter: 'brightness(5)' },
-        { filter: 'none' },
-      ],
-      { duration: 1200 }
-    ).finished;
-  }
-  m.id = d.evolvesTo;
-  m.hp = st(m).max;
-  ui();
-  sound.beep(880, 0.3);
-  await say(`It evolved into ${POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase()}!`);
+  await runEvolution(m, d.evolvesTo);
 }
 
 export function showMoveLearnComparisonModal(m: MonInstance, newMove: MoveData): Promise<number> {
@@ -3606,13 +4320,9 @@ export async function lvls(m: MonInstance): Promise<void> {
 
 export async function stone(m: MonInstance, k: string): Promise<void> {
   const e = (STONE_EVOLUTIONS[m.id] || []).find(x => x.stoneType === k);
-  if (!e) return;
-  const o = POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase();
-  G.st[k]--;
-  await say(`${o} is evolving!`, 200);
-  m.id = e.evolvesTo;
-  m.hp = st(m).max;
-  await say(`It evolved into ${POKEMON_SPECIES_MAP[m.id]?.name.toUpperCase()}!`);
+  if (!e || (G.st[k] || 0) <= 0) return;
+  // The stone is consumed in the same save that changes the species.
+  await runEvolution(m, e.evolvesTo, k);
 }
 
 // ============================================================================
@@ -3670,7 +4380,16 @@ export async function say(t: string, p: number = 220): Promise<void> {
   await sleep(actualPause);
 }
 
+let battleAvatarLook: TrainerCustomization | null = null;
 export function ui(): void {
+  const av = document.getElementById('p-trainer') as HTMLCanvasElement | null;
+  if (av && G) {
+    const look = playerLook();
+    if (look !== battleAvatarLook) {
+      battleAvatarLook = look;
+      drawTrainerPortrait(av, 'right');
+    }
+  }
   if (HUB || !B) return;
   for (const s of ['p', 'f'] as const) {
     const m = M(s);
@@ -4407,6 +5126,12 @@ export async function turn(pa: any): Promise<string | null> {
 
         G.routeEncountersDone = (G.routeEncountersDone || 0) + 1;
         save();
+        noteQuestEvent({
+          kind: 'catch',
+          speciesId: captured.id,
+          types: POKEMON_SPECIES_MAP[captured.id]?.typesShort || [],
+          areaId: B?.returnCoords ? B.returnCoords.routeId : -1,
+        });
 
         await say(`Gotcha! ${POKEMON_SPECIES_MAP[captured.id]?.name.toUpperCase()} was caught!`);
         await showPokemonCaughtModal(captured, destinationMsg);
@@ -4841,3 +5566,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   titleScr();
 });
+
+// Dev-only automation hooks used by the regression harness (stripped from production builds).
+if (import.meta.env.DEV) {
+  Object.assign(window as any, {
+    __engine: routeExplorationEngine,
+    __routes: KANTO_JOURNEY_ROUTES,
+    __areas: SPECIAL_AREAS,
+    __getRoute: getRouteDefinition,
+    __G: () => G,
+    __B: () => B,
+    __selfcheck: () => import('./devtools/selfcheck').then(m => m.runSelfChecks()),
+    __evolve: (uid: string, to: number) => {
+      const m = G.team.find(x => x.uid === uid);
+      return m ? runEvolution(m, to) : Promise.resolve();
+    },
+  });
+}

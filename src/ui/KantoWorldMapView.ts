@@ -44,6 +44,17 @@ export interface WorldMapLandmark {
   requiredRoute: number;
 }
 
+/** Discovered exploration areas shown on the map (forests, caves, coast, mountains). */
+export interface MapAreaPin {
+  id: number;
+  name: string;
+  kind: 'forest' | 'cave' | 'coast' | 'mountain';
+  mapX: number;
+  mapY: number;
+  canTravel: boolean;
+  current: boolean;
+}
+
 export const KANTO_MAP_CITIES: WorldMapCityNode[] = [
   {
     cityIndex: 0,
@@ -276,6 +287,9 @@ export class KantoWorldMapView {
   private furthestUnlockedIndex: number = 1;
   private onTravelCallback: ((cityIndex: number) => void) | null = null;
   private onCloseCallback: (() => void) | null = null;
+  private areaPins: MapAreaPin[] = [];
+  private onAreaTravel: ((areaId: number) => void) | null = null;
+  private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
   // Pan & Zoom Engine State
   private zoomLevel: number = 1.0;
@@ -296,7 +310,11 @@ export class KantoWorldMapView {
     has8Badges: boolean;
     onTravel: (cityIndex: number) => void;
     onClose: () => void;
+    areas?: MapAreaPin[];
+    onAreaTravel?: (areaId: number) => void;
   }): void {
+    this.areaPins = options.areas || [];
+    this.onAreaTravel = options.onAreaTravel || null;
     this.currentLocationIndex = options.currentCityIndex;
     this.furthestUnlockedIndex = getFurthestUnlockedCityIndex(options.gymIndex, options.has8Badges);
     this.onTravelCallback = options.onTravel;
@@ -318,6 +336,10 @@ export class KantoWorldMapView {
   }
 
   public close(): void {
+    if (this.keydownHandler) {
+      window.removeEventListener('keydown', this.keydownHandler);
+      this.keydownHandler = null;
+    }
     if (this.overlayEl && this.overlayEl.parentNode) {
       this.overlayEl.parentNode.removeChild(this.overlayEl);
       this.overlayEl = null;
@@ -568,6 +590,19 @@ export class KantoWorldMapView {
                     </div>
                   `;
                 }).join('')}
+              </div>
+
+              <!-- Discovered Exploration Areas -->
+              <div class="kanto-map-areas-layer">
+                ${this.areaPins
+                  .map(
+                    a => `<button class="kanto-area-pin kind-${a.kind} ${a.canTravel ? 'travel' : ''} ${a.current ? 'current' : ''}"
+                      style="left:${(a.mapX / 1000) * 100}%; top:${(a.mapY / 750) * 100}%"
+                      data-area-id="${a.id}" title="${a.name}${a.canTravel ? ' (fast travel)' : ''}">
+                      <span class="area-pin-dot"></span><span class="area-pin-name">${a.name}</span>
+                    </button>`
+                  )
+                  .join('')}
               </div>
 
               <!-- Interactive City Pins Layer -->
@@ -891,6 +926,26 @@ export class KantoWorldMapView {
   private attachEvents(): void {
     if (!this.overlayEl) return;
 
+    // 0. Discovered exploration areas (fast travel only to outdoor areas)
+    this.overlayEl.querySelectorAll<HTMLButtonElement>('.kanto-area-pin').forEach(el => {
+      el.addEventListener('pointerdown', e => e.stopPropagation());
+      el.onclick = e => {
+        e.stopPropagation();
+        const pin = this.areaPins.find(a => a.id === Number(el.dataset.areaId));
+        if (!pin || !pin.canTravel || pin.current) {
+          sound.beep(220, 0.12, 'triangle');
+          el.classList.add('nope');
+          setTimeout(() => el.classList.remove('nope'), 400);
+          return;
+        }
+        sound.beep(784, 0.12, 'sine');
+        const cb = this.onAreaTravel;
+        this.onCloseCallback = null; // travelling replaces the usual "resume" behaviour
+        this.close();
+        cb?.(pin.id);
+      };
+    });
+
     // 1. Close Button
     const closeBtn = this.overlayEl.querySelector('#btn-kanto-map-close') as HTMLButtonElement;
     if (closeBtn) {
@@ -986,7 +1041,7 @@ export class KantoWorldMapView {
 
       // Pointer Down
       viewport.onpointerdown = (e: PointerEvent) => {
-        if ((e.target as HTMLElement).closest('.kanto-hud-btn, .kanto-city-pin, .kanto-landmark-marker')) {
+        if ((e.target as HTMLElement).closest('.kanto-hud-btn, .kanto-city-pin, .kanto-landmark-marker, .kanto-area-pin')) {
           return;
         }
         this.isDragging = true;
@@ -1052,13 +1107,15 @@ export class KantoWorldMapView {
     this.attachTravelTriggers();
 
     // 7. Keyboard Navigation & Close
-    const handleKey = (e: KeyboardEvent) => {
+    if (this.keydownHandler) {
+      window.removeEventListener('keydown', this.keydownHandler);
+    }
+    this.keydownHandler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' || e.key === 'm' || e.key === 'M') {
-        window.removeEventListener('keydown', handleKey);
         this.close();
       }
     };
-    window.addEventListener('keydown', handleKey);
+    window.addEventListener('keydown', this.keydownHandler);
   }
 
   private attachTravelTriggers(): void {

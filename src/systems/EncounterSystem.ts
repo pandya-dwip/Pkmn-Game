@@ -100,6 +100,15 @@ export const ROUTE_ZONES: Record<number, Record<string, number[]>> = {
   },
 };
 
+// Level bands for special exploration areas (ids >= 100)
+export const AREA_LEVELS: Record<number, [number, number]> = {};
+
+/** Register an exploration area's zone tables and level band. */
+export function registerAreaEncounters(areaId: number, zones: Record<string, number[]>, levels: [number, number]): void {
+  ROUTE_ZONES[areaId] = zones;
+  AREA_LEVELS[areaId] = levels;
+}
+
 // Route pools by Gym level (fallback aggregate)
 export const ROUTE_POOLS: Record<number, number[]> = {
   0: [16, 19, 10, 13, 21, 29, 32, 25, 39],
@@ -141,6 +150,11 @@ export function generateEncounterMon(gymIndex: number, isRare: boolean = false, 
   const spec = POKEMON_SPECIES_MAP[id] || POKEMON_SPECIES_MAP[16];
 
   const isRareZone = isRare || zone === 'rare';
+  const band = AREA_LEVELS[gymIndex];
+  if (band) {
+    const lvArea = band[0] + Math.floor(Math.random() * (band[1] - band[0] + 1)) + (isRareZone ? 4 : 0);
+    return buildEncounterMon(id, lvArea, isRareZone ? 10 + Math.floor(Math.random() * 6) : Math.floor(Math.random() * 16));
+  }
   const baseLv = gymIndex === 0
     ? (isRareZone ? 9 : (zone === 'deep' ? 5 : 3))
     : Math.min(50, 8 + gymIndex * 5 + (isRareZone ? 5 : 0));
@@ -148,6 +162,13 @@ export function generateEncounterMon(gymIndex: number, isRare: boolean = false, 
   const lv = Math.max(isRareZone ? 8 : 2, baseLv + Math.floor(Math.random() * (lvVariance * 2 + 1)) - lvVariance);
   const iv = isRareZone ? (10 + Math.floor(Math.random() * 6)) : Math.floor(Math.random() * 16);
 
+  return buildEncounterMon(id, lv, iv);
+}
+
+/** Build a wild encounter of a specific species and level (also used for static encounters / fishing). */
+export function buildEncounterMon(id: number, lv: number, iv: number = Math.floor(Math.random() * 16)): EncounterMon {
+  const spec = POKEMON_SPECIES_MAP[id] || POKEMON_SPECIES_MAP[16];
+  id = spec.id;
   // HP calculation
   const maxHp = Math.floor(((2 * spec.baseHP + iv) * lv) / 100) + lv + 10;
 

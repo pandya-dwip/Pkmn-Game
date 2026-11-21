@@ -31,12 +31,13 @@ export interface TrainerCustomization {
     eyeColor: string;
   };
   style: {
-    hairStyle: 'spiky' | 'wavy_shaggy' | 'short_trim' | 'beret_neat' | 'long_fringe' | 'pigtails' | 'buns_curls' | 'twin_tails';
-    hatType: 'baseball_cap' | 'backwards_cap' | 'beanie' | 'beret' | 'sunhat' | 'straw_hat' | 'bandana' | 'coordinator_beanie' | 'none';
+    hairStyle: 'spiky' | 'wavy_shaggy' | 'short_trim' | 'beret_neat' | 'long_fringe' | 'pigtails' | 'buns_curls' | 'twin_tails' | 'ponytail';
+    hatType: 'baseball_cap' | 'backwards_cap' | 'beanie' | 'beret' | 'sunhat' | 'straw_hat' | 'bandana' | 'coordinator_beanie' | 'helmet' | 'sailor_cap' | 'none';
     bottomType: 'jeans' | 'shorts' | 'skirt' | 'overalls';
     hasGlasses?: boolean;
     hasRibbon?: boolean;
     hasSatchel?: boolean;
+    hasScarf?: boolean;
   };
 }
 
@@ -308,12 +309,13 @@ export function drawCustomTrainerSprite(
   py: number,
   dir: 'down' | 'up' | 'left' | 'right',
   animFrame: number,
-  trainerId: string = 'male_red',
+  trainerId: string | TrainerCustomization = 'male_red',
   inGrass: boolean = false,
   time: number = 0,
-  scaleFactor: number = 1.0
+  scaleFactor: number = 1.0,
+  withShadow: boolean = true
 ): void {
-  const trainer = getTrainerById(trainerId);
+  const trainer = typeof trainerId === 'string' ? getTrainerById(trainerId) : trainerId;
   const p = trainer.palette;
   const s = trainer.style;
 
@@ -332,10 +334,20 @@ export function drawCustomTrainerSprite(
   const breathing = isWalking ? 0 : Math.sin(time * 3.5) * 0.7;
 
   // 1. Soft Elliptical Ground Drop Shadow
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.40)';
-  ctx.beginPath();
-  ctx.ellipse(0, 13, 12, 5.5, 0, 0, Math.PI * 2);
-  ctx.fill();
+  if (withShadow) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.40)';
+    ctx.beginPath();
+    ctx.ellipse(0, 13, 12, 5.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 1.5 Ponytail / long back hair is behind the body when facing away or sideways
+  if (s.hairStyle === 'ponytail' && dir !== 'down') {
+    ctx.fillStyle = p.hair;
+    const tx = dir === 'left' ? 4 : dir === 'right' ? -7 : -2;
+    const sway = Math.sin(time * 5) * 1.2;
+    ctx.fillRect(tx + sway, -15 + bob + breathing, 4, 12);
+  }
 
   // 2. Legs / Bottom Outfit
   if (s.bottomType === 'skirt') {
@@ -457,6 +469,28 @@ export function drawCustomTrainerSprite(
     ctx.fillRect(colX, -7 + bob + breathing, 3, 4);
   }
 
+  // Cross-body satchel strap
+  if (s.hasSatchel) {
+    ctx.strokeStyle = p.backpackSec || '#78350f';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-6, -7 + bob + breathing);
+    ctx.lineTo(5, 3 + bob + breathing);
+    ctx.stroke();
+    if (dir !== 'up') {
+      ctx.fillStyle = p.backpackMain;
+      ctx.fillRect(dir === 'left' ? -8 : 3, 1 + bob + breathing, 6, 5);
+    }
+  }
+
+  // Scarf wrapped at the collar
+  if (s.hasScarf) {
+    ctx.fillStyle = p.accessoryMain || '#ef4444';
+    ctx.fillRect(-6, -8 + bob + breathing, 12, 3);
+    if (dir === 'down' || dir === 'right') ctx.fillRect(2, -6 + bob + breathing, 3, 6);
+    else if (dir === 'left') ctx.fillRect(-5, -6 + bob + breathing, 3, 6);
+  }
+
   // Arm swings with hands
   ctx.fillStyle = p.topMain;
   if (dir === 'down' || dir === 'up') {
@@ -486,6 +520,16 @@ export function drawCustomTrainerSprite(
   } else if (s.hairStyle === 'buns_curls') {
     ctx.fillRect(-8, -17 + bob + breathing, 3, 5);
     ctx.fillRect(5, -17 + bob + breathing, 3, 5);
+  } else if (s.hairStyle === 'wavy_shaggy') {
+    ctx.fillRect(-7, -15 + bob + breathing, 2, 6);
+    ctx.fillRect(5, -15 + bob + breathing, 2, 6);
+  } else if (s.hairStyle === 'ponytail' && dir === 'down') {
+    ctx.fillRect(-7, -15 + bob + breathing, 2, 4);
+    ctx.fillRect(5, -15 + bob + breathing, 2, 4);
+  }
+  if (dir === 'up') {
+    // Back of the head is hair, not a face
+    ctx.fillRect(-5, -17 + bob + breathing, 10, 8);
   }
 
   // Eyes & Expressions
@@ -516,9 +560,29 @@ export function drawCustomTrainerSprite(
     ctx.fillRect(3, -13 + bob + breathing, 1, 1);
   }
 
+  if (s.hasGlasses && dir !== 'up') {
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 0.9;
+    if (dir === 'down') {
+      ctx.strokeRect(-4, -13.5 + bob + breathing, 3.5, 3);
+      ctx.strokeRect(0.5, -13.5 + bob + breathing, 3.5, 3);
+    } else {
+      ctx.strokeRect(dir === 'left' ? -5 : 1, -13.5 + bob + breathing, 4, 3);
+    }
+  }
+
   // Front Hair Fringe
   ctx.fillStyle = p.hair;
   ctx.fillRect(-6, -18 + bob + breathing, 12, 3);
+  if (s.hairStyle === 'spiky') {
+    ctx.beginPath();
+    for (const sx of [-6, -2, 2]) {
+      ctx.moveTo(sx, -17 + bob + breathing);
+      ctx.lineTo(sx + 2, -21 + bob + breathing);
+      ctx.lineTo(sx + 4, -17 + bob + breathing);
+    }
+    ctx.fill();
+  }
   if (dir === 'down') {
     ctx.fillRect(-5, -15 + bob + breathing, 2, 3);
     ctx.fillRect(3, -15 + bob + breathing, 2, 3);
@@ -594,6 +658,35 @@ export function drawCustomTrainerSprite(
     ctx.beginPath();
     ctx.arc(0, -17 + bob + breathing, 1.8, 0, Math.PI * 2);
     ctx.fill();
+  } else if (s.hatType === 'helmet') {
+    // Explorer helmet with headlamp
+    ctx.fillStyle = p.hatMain || '#f59e0b';
+    ctx.beginPath();
+    ctx.ellipse(0, -18 + bob + breathing, 7.5, 5.5, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(-8, -18 + bob + breathing, 16, 2);
+    if (dir !== 'up') {
+      ctx.fillStyle = '#fef9c3';
+      ctx.beginPath();
+      ctx.arc(dir === 'left' ? -3 : dir === 'right' ? 3 : 0, -20 + bob + breathing, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (s.hatType === 'sailor_cap') {
+    ctx.fillStyle = p.hatMain || '#f8fafc';
+    ctx.fillRect(-6, -21 + bob + breathing, 12, 4);
+    ctx.fillStyle = p.hatSec || '#1e3a8a';
+    ctx.fillRect(-7, -17.5 + bob + breathing, 14, 2);
+  }
+
+  if (s.hasRibbon && s.hatType !== 'sunhat') {
+    ctx.fillStyle = p.accessoryMain || '#ef4444';
+    const rx = dir === 'left' ? 3 : dir === 'right' ? -6 : 3;
+    ctx.beginPath();
+    ctx.moveTo(rx, -19 + bob + breathing);
+    ctx.lineTo(rx + 4, -21 + bob + breathing);
+    ctx.lineTo(rx + 4, -17 + bob + breathing);
+    ctx.closePath();
+    ctx.fill();
   }
 
   // 8. Tall Grass Immersion
@@ -630,4 +723,157 @@ export function drawCustomTrainerSprite(
 export function getTrainerCharacter(id?: string): TrainerCustomization {
   if (!id) return TRAINER_CHARACTERS[0];
   return TRAINER_CHARACTERS.find(t => t.id === id) || TRAINER_CHARACTERS[0];
+}
+
+// ============================================================================
+// CACHED, OUTLINED SPRITES (used by the 2.5D world renderer)
+// ============================================================================
+// Characters are drawn once per (appearance, direction, frame) into a small
+// high-resolution canvas with a soft dark outline, then blitted. This keeps
+// many on-screen NPCs cheap and makes characters read clearly against the
+// detailed terrain. Idle breathing is applied as a sub-pixel offset at blit time.
+
+const SPRITE_W = 36;
+const SPRITE_H = 46;
+const SPRITE_OX = 18; // origin (feet centre) inside the sprite canvas
+const SPRITE_OY = 28;
+const SPRITE_RES = 2.5;
+
+const spriteCache = new WeakMap<TrainerCustomization, Map<string, HTMLCanvasElement>>();
+
+function buildTrainerSprite(trainer: TrainerCustomization, dir: 'down' | 'up' | 'left' | 'right', frame: number): HTMLCanvasElement {
+  const w = Math.ceil(SPRITE_W * SPRITE_RES);
+  const h = Math.ceil(SPRITE_H * SPRITE_RES);
+  const body = document.createElement('canvas');
+  body.width = w;
+  body.height = h;
+  const bctx = body.getContext('2d')!;
+  bctx.scale(SPRITE_RES, SPRITE_RES);
+  drawCustomTrainerSprite(bctx, SPRITE_OX, SPRITE_OY, dir, frame, trainer, false, 0, 1, false);
+
+  // Silhouette for the outline
+  const sil = document.createElement('canvas');
+  sil.width = w;
+  sil.height = h;
+  const sctx = sil.getContext('2d')!;
+  sctx.drawImage(body, 0, 0);
+  sctx.globalCompositeOperation = 'source-in';
+  sctx.fillStyle = 'rgba(10, 14, 26, 0.85)';
+  sctx.fillRect(0, 0, w, h);
+
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  const octx = out.getContext('2d')!;
+  const o = Math.max(1, Math.round(SPRITE_RES * 0.6));
+  for (const [dx, dy] of [[-o, 0], [o, 0], [0, -o], [0, o]]) octx.drawImage(sil, dx, dy);
+  octx.drawImage(body, 0, 0);
+  // Gentle top-left rim light for volume
+  octx.globalCompositeOperation = 'source-atop';
+  const g = octx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, 'rgba(255,255,255,0.10)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.16)');
+  octx.fillStyle = g;
+  octx.fillRect(0, 0, w, h);
+  return out;
+}
+
+export function drawTrainerSpriteCached(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  dir: 'down' | 'up' | 'left' | 'right',
+  animFrame: number,
+  trainer: TrainerCustomization,
+  inGrass: boolean,
+  time: number,
+  scale: number = 1
+): void {
+  let perTrainer = spriteCache.get(trainer);
+  if (!perTrainer) {
+    perTrainer = new Map();
+    spriteCache.set(trainer, perTrainer);
+  }
+  const key = dir + animFrame;
+  let spr = perTrainer.get(key);
+  if (!spr) {
+    spr = buildTrainerSprite(trainer, dir, animFrame);
+    perTrainer.set(key, spr);
+  }
+
+  // Contact shadow (kept out of the cache so it never gets outlined)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+  ctx.beginPath();
+  ctx.ellipse(px, py + 13 * scale, 11 * scale, 4.6 * scale, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const breathe = animFrame === 0 ? Math.sin(time * 3.5) * 0.6 : 0;
+  ctx.drawImage(spr, px - SPRITE_OX * scale, py - SPRITE_OY * scale + breathe, SPRITE_W * scale, SPRITE_H * scale);
+
+  if (inGrass) {
+    const gSway = Math.sin(time * 3 + px * 0.1) * 2.5;
+    const blades: [number, number, number, string][] = [
+      [-9, -4, 3, '#40916c'],
+      [-2, 3, 2, '#52b788'],
+      [4, 9, 4, '#74c69d'],
+    ];
+    for (const [x0, x1, top, col] of blades) {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(px + x0 * scale, py + 14 * scale);
+      ctx.lineTo(px + ((x0 + x1) / 2 + gSway) * scale, py + top * scale);
+      ctx.lineTo(px + x1 * scale, py + 14 * scale);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+}
+
+/** Deterministic, varied townsfolk appearance derived from an NPC id. */
+const npcLookCache = new Map<string, TrainerCustomization>();
+export function getNpcAppearance(seed: string): TrainerCustomization {
+  const cached = npcLookCache.get(seed);
+  if (cached) return cached;
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+  const rnd = () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return ((h ^= h >>> 16) >>> 0) / 4294967296;
+  };
+  const pickOne = <T,>(arr: readonly T[]): T => arr[Math.floor(rnd() * arr.length)];
+  const base = pickOne(TRAINER_CHARACTERS);
+  const skins = [['#fed7aa', '#fdba74'], ['#f5d0a9', '#e8b27d'], ['#d6a06f', '#b8834f'], ['#a8714a', '#8a5a36'], ['#fde7c8', '#f4c99a']];
+  const hairs = ['#1c1917', '#44403c', '#78350f', '#a16207', '#d6d3d1', '#7c2d12', '#1e3a8a'];
+  const tops = ['#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#be123c', '#4d7c0f', '#475569', '#ca8a04'];
+  const bottoms = ['#1e293b', '#334155', '#1e3a8a', '#713f12', '#3f6212', '#4c1d95'];
+  const [skin, skinShadow] = pickOne(skins);
+  const look: TrainerCustomization = {
+    ...base,
+    id: 'npc_' + seed,
+    palette: {
+      ...base.palette,
+      skin,
+      skinShadow,
+      hair: pickOne(hairs),
+      topMain: pickOne(tops),
+      topSec: rnd() < 0.5 ? '#f8fafc' : pickOne(tops),
+      bottomMain: pickOne(bottoms),
+      hatMain: pickOne(tops),
+      backpackMain: pickOne(tops),
+      shoesMain: pickOne(['#0f172a', '#78350f', '#f8fafc', '#b91c1c']),
+    },
+    style: {
+      ...base.style,
+      hairStyle: pickOne(['spiky', 'short_trim', 'wavy_shaggy', 'long_fringe', 'ponytail', 'buns_curls'] as const),
+      hatType: rnd() < 0.45 ? 'none' : pickOne(['baseball_cap', 'beanie', 'sunhat', 'straw_hat', 'bandana', 'beret'] as const),
+      bottomType: pickOne(['jeans', 'shorts', 'skirt', 'overalls'] as const),
+      hasGlasses: rnd() < 0.2,
+      hasScarf: rnd() < 0.15,
+      hasSatchel: rnd() < 0.2,
+    },
+  };
+  npcLookCache.set(seed, look);
+  return look;
 }

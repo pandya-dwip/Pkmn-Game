@@ -20,6 +20,11 @@ const MUS: Record<string, { b: number; r: number; s: number[]; p: number[]; c: n
   victory: { b: 140, r: 60, s: MJ, p: [0, 2, 4, 7, 4, 2, 0, -1, 2, 4, 5, 7, 9, 7, 5, -1], c: [0, 3, 4, 0], w: 'square', d: 1 },
   eliteFour: { b: 184, r: 50, s: MI, p: [0, 3, 5, 6, 7, 6, 5, 3, 0, 5, 7, 8, 10, 8, 7, 5], c: [0, 6, 7, 5], w: 'sawtooth', d: 2 },
   championCeremony: { b: 132, r: 62, s: MJ, p: [0, 4, 7, 12, 11, 9, 7, 4, 5, 7, 9, 12, 14, 12, 9, 7], c: [0, 3, 4, 0], w: 'triangle', d: 1 },
+  // Exploration environments
+  forest: { b: 92, r: 62, s: MJ, p: [4, -1, 2, 4, 5, -1, 4, 2, 0, -1, 2, -1, 4, 2, 1, -1], c: [0, 5, 3, 4], w: 'triangle', d: 0 },
+  cave: { b: 70, r: 50, s: MI, p: [0, -1, -1, 3, -1, 2, -1, -1, 0, -1, -1, 5, -1, 3, 2, -1], c: [0, 5, 3, 6], w: 'sine', d: 0 },
+  coast: { b: 104, r: 64, s: MJ, p: [0, 2, 4, 7, -1, 4, 2, -1, 5, 4, 2, 0, -1, 2, 4, -1], c: [0, 3, 4, 3], w: 'triangle', d: 0 },
+  mountain: { b: 96, r: 55, s: MJ, p: [0, -1, 4, -1, 7, -1, 9, 7, 5, -1, 4, -1, 2, -1, 4, -1], c: [0, 4, 3, 4], w: 'square', d: 0 },
 };
 
 const hz = (n: number) => 440 * 2 ** ((n - 69) / 12);
@@ -253,6 +258,99 @@ export class AudioEngine {
     this.mt = a.currentTime + 0.25;
     if (this.tmr) clearInterval(this.tmr);
     this.tmr = window.setInterval(() => this.sched(n, g), 150);
+  }
+
+  // ------------------------------------------------------------------
+  // Exploration ambience & event jingles (share the music/SFX buses so
+  // the existing volume sliders and mute apply; nothing plays until the
+  // audio context has been unlocked by a user gesture).
+  // ------------------------------------------------------------------
+  private ambTimer: number | null = null;
+  private ambKind: string | null = null;
+
+  public ambient(kind: string | null): void {
+    if (this.ambKind === kind) return;
+    this.ambKind = kind;
+    if (this.ambTimer) {
+      clearInterval(this.ambTimer);
+      this.ambTimer = null;
+    }
+    if (kind) this.ambTimer = window.setInterval(() => this.ambientTick(), 650);
+  }
+
+  private swell(d: number, f: number, v: number, ty: BiquadFilterType): void {
+    if (!this.ac || !this.mu || !this.nb) return;
+    const a = this.ac;
+    const t = a.currentTime;
+    const n = a.createBufferSource();
+    n.buffer = this.nb;
+    n.loop = true;
+    const flt = a.createBiquadFilter();
+    flt.type = ty;
+    flt.frequency.value = f;
+    const g = a.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(v, t + d * 0.45);
+    g.gain.linearRampToValueAtTime(0.0001, t + d);
+    n.connect(flt).connect(g).connect(this.mu);
+    n.start(t);
+    n.stop(t + d + 0.05);
+  }
+
+  private ambientTick(): void {
+    if (!this.ac || this.ac.state !== 'running' || !this.mu) return;
+    const r = Math.random();
+    switch (this.ambKind) {
+      case 'cave':
+        if (r < 0.3) {
+          const f = 1500 + Math.random() * 1500;
+          this.swp(f, f * 0.5, 0.1, 'sine', 0.05, 0, this.mu);
+          this.swp(f * 0.55, f * 0.4, 0.18, 'sine', 0.018, 0.22, this.mu);
+        }
+        break;
+      case 'coast':
+        if (r < 0.22) this.swell(3.2, 520 + Math.random() * 300, 0.08, 'lowpass');
+        if (r > 0.93) this.swp(2600, 1900, 0.18, 'sine', 0.02, 0, this.mu); // gull
+        break;
+      case 'forest':
+        if (r < 0.22) {
+          const f = 2300 + Math.random() * 1600;
+          [0, 0.09, 0.19].forEach((t, i) => this.swp(f * (1 + i * 0.07), f * 1.22, 0.06, 'sine', 0.022, t, this.mu!));
+        }
+        if (r > 0.9) this.swell(2.4, 900, 0.03, 'bandpass');
+        break;
+      case 'mountain':
+        if (r < 0.28) this.swell(2.8, 380 + Math.random() * 200, 0.06, 'bandpass');
+        break;
+    }
+  }
+
+  public questAccept(): void {
+    [523, 659, 784].forEach((f, i) => this.beep(f, 0.14, 'triangle', 0.06, i * 0.08));
+  }
+
+  public questComplete(): void {
+    [523, 659, 784, 1047].forEach((f, i) => this.beep(f, 0.18, 'square', 0.045, i * 0.1));
+    this.beep(1319, 0.4, 'triangle', 0.06, 0.42);
+  }
+
+  public discovery(): void {
+    [880, 1175, 1568].forEach((f, i) => this.beep(f, 0.22, 'sine', 0.05, i * 0.09));
+  }
+
+  /** Rising shimmer used while a Pokémon gathers energy to evolve. */
+  public evolutionCharge(seconds: number): void {
+    for (let i = 0; i < Math.floor(seconds * 4); i++) {
+      const f = 330 * Math.pow(2, i / (seconds * 4));
+      this.beep(f, 0.12, 'triangle', 0.035, i * 0.25);
+      if (i % 2 === 0) this.nzs(0.18, 7000, 4000, 0.02, i * 0.25, 1, 'highpass');
+    }
+  }
+
+  public evolutionReveal(): void {
+    this.nzs(0.6, 8000, 2000, 0.06, 0, 1, 'highpass');
+    [523, 659, 784, 1047, 1319].forEach((f, i) => this.beep(f, 0.22, 'square', 0.05, 0.05 + i * 0.09));
+    [523, 784, 1047].forEach(f => this.beep(f, 0.9, 'triangle', 0.05, 0.55));
   }
 
   public unlock(): void {

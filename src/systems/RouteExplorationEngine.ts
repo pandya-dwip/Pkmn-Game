@@ -10,10 +10,52 @@
  * - Preserves exact route position upon returning from battle!
  */
 
-import { POKEMON_SPECIES_MAP } from '../data/pokemon';
 import { sound } from '../audio/SoundSynthesizer';
 import { generateEncounterMon, EncounterMon } from './EncounterSystem';
 import { inputManager } from './InputManager';
+import { Camera25D } from '../world/Camera25D';
+import { CompanionController } from '../world/CompanionController';
+import { drawBuildingVolume, Architecture } from '../world/BuildingVolume';
+import { getPokemonSprite } from '../world/PokemonSprites';
+import { drawTrainerSpriteCached, getNpcAppearance, getTrainerById, TrainerCustomization } from '../data/characters';
+import {
+  CAVE_WALL_FACE,
+  drawTerrainPatch,
+  drawCaveFloors,
+  isOnCaveFloor,
+  drawWater,
+  drawBridge,
+  drawSwitchPlate,
+  drawFishingSpot,
+  drawPortal,
+  portalAnchorY,
+  drawBoulder,
+  drawBarrier,
+  drawLandmark,
+  drawWaterfall,
+  drawCrystal,
+  drawNoticeBoard,
+  drawMarker,
+  drawEncounterPatch,
+} from '../world/FeatureRenderer';
+import {
+  Rect,
+  WorldCondition,
+  RoutePortal,
+  RouteWater,
+  RouteBridge,
+  RouteTerrainPatch,
+  RouteBoulder,
+  RouteSwitch,
+  RouteBarrier,
+  RouteLandmark,
+  RouteFishingSpot,
+  RouteWaterfall,
+  RouteCrystal,
+  RouteNoticeBoard,
+  RouteStaticEncounter,
+  RouteLostPokemon,
+} from '../world/WorldTypes';
 
 export interface RouteBuilding {
   type: 'center' | 'mart' | 'gym' | 'gate' | 'house';
@@ -45,9 +87,14 @@ export interface RouteItem {
   x: number;
   y: number;
   name: string;
-  type: 'ball' | 'berry' | 'money';
+  type: 'ball' | 'berry' | 'money' | 'greatBall' | 'ultraBall' | 'sitrus' | 'revive' | 'stone' | 'key';
   amount: number;
   collected: boolean;
+  /** Hidden items only become visible (and collectable) at close range. */
+  hidden?: boolean;
+  /** Stone type for 'stone' items, key-item id for 'key' items. */
+  detail?: string;
+  requires?: WorldCondition;
 }
 
 export interface RouteNPC {
@@ -57,8 +104,16 @@ export interface RouteNPC {
   avatar: string;
   name: string;
   dialogue: string;
-  gift?: { type: 'ball' | 'berry' | 'money'; name: string; amount: number };
+  gift?: { type: 'ball' | 'berry' | 'money' | 'key'; name: string; amount: number; detail?: string };
   given?: boolean;
+  /** Quests this NPC offers or accepts. */
+  questIds?: string[];
+  visibleWhen?: WorldCondition;
+  /** Optional trainer battle. */
+  trainer?: { id: string; team: { id: number; lv: number }[]; reward: number; intro: string; defeat: string };
+  /** Ferry / guide NPC that moves the player to another location. */
+  ferry?: { target: number; x: number; y: number; label: string; requires?: WorldCondition };
+  facing?: 'up' | 'down' | 'left' | 'right';
 }
 
 export interface GrassPatch {
@@ -67,6 +122,8 @@ export interface GrassPatch {
   w: number;
   h: number;
   zone?: string;
+  /** Visual style of the encounter patch (tall grass by default). */
+  style?: 'grass' | 'rubble' | 'reeds' | 'dunes';
 }
 
 export interface RouteFence {
@@ -200,6 +257,42 @@ export interface RouteDefinition {
   fountains?: RouteFountain[];
   streetlamps?: RouteStreetlamp[];
   benches?: RouteBench[];
+
+  // ---- 2.5D world expansion (all optional) ----
+  /** Special exploration area (forest / cave / coast / mountain) outside the linear route chain. */
+  isSpecialArea?: boolean;
+  areaKind?: 'forest' | 'cave' | 'coast' | 'mountain';
+  /** Area this one returns to by default (for the HUD / hub). */
+  parentRouteId?: number;
+  /** Ambient darkness 0..1 (caves). */
+  dark?: number;
+  architecture?: Architecture;
+  music?: string;
+  portals?: RoutePortal[];
+  waters?: RouteWater[];
+  bridges?: RouteBridge[];
+  terrain?: RouteTerrainPatch[];
+  /** Cave chambers: when set, only these rectangles (and bridges) are walkable. */
+  floors?: Rect[];
+  boulders?: RouteBoulder[];
+  switches?: RouteSwitch[];
+  barriers?: RouteBarrier[];
+  landmarks?: RouteLandmark[];
+  fishingSpots?: RouteFishingSpot[];
+  waterfalls?: RouteWaterfall[];
+  crystals?: RouteCrystal[];
+  noticeBoards?: RouteNoticeBoard[];
+  staticEncounters?: RouteStaticEncounter[];
+  lostPokemon?: RouteLostPokemon[];
+  /** Base backdrop colour outside the world bounds. */
+  backdrop?: string;
+}
+
+/** What the trainer can currently interact with. */
+export interface InteractTarget {
+  label: string;
+  action: string;
+  run: () => void;
 }
 
 export class RouteExplorationEngine {
@@ -237,14 +330,49 @@ export class RouteExplorationEngine {
   public encountersTriggered: number = 0;
   public isPaused: boolean = false;
 
-  // Camera
+  // 2.5D camera (camX/camY hold the ground-view origin while the ground layer renders)
+  public readonly cam = new Camera25D();
   private camX: number = 0;
   private camY: number = 0;
+  private viewW = 800;
+  private viewH = 480;
+  private dpr = 1;
+  private groundCanvas: HTMLCanvasElement | null = null;
+  private groundCtx: CanvasRenderingContext2D | null = null;
+  private staticCanvas: HTMLCanvasElement | null = null;
+  private staticRouteRef: RouteDefinition | null = null;
+  private darkCanvas: HTMLCanvasElement | null = null;
+  private groundRect = { x: 0, y: 0, w: 0, h: 0 };
+
+  // Per-route caches (generated trees/fences/stones are otherwise rebuilt on every collision test)
+  private treeCache: RouteTree[] = [];
+  private fenceCache: RouteFence[] = [];
+  private stoneCache: RouteStone[] = [];
+  private cacheRoute: RouteDefinition | null = null;
+
+  // Exploration state
+  public readonly companion = new CompanionController();
+  private boulderPos = new Map<string, { x: number; y: number }>();
+  private revealedPortals = new Set<string>();
+  private revealedItems = new Set<string>();
+  private toast: { title: string; sub: string; t: number } | null = null;
+  private fishing: { spot: RouteFishingSpot; t: number; biteAt: number; bite: boolean } | null = null;
 
   // Input Keys
   private keys: Record<string, boolean> = {};
 
   public selectedTrainerId: string = 'male_red';
+  /** Fully resolved trainer look (base character + cosmetics). */
+  public playerAppearance: TrainerCustomization | null = null;
+  /** Lantern / headlamp increases the light radius in caves. */
+  public hasLantern = false;
+
+  // Progress hooks provided by the game layer
+  public isConditionMet: (c?: WorldCondition) => boolean = () => true;
+  public getFlag: (flag: string) => boolean = () => false;
+  public setFlag: (flag: string) => void = () => {};
+  public questMarkerFor: ((npc: RouteNPC) => 'quest' | 'turnin' | null) | null = null;
+  public noticeBoardHasNew: ((board: RouteNoticeBoard) => boolean) | null = null;
 
   // External Callbacks
   public onTriggerEncounter: ((mon: EncounterMon, x: number, y: number) => void) | null = null;
@@ -260,18 +388,27 @@ export class RouteExplorationEngine {
   public onRoutePreviousExit: ((prevRouteIndex: number) => void) | null = null;
   public onOpenMap: (() => void) | null = null;
   public onOpenMenu: (() => void) | null = null;
+  public onUsePortal: ((portal: RoutePortal) => void) | null = null;
+  public onLandmark: ((lm: RouteLandmark) => void) | null = null;
+  public onNoticeBoard: ((board: RouteNoticeBoard) => void) | null = null;
+  public onStaticEncounter: ((enc: RouteStaticEncounter) => void) | null = null;
+  public onLostPokemon: ((lost: RouteLostPokemon) => void) | null = null;
+  public onFishBite: ((spot: RouteFishingSpot) => void) | null = null;
+  public onFishStart: ((spot: RouteFishingSpot) => boolean) | null = null;
+  public onCompanionInteract: (() => void) | null = null;
+  public onPuzzleSolved: ((sw: RouteSwitch) => void) | null = null;
+  public onReveal: ((what: 'portal' | 'item', label: string) => void) | null = null;
 
   private handlePointerDown = (e: PointerEvent): void => {
     if (this.isPaused || !this.canvas || !this.currentRoute) return;
     const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
-    const screenX = (e.clientX - rect.left) * scaleX;
-    const screenY = (e.clientY - rect.top) * scaleY;
-    const worldX = screenX + this.camX;
-    const worldY = screenY + this.camY;
-    this.targetDest = { x: worldX, y: worldY };
+    const sx = ((e.clientX - rect.left) / rect.width) * this.viewW;
+    const sy = ((e.clientY - rect.top) / rect.height) * this.viewH;
+    const w = this.cam.unproject(sx, sy);
+    if (w) this.targetDest = w;
   };
+
+  private handleResize = (): void => this.resize();
 
   constructor() {
     this.handleKeyDown = this.handleKeyDown.bind(this);
@@ -282,24 +419,34 @@ export class RouteExplorationEngine {
   public resize(): void {
     if (!this.canvas) return;
     const parent = this.canvas.parentElement;
-    if (parent) {
-      const w = parent.clientWidth || 800;
-      const h = parent.clientHeight || 480;
-      if (this.canvas.width !== w || this.canvas.height !== h) {
-        this.canvas.width = w;
-        this.canvas.height = h;
-      }
+    const w = (parent && parent.clientWidth) || 800;
+    const h = (parent && parent.clientHeight) || 480;
+    // Sharper rendering on high-DPI screens, capped to protect mobile fill-rate.
+    const dpr = Math.min(window.devicePixelRatio || 1, w < 700 ? 2 : 1.5);
+    const pw = Math.round(w * dpr);
+    const ph = Math.round(h * dpr);
+    if (this.canvas.width !== pw || this.canvas.height !== ph) {
+      this.canvas.width = pw;
+      this.canvas.height = ph;
     }
+    this.viewW = w;
+    this.viewH = h;
+    this.dpr = dpr;
+    this.cam.setViewport(w, h);
   }
 
   public init(canvas: HTMLCanvasElement): void {
+    if (this.canvas !== canvas) {
+      if (this.canvas) this.canvas.removeEventListener('pointerdown', this.handlePointerDown);
+      canvas.addEventListener('pointerdown', this.handlePointerDown);
+    }
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.resize();
+    // Re-adding the same bound listeners is a no-op, so repeated init() calls never stack handlers.
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
-    window.addEventListener('resize', () => this.resize());
-    canvas.addEventListener('pointerdown', this.handlePointerDown);
+    window.addEventListener('resize', this.handleResize);
 
     const viewport = document.getElementById('route-viewport');
     const joystick = document.getElementById('touch-joystick');
@@ -339,104 +486,186 @@ export class RouteExplorationEngine {
 
   public interact(): void {
     if (!this.currentRoute || this.isPaused) return;
-
-    // Check NPC interaction
-    for (const npc of this.currentRoute.npcs) {
-      const dist = Math.hypot(this.player.x - npc.x, this.player.y - npc.y);
-      if (dist < 55) {
-        sound.beep(660, 0.1, 'triangle');
-        if (this.onTalkNPC) this.onTalkNPC(npc);
-        return;
-      }
+    if (this.fishing) {
+      this.reelIn();
+      return;
     }
-
-    // Check Building interaction
-    for (const b of this.currentRoute.buildings) {
-      const nearDoor =
-        this.player.x >= b.x - 20 &&
-        this.player.x <= b.x + b.w + 24 &&
-        this.player.y >= b.y + b.h - 16 &&
-        this.player.y <= b.y + b.h + 45;
-
-      if (nearDoor) {
-        sound.beep(880, 0.15, 'sine');
-        if (b.type === 'gym') {
-          if (b.gymIndex !== undefined && this.onEnterGym) {
-            this.onEnterGym(b.gymIndex);
-          } else if (this.onEnterHouse) {
-            this.onEnterHouse(b);
-          }
-        } else if (b.type === 'mart' && this.onEnterMart) {
-          this.onEnterMart();
-        } else if (b.type === 'center' && this.onEnterCenter) {
-          this.onEnterCenter();
-        } else if (b.type === 'house' && this.onEnterHouse) {
-          this.onEnterHouse(b);
-        } else if (b.type === 'gate') {
-          if (this.onEnterGate) {
-            this.onEnterGate(b);
-          } else if (this.onRouteExit) {
-            this.onRouteExit(this.currentRoute.id + 1);
-          }
-        }
-        return;
-      }
-    }
-
-    // Check Route Exit Signpost
-    if (this.currentRoute.exitX > 0) {
-      const ex = this.currentRoute.exitX - 30;
-      const ey = 200;
-      if (Math.hypot(this.player.x - ex, this.player.y - ey) < 55) {
-        sound.beep(880, 0.15, 'sine');
-        if (this.onRouteExit) {
-          this.onRouteExit(this.currentRoute.id + 1);
-        }
-        return;
-      }
-    }
-
-    // Check Route Signposts
-    if (this.currentRoute.signposts) {
-      for (const sp of this.currentRoute.signposts) {
-        if (Math.hypot(this.player.x - sp.x, this.player.y - sp.y) < 50) {
-          sound.beep(750, 0.1, 'sine');
-          if (this.onReadSignpost) {
-            this.onReadSignpost(sp);
-          }
-          return;
-        }
-      }
-    }
+    const t = this.getInteractTarget();
+    if (t) t.run();
   }
 
   public hasNearbyInteractable(): boolean {
-    if (!this.currentRoute) return false;
-    for (const npc of this.currentRoute.npcs) {
-      if (Math.hypot(this.player.x - npc.x, this.player.y - npc.y) < 55) return true;
-    }
-    for (const b of this.currentRoute.buildings) {
-      const nearDoor =
-        this.player.x >= b.x - 20 &&
-        this.player.x <= b.x + b.w + 24 &&
-        this.player.y >= b.y + b.h - 16 &&
-        this.player.y <= b.y + b.h + 45;
-      if (nearDoor) return true;
-    }
-    if (this.currentRoute.exitX > 0) {
-      const ex = this.currentRoute.exitX - 30;
-      const ey = 200;
-      if (Math.hypot(this.player.x - ex, this.player.y - ey) < 55) return true;
-    }
-    if (this.currentRoute.signposts) {
-      for (const sp of this.currentRoute.signposts) {
-        if (Math.hypot(this.player.x - sp.x, this.player.y - sp.y) < 50) return true;
+    return !!this.currentRoute && !!this.getInteractTarget();
+  }
+
+  /** NPCs currently present (quest / story conditions applied). */
+  public visibleNPCs(): RouteNPC[] {
+    const r = this.currentRoute;
+    if (!r) return [];
+    return r.npcs.filter(n => !n.visibleWhen || this.isConditionMet(n.visibleWhen));
+  }
+
+  private isNearDoor(b: RouteBuilding): boolean {
+    const p = this.player;
+    return p.x >= b.x - 20 && p.x <= b.x + b.w + 24 && p.y >= b.y + b.h - 16 && p.y <= b.y + b.h + 45;
+  }
+
+  /**
+   * Single source of truth for proximity interactions, shared by the A button,
+   * keyboard, contextual prompt and pulse indicator. Ordered by priority.
+   */
+  public getInteractTarget(): InteractTarget | null {
+    const r = this.currentRoute;
+    if (!r) return null;
+    const p = this.player;
+    const near = (x: number, y: number, d: number) => Math.hypot(p.x - x, p.y - y) < d;
+
+    for (const npc of this.visibleNPCs()) {
+      if (near(npc.x, npc.y, 55)) {
+        const action = npc.trainer && !this.getFlag('trainer:' + npc.trainer.id) ? 'Battle' : npc.ferry ? 'Board' : 'Talk';
+        return {
+          label: npc.name,
+          action,
+          run: () => {
+            sound.beep(660, 0.1, 'triangle');
+            if (this.onTalkNPC) this.onTalkNPC(npc);
+          },
+        };
       }
     }
-    return false;
+    for (const enc of r.staticEncounters || []) {
+      if (this.getFlag(enc.doneFlag) || !this.isConditionMet(enc.requires)) continue;
+      if (near(enc.x, enc.y, 60)) {
+        return { label: 'Wild Pokémon', action: 'Approach', run: () => this.onStaticEncounter?.(enc) };
+      }
+    }
+    for (const lost of r.lostPokemon || []) {
+      if (this.getFlag(lost.foundFlag) || !this.isConditionMet(lost.requires)) continue;
+      if (near(lost.x, lost.y, 52)) {
+        return { label: 'Lost Pokémon', action: 'Approach', run: () => this.onLostPokemon?.(lost) };
+      }
+    }
+    for (const nb of r.noticeBoards || []) {
+      if (near(nb.x, nb.y + 4, 52)) return { label: nb.title, action: 'Read', run: () => this.onNoticeBoard?.(nb) };
+    }
+    for (const lm of r.landmarks || []) {
+      if (near(lm.x, lm.y, 62)) {
+        return {
+          label: lm.title,
+          action: 'Inspect',
+          run: () => {
+            sound.beep(784, 0.12, 'sine');
+            this.onLandmark?.(lm);
+          },
+        };
+      }
+    }
+    for (const portal of r.portals || []) {
+      if (portal.hidden && !this.revealedPortals.has(portal.id) && !this.getFlag('portal:' + portal.id)) continue;
+      if (near(portal.x, portal.y, 48)) {
+        return {
+          label: portal.label,
+          action: portal.style === 'dock' ? 'Sail' : portal.style.startsWith('stairs') ? 'Climb' : 'Enter',
+          run: () => {
+            sound.beep(880, 0.15, 'sine');
+            this.onUsePortal?.(portal);
+          },
+        };
+      }
+    }
+    for (const b of r.buildings) {
+      if (this.isNearDoor(b)) {
+        const action = b.type === 'gym' ? (b.gymIndex !== undefined ? 'Enter Gym' : 'Inspect') : b.type === 'house' ? 'Visit' : 'Enter';
+        return { label: b.label, action, run: () => this.enterBuilding(b) };
+      }
+    }
+    if (r.exitX > 0 && near(r.exitX - 30, 200, 55)) {
+      return {
+        label: r.destinationLabel || 'Next Route',
+        action: 'Travel',
+        run: () => {
+          sound.beep(880, 0.15, 'sine');
+          this.onRouteExit?.(r.id + 1);
+        },
+      };
+    }
+    for (const sp of r.signposts || []) {
+      if (near(sp.x, sp.y, 50)) {
+        return {
+          label: sp.title,
+          action: 'Read Sign',
+          run: () => {
+            sound.beep(750, 0.1, 'sine');
+            this.onReadSignpost?.(sp);
+          },
+        };
+      }
+    }
+    for (const f of r.fishingSpots || []) {
+      if (near(f.x, f.y, 70)) return { label: 'Fishing Spot', action: 'Fish', run: () => this.startFishing(f) };
+    }
+    // Petting the partner requires turning to face it (it usually trails behind)
+    const c = this.companion;
+    const facingCompanion =
+      !!c.info &&
+      c.isNear(p.x, p.y, 46) &&
+      ((p.dir === 'up' && c.y < p.y - 6) || (p.dir === 'down' && c.y > p.y + 6) || (p.dir === 'left' && c.x < p.x - 6) || (p.dir === 'right' && c.x > p.x + 6));
+    if (this.companion.info && facingCompanion) {
+      return {
+        label: this.companion.info.name,
+        action: 'Pet',
+        run: () => {
+          this.companion.celebrate();
+          this.onCompanionInteract?.();
+        },
+      };
+    }
+    return null;
+  }
+
+  private enterBuilding(b: RouteBuilding): void {
+    const r = this.currentRoute;
+    if (!r) return;
+    sound.beep(880, 0.15, 'sine');
+    if (b.type === 'gym') {
+      if (b.gymIndex !== undefined && this.onEnterGym) this.onEnterGym(b.gymIndex);
+      else this.onEnterHouse?.(b);
+    } else if (b.type === 'mart') this.onEnterMart?.();
+    else if (b.type === 'center') this.onEnterCenter?.();
+    else if (b.type === 'house') this.onEnterHouse?.(b);
+    else if (b.type === 'gate') {
+      if (this.onEnterGate) this.onEnterGate(b);
+      else this.onRouteExit?.(r.id + 1);
+    }
+  }
+
+  // ---------------------------------------------------------------- fishing
+  private startFishing(spot: RouteFishingSpot): void {
+    if (this.onFishStart && !this.onFishStart(spot)) return;
+    sound.swp(900, 400, 0.25, 'sine', 0.08);
+    this.fishing = { spot, t: 0, biteAt: 1.2 + Math.random() * 2.4, bite: false };
+    this.showToast('Fishing...', 'Press A when something bites');
+  }
+
+  private reelIn(): void {
+    const f = this.fishing;
+    if (!f) return;
+    this.fishing = null;
+    if (f.bite) {
+      sound.beep(1046, 0.12, 'square');
+      this.onFishBite?.(f.spot);
+    } else {
+      sound.beep(220, 0.15, 'triangle');
+      this.showToast('Too early!', 'Nothing was biting yet');
+    }
+  }
+
+  public showToast(title: string, sub: string): void {
+    this.toast = { title, sub, t: 2.6 };
   }
 
   public loadRoute(routeDef: RouteDefinition, resumeX?: number, resumeY?: number): void {
+    const routeChanged = this.currentRoute !== routeDef;
     this.currentRoute = routeDef;
     this.routeIndex = routeDef.id;
     this.player.x = resumeX !== undefined ? resumeX : routeDef.startX;
@@ -445,7 +674,84 @@ export class RouteExplorationEngine {
     this.player.vy = 0;
     this.player.cooldownTimer = 2.0; // 2 seconds safety cooldown after returning
     this.isPaused = false;
+    this.targetDest = null;
+    this.fishing = null;
+    this.lastPromptKey = '#';
+    if (routeChanged) {
+      this.revealedPortals.clear();
+      this.revealedItems.clear();
+      this.activeSection = null;
+    }
+    this.rebuildCaches(routeDef);
+    this.resetBoulders(routeDef);
+    // Never spawn inside a solid (e.g. an old save position that is now blocked)
+    if (this.isBlocked(this.player.x, this.player.y, routeDef)) {
+      const spot = this.findFreeSpotNear(this.player.x, this.player.y) || { x: routeDef.startX, y: routeDef.startY };
+      this.player.x = spot.x;
+      this.player.y = spot.y;
+    }
+    this.companion.snapBehind(this.player.x, this.player.y, this.player.dir, (x, y) => !this.isBlocked(x, y, routeDef));
+    this.snapCamera();
     this.initParticles();
+  }
+
+  private rebuildCaches(route: RouteDefinition): void {
+    if (this.cacheRoute === route) return;
+    this.cacheRoute = null;
+    // Generated lists are computed once per route; trees are cleared away from
+    // visible portals so entrances are never buried in foliage.
+    const trees = this.getRouteTrees(route);
+    const clear = (route.portals || []).filter(p => !p.hidden);
+    this.treeCache = trees.filter(t => !clear.some(p => Math.hypot(t.x - p.x, this.getTreeTrunkFootY(t) - p.y) < 58));
+    this.fenceCache = this.getRouteFences(route);
+    this.stoneCache = this.getRouteStones(route);
+    this.cacheRoute = route;
+    this.staticRouteRef = null; // force static ground rebuild
+  }
+
+  private resetBoulders(route: RouteDefinition): void {
+    this.boulderPos.clear();
+    for (const b of route.boulders || []) {
+      // A solved puzzle keeps its boulder resting on the matching plate.
+      const solvedPlate = (route.switches || []).find(sw => this.getFlag(sw.flag) && sw.id === b.id);
+      this.boulderPos.set(b.id, solvedPlate ? { x: solvedPlate.x, y: solvedPlate.y } : { x: b.x, y: b.y });
+    }
+  }
+
+  public findFreeSpotNear(x: number, y: number): { x: number; y: number } | null {
+    const r = this.currentRoute;
+    if (!r) return null;
+    for (let rad = 16; rad < 300; rad += 16) {
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+        const cx = x + Math.cos(a) * rad;
+        const cy = y + Math.sin(a) * rad;
+        if (!this.isBlocked(cx, cy, r)) return { x: cx, y: cy };
+      }
+    }
+    return null;
+  }
+
+  /** Focus point the camera wants for the current player position (clamped to the world). */
+  private desiredFocus(): { x: number; y: number } {
+    const r = this.currentRoute!;
+    const cam = this.cam;
+    const half = cam.nearHalfWidth();
+    const reach = cam.verticalReach();
+    let fx = this.player.x;
+    let fy = this.player.y - 8;
+    if (r.worldWidth <= half * 2) fx = r.worldWidth / 2;
+    else fx = Math.max(half, Math.min(r.worldWidth - half, fx));
+    const minY = reach.up - 50;
+    const maxY = r.worldHeight - reach.down + 20;
+    fy = maxY < minY ? (minY + maxY) / 2 : Math.max(minY, Math.min(maxY, fy));
+    return { x: fx, y: fy };
+  }
+
+  private snapCamera(): void {
+    if (!this.currentRoute) return;
+    const f = this.desiredFocus();
+    this.cam.fx = f.x;
+    this.cam.fy = f.y;
   }
 
   private initParticles(): void {
@@ -534,45 +840,60 @@ export class RouteExplorationEngine {
   }
 
   private update(dt: number): void {
-    if (!this.currentRoute) return;
+    const route = this.currentRoute;
+    if (!route) return;
 
     this.time += dt;
+    if (this.toast) {
+      this.toast.t -= dt;
+      if (this.toast.t <= 0) this.toast = null;
+    }
 
-    // Update atmospheric floating particles
+    // Atmospheric floating particles
     for (const p of this.particles) {
       p.x += p.vx * dt;
       p.y += (p.vy + Math.sin(this.time * 2 + p.x * 0.05) * 4) * dt;
       p.rot += p.rotSpeed * dt;
-      if (this.currentRoute) {
-        if (p.x > this.currentRoute.worldWidth + 20) p.x = -20;
-        if (p.y > this.currentRoute.worldHeight + 20) p.y = -20;
-      }
+      if (p.x > route.worldWidth + 20) p.x = -20;
+      if (p.y > route.worldHeight + 20) p.y = -20;
     }
 
-    // Update grass kick-up particles
+    // Grass kick-up particles
     for (let i = this.grassParticles.length - 1; i >= 0; i--) {
       const gp = this.grassParticles[i];
       gp.x += gp.vx * dt;
       gp.y += gp.vy * dt;
       gp.life -= dt;
-      if (gp.life <= 0) {
-        this.grassParticles.splice(i, 1);
+      if (gp.life <= 0) this.grassParticles.splice(i, 1);
+    }
+
+    // Fishing: the trainer stands still until a bite or until they reel in
+    if (this.fishing) {
+      const f = this.fishing;
+      f.t += dt;
+      if (!f.bite && f.t >= f.biteAt) {
+        f.bite = true;
+        sound.beep(1318, 0.08, 'square');
+        sound.beep(1318, 0.08, 'square', 0.05, 0.12);
+        this.showToast('Something bit!', 'Press A to reel in');
+      } else if (f.bite && f.t >= f.biteAt + 1.6) {
+        this.fishing = null;
+        this.showToast('It got away...', 'Try again');
       }
+      this.updateCompanionAndCamera(dt);
+      this.updatePrompt();
+      return;
     }
 
     const move = inputManager.getMovement();
     let dx = move.dx;
     let dy = move.dy;
-
-    // Combine with legacy keys if any
     if (this.keys['ArrowUp']) dy -= 1;
     if (this.keys['ArrowDown']) dy += 1;
     if (this.keys['ArrowLeft']) dx -= 1;
     if (this.keys['ArrowRight']) dx += 1;
 
     let len = Math.hypot(dx, dy);
-
-    // If manual input is given, cancel tap-to-move destination
     if (len > 0.05) {
       this.targetDest = null;
     } else if (this.targetDest) {
@@ -587,20 +908,15 @@ export class RouteExplorationEngine {
         len = 1.0;
       }
     }
-
     if (len > 1.0) {
       dx /= len;
       dy /= len;
     }
 
-    if (Math.abs(dx) > Math.abs(dy)) {
-      this.player.dir = dx > 0 ? 'right' : 'left';
-    } else if (Math.abs(dy) > 0) {
-      this.player.dir = dy > 0 ? 'down' : 'up';
-    }
+    if (Math.abs(dx) > Math.abs(dy)) this.player.dir = dx > 0 ? 'right' : 'left';
+    else if (Math.abs(dy) > 0) this.player.dir = dy > 0 ? 'down' : 'up';
 
     const isMoving = len > 0.05;
-
     if (isMoving) {
       this.player.stepTimer += dt;
       if (this.player.stepTimer > 0.12) {
@@ -610,234 +926,253 @@ export class RouteExplorationEngine {
     } else {
       this.player.animFrame = 0;
     }
+    if (this.player.cooldownTimer > 0) this.player.cooldownTimer -= dt;
 
-    // Cooldown timer
-    if (this.player.cooldownTimer > 0) {
-      this.player.cooldownTimer -= dt;
-    }
-
-    // Move player with axis-aligned sliding collision checks
-    const moveX = dx * this.player.speed * dt;
-    const moveY = dy * this.player.speed * dt;
-
+    // Shallow water slows the trainer down
+    const speed = this.player.speed * (this.isInShallows(this.player.x, this.player.y + 8) ? 0.62 : 1);
+    const moveX = dx * speed * dt;
+    const moveY = dy * speed * dt;
+    let blockedMove = false;
     if (Math.abs(moveX) > 0.001) {
       const nextX = this.player.x + moveX;
-      if (!this.isBlocked(nextX, this.player.y, this.currentRoute)) {
-        this.player.x = nextX;
+      if (!this.isBlocked(nextX, this.player.y, route)) this.player.x = nextX;
+      else {
+        this.tryPushBoulder(nextX, this.player.y, Math.sign(moveX), 0, dt);
+        blockedMove = true;
       }
     }
-
     if (Math.abs(moveY) > 0.001) {
       const nextY = this.player.y + moveY;
-      if (!this.isBlocked(this.player.x, nextY, this.currentRoute)) {
-        this.player.y = nextY;
+      if (!this.isBlocked(this.player.x, nextY, route)) this.player.y = nextY;
+      else {
+        this.tryPushBoulder(this.player.x, nextY, 0, Math.sign(moveY), dt);
+        blockedMove = true;
       }
     }
+    if (blockedMove && this.targetDest) {
+      // Tap-to-move gives up instead of grinding against a wall
+      const tdist = Math.hypot(this.targetDest.x - this.player.x, this.targetDest.y - this.player.y);
+      if (tdist < 60) this.targetDest = null;
+    }
 
-    // Check Tall Grass (Spawn Grass Patches) & Wild Encounters
-    // Normal lawn grass outside paths is safe walking terrain.
-    // Wild Pokémon encounters ONLY occur when wading inside tall grass patches!
+    // Tall grass & wild encounters (only inside tall grass patches)
     let inGrassNow = false;
+    let inEncounterPatch = false;
     let currentGrassZone: string | undefined = undefined;
-
-    // Check player's foot position for realistic wading
     const footX = this.player.x;
     const footY = this.player.y + 10;
-
-    for (const patch of this.currentRoute.grassPatches) {
-      if (
-        footX >= patch.x - 2 &&
-        footX <= patch.x + patch.w + 2 &&
-        footY >= patch.y - 2 &&
-        footY <= patch.y + patch.h + 2
-      ) {
-        inGrassNow = true;
+    for (const patch of route.grassPatches) {
+      if (footX >= patch.x - 2 && footX <= patch.x + patch.w + 2 && footY >= patch.y - 2 && footY <= patch.y + patch.h + 2) {
+        inGrassNow = patch.style !== 'rubble';
+        inEncounterPatch = true;
         currentGrassZone = patch.zone;
         break;
       }
     }
-
     this.player.inGrass = inGrassNow;
 
-    if (inGrassNow && isMoving) {
-      if (Math.random() < 0.45) {
-        this.spawnGrassParticle(this.player.x, this.player.y + 12);
-      }
+    if (inEncounterPatch && isMoving) {
+      if (inGrassNow && Math.random() < 0.45) this.spawnGrassParticle(this.player.x, this.player.y + 12);
       if (this.player.cooldownTimer <= 0) {
-        // Increased spawn rate when walking in tall grass (responsive & snappy)
         this.player.grassSteps += dt * 3.8;
         if (this.player.grassSteps >= 2.6) {
           this.player.grassSteps = 0;
-          // Roll for wild encounter (~60% chance per check)
-          const encounterRoll = Math.random();
-          if (encounterRoll < 0.60) {
-            this.triggerWildBattle(currentGrassZone || (this.currentRoute.theme === 'forest' ? 'forest' : 'field'));
+          if (Math.random() < 0.6) {
+            this.triggerWildBattle(currentGrassZone || (route.theme === 'forest' ? 'forest' : 'field'));
             return;
           }
         }
       }
     }
 
-    // Update Active Map Section & On-Screen Banner
-    if (this.currentRoute.sections) {
-      for (const sec of this.currentRoute.sections) {
-        if (
-          this.player.x >= sec.x &&
-          this.player.x <= sec.x + sec.w &&
-          this.player.y >= sec.y &&
-          this.player.y <= sec.y + sec.h
-        ) {
+    // Map section banner
+    if (route.sections) {
+      for (const sec of route.sections) {
+        if (this.player.x >= sec.x && this.player.x <= sec.x + sec.w && this.player.y >= sec.y && this.player.y <= sec.y + sec.h) {
           if (!this.activeSection || this.activeSection.id !== sec.id) {
             this.activeSection = sec;
             this.sectionBannerTimer = 3.8;
             const locEl = document.getElementById('route-location-label');
-            if (locEl) {
-              locEl.innerHTML = `${this.currentRoute.name} &bull; ${sec.icon} ${sec.name}`;
-            }
+            if (locEl) locEl.textContent = route.name + ' · ' + sec.name;
           }
           break;
         }
       }
     }
-    if (this.sectionBannerTimer > 0) {
-      this.sectionBannerTimer -= dt;
+    if (this.sectionBannerTimer > 0) this.sectionBannerTimer -= dt;
+
+    this.updateDiscoveries();
+    this.updateSwitches(route);
+
+    // Ground items (hidden ones must be revealed first)
+    for (const it of route.items) {
+      if (it.collected || (it.requires && !this.isConditionMet(it.requires))) continue;
+      if (it.hidden && !this.revealedItems.has(it.id)) continue;
+      if (Math.hypot(this.player.x - it.x, this.player.y - it.y) < 26) {
+        it.collected = true;
+        sound.beep(880, 0.15, 'sine');
+        sound.beep(1100, 0.2, 'sine', 0.1, 0.12);
+        this.onPickItem?.(it);
+      }
     }
 
-    // Check Contextual Proximity Prompt
+    // Linear route exits (main Kanto chain only; special areas use portals)
+    if (!route.isSpecialArea) {
+      if (route.exitX > 0 && this.player.x >= route.exitX && this.onRouteExit) {
+        this.isPaused = true;
+        sound.beep(780, 0.25, 'triangle');
+        this.onRouteExit(route.id + 1);
+        return;
+      }
+      if (route.id > 0 && this.player.x <= 40 && this.onRoutePreviousExit) {
+        this.isPaused = true;
+        sound.beep(660, 0.25, 'triangle');
+        this.onRoutePreviousExit(route.id - 1);
+        return;
+      }
+    }
+
+    this.updateCompanionAndCamera(dt);
+    this.updatePrompt();
+  }
+
+  private updateCompanionAndCamera(dt: number): void {
+    this.companion.update(dt, this.player.x, this.player.y);
+    const f = this.desiredFocus();
+    // Frame-rate independent exponential smoothing: no overshoot, so no jitter.
+    const k = 1 - Math.exp(-dt * 7);
+    this.cam.fx += (f.x - this.cam.fx) * k;
+    this.cam.fy += (f.y - this.cam.fy) * k;
+  }
+
+  private lastPromptKey = '';
+  private updatePrompt(): void {
+    const target = this.getInteractTarget();
+    const key = target ? target.label + '|' + target.action : '';
+    if (key === this.lastPromptKey) return; // avoid rebuilding DOM every frame
+    this.lastPromptKey = key;
     const promptEl = document.getElementById('route-prompt');
-    let promptTarget = '';
-    let promptAction = '';
-
-    for (const npc of this.currentRoute.npcs) {
-      const dist = Math.hypot(this.player.x - npc.x, this.player.y - npc.y);
-      if (dist < 55) {
-        promptTarget = npc.name;
-        promptAction = 'Talk';
-        break;
-      }
-    }
-
-    if (!promptTarget && this.currentRoute.signposts) {
-      for (const sp of this.currentRoute.signposts) {
-        if (Math.hypot(this.player.x - sp.x, this.player.y - sp.y) < 50) {
-          promptTarget = sp.title;
-          promptAction = 'Read Sign';
-          break;
-        }
-      }
-    }
-
-    if (!promptTarget) {
-      for (const b of this.currentRoute.buildings) {
-        const nearDoor =
-          this.player.x >= b.x - 20 &&
-          this.player.x <= b.x + b.w + 24 &&
-          this.player.y >= b.y + b.h - 16 &&
-          this.player.y <= b.y + b.h + 45;
-        if (nearDoor) {
-          promptTarget = b.label;
-          promptAction = b.type === 'gym' ? (b.gymIndex !== undefined ? 'Enter Gym' : 'Inspect') : b.type === 'house' ? 'Visit' : 'Enter';
-          break;
-        }
-      }
-    }
-
-    if (!promptTarget && this.currentRoute.exitX > 0) {
-      const ex = this.currentRoute.exitX - 30;
-      const ey = 200;
-      if (Math.hypot(this.player.x - ex, this.player.y - ey) < 55) {
-        promptTarget = this.currentRoute.destinationLabel || 'Next Route';
-        promptAction = 'Travel';
-      }
-    }
-
     const actBtn = document.getElementById('btn-interact');
     if (promptEl) {
-      if (promptTarget) {
-        promptEl.innerHTML = `<span class="context-label">${promptTarget}</span><button class="context-action-btn" id="context-pill-btn">${promptAction}</button>`;
+      if (target) {
+        promptEl.innerHTML = '';
+        const label = document.createElement('span');
+        label.className = 'context-label';
+        label.textContent = target.label;
+        const btn = document.createElement('button');
+        btn.className = 'context-action-btn';
+        btn.id = 'context-pill-btn';
+        btn.textContent = target.action;
+        promptEl.append(label, btn);
         promptEl.classList.remove('hidden');
-        const pillBtn = document.getElementById('context-pill-btn');
-        if (pillBtn) {
-          pillBtn.onclick = (e) => {
-            e.stopPropagation();
-            this.interact();
-          };
-        }
       } else {
         promptEl.classList.add('hidden');
       }
     }
     if (actBtn) {
-      if (promptTarget) {
+      if (target) {
         actBtn.classList.remove('hidden');
         actBtn.classList.add('pulse');
-        actBtn.textContent = promptAction;
+        actBtn.textContent = target.action;
       } else {
         actBtn.classList.add('hidden');
         actBtn.classList.remove('pulse');
       }
     }
+  }
 
-    // Check Ground Items
-    for (const it of this.currentRoute.items) {
-      if (!it.collected) {
-        const dist = Math.hypot(this.player.x - it.x, this.player.y - it.y);
-        if (dist < 26) {
-          it.collected = true;
-          sound.beep(880, 0.15, 'sine');
-          sound.beep(1100, 0.2, 'sine', 0.1, 0.12);
-          if (this.onPickItem) this.onPickItem(it);
+  /** Hidden paths / items reveal themselves at close range; the companion notices them earlier. */
+  private updateDiscoveries(): void {
+    const r = this.currentRoute!;
+    const p = this.player;
+    for (const portal of r.portals || []) {
+      if (!portal.hidden || this.revealedPortals.has(portal.id)) continue;
+      const d = Math.hypot(p.x - portal.x, p.y - portal.y);
+      if (this.getFlag('portal:' + portal.id) || d < 46) {
+        this.revealedPortals.add(portal.id);
+        if (!this.getFlag('portal:' + portal.id)) {
+          this.setFlag('portal:' + portal.id);
+          sound.beep(988, 0.12, 'sine');
+          sound.beep(1319, 0.2, 'sine', 0.06, 0.12);
+          this.showToast('Hidden path discovered', portal.label);
+          this.onReveal?.('portal', portal.label);
         }
+      } else if (d < 150) {
+        this.companion.notice('portal:' + portal.id, portal.x, portal.y, this.time);
       }
     }
-
-    // Check Route Exit
-    if (this.currentRoute.exitX > 0 && this.player.x >= this.currentRoute.exitX) {
-      if (this.onRouteExit) {
-        this.isPaused = true;
-        sound.beep(780, 0.25, 'triangle');
-        this.onRouteExit(this.currentRoute.id + 1);
-        return;
+    for (const it of r.items) {
+      if (!it.hidden || it.collected || this.revealedItems.has(it.id)) continue;
+      if (it.requires && !this.isConditionMet(it.requires)) continue;
+      const d = Math.hypot(p.x - it.x, p.y - it.y);
+      if (d < 44) {
+        this.revealedItems.add(it.id);
+        sound.beep(1175, 0.1, 'sine');
+      } else if (d < 130) {
+        this.companion.notice('item:' + it.id, it.x, it.y, this.time);
       }
     }
+    for (const lm of r.landmarks || []) {
+      if (this.getFlag('landmark:' + lm.id)) continue;
+      if (Math.hypot(p.x - lm.x, p.y - lm.y) < 140) this.companion.notice('lm:' + lm.id, lm.x, lm.y, this.time);
+    }
+  }
 
-    // Check Previous Route Exit (walking back west through entrance)
-    if (this.currentRoute.id > 0 && this.player.x <= 40) {
-      if (this.onRoutePreviousExit) {
-        this.isPaused = true;
-        sound.beep(660, 0.25, 'triangle');
-        this.onRoutePreviousExit(this.currentRoute.id - 1);
-        return;
+  private updateSwitches(route: RouteDefinition): void {
+    for (const sw of route.switches || []) {
+      if (this.getFlag(sw.flag)) continue;
+      const b = this.boulderPos.get(sw.id);
+      if (b && Math.hypot(b.x - sw.x, b.y - sw.y) < 16) {
+        this.boulderPos.set(sw.id, { x: sw.x, y: sw.y });
+        this.setFlag(sw.flag);
+        sound.swp(200, 90, 0.5, 'sawtooth', 0.12);
+        sound.beep(784, 0.2, 'sine', 0.06, 0.35);
+        this.showToast('Something rumbled nearby', 'A passage has opened');
+        this.onPuzzleSolved?.(sw);
       }
     }
+  }
 
-    // Update Camera with Smooth Lerp
-    if (this.canvas) {
-      const targetCamX = this.player.x - this.canvas.width / 2;
-      const targetCamY = this.player.y - this.canvas.height / 2;
-
-      let desiredCamX = 0;
-      let desiredCamY = 0;
-
-      if (this.canvas.width >= this.currentRoute.worldWidth) {
-        desiredCamX = -(this.canvas.width - this.currentRoute.worldWidth) / 2;
-      } else {
-        const maxCamX = this.currentRoute.worldWidth - this.canvas.width;
-        desiredCamX = Math.max(0, Math.min(maxCamX, targetCamX));
+  /** Push a boulder the trainer is walking into, if the space behind it is free. */
+  private tryPushBoulder(nx: number, ny: number, ddx: number, ddy: number, dt: number): void {
+    const route = this.currentRoute;
+    if (!route || !route.boulders) return;
+    const footY = ny + 8;
+    for (const b of route.boulders) {
+      const pos = this.boulderPos.get(b.id);
+      if (!pos) continue;
+      const r = b.r || 18;
+      if (Math.hypot(nx - pos.x, footY - pos.y) >= r + 10) continue;
+      // Solved boulders stay put
+      const plate = (route.switches || []).find(sw => sw.id === b.id);
+      if (plate && this.getFlag(plate.flag)) return;
+      const step = 120 * dt;
+      const tx = pos.x + ddx * step;
+      const ty = pos.y + ddy * step;
+      if (this.isBoulderSpotFree(b.id, tx, ty, r)) {
+        pos.x = tx;
+        pos.y = ty;
+        if (Math.random() < 0.08) sound.nzs(0.08, 400, 200, 0.05, 0, 1, 'lowpass');
       }
-
-      if (this.canvas.height >= this.currentRoute.worldHeight) {
-        desiredCamY = -(this.canvas.height - this.currentRoute.worldHeight) / 2;
-      } else {
-        const maxCamY = this.currentRoute.worldHeight - this.canvas.height;
-        desiredCamY = Math.max(0, Math.min(maxCamY, targetCamY));
-      }
-
-      // Smooth camera interpolation
-      const lerp = Math.min(1.0, dt * 10);
-      this.camX += (desiredCamX - this.camX) * lerp;
-      this.camY += (desiredCamY - this.camY) * lerp;
+      return;
     }
+  }
+
+  private isBoulderSpotFree(id: string, x: number, y: number, r: number): boolean {
+    const route = this.currentRoute!;
+    // Sample the boulder rim against the world (ignoring itself)
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
+      const sx = x + Math.cos(a) * r * 0.8;
+      const sy = y + Math.sin(a) * r * 0.5;
+      if (this.isBlocked(sx, sy - 8, route, id)) return false;
+    }
+    return true;
+  }
+
+  private isInShallows(x: number, footY: number): boolean {
+    const r = this.currentRoute;
+    if (!r || !r.waters) return false;
+    return r.waters.some(w => w.kind === 'shallows' && x >= w.x && x <= w.x + w.w && footY >= w.y && footY <= w.y + w.h);
   }
 
   private triggerWildBattle(zone?: string): void {
@@ -874,26 +1209,85 @@ export class RouteExplorationEngine {
     const canvas = this.canvas;
     const route = this.currentRoute;
     if (!ctx || !canvas || !route) return;
+    const W = this.viewW;
+    const H = this.viewH;
+    const dpr = this.dpr;
 
-    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.imageSmoothingEnabled = true;
+    ctx.fillStyle = this.backdropColor(route);
+    ctx.fillRect(0, 0, W, H);
 
-    // Fill screen background outside world boundaries
-    const baseGreen = route.theme === 'forest' ? '#143825' : route.theme === 'city' ? '#245239' : '#1e431b';
-    ctx.fillStyle = baseGreen;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const rect = this.cam.visibleWorldRect(36);
+    this.ensureStaticGround(route);
+    this.renderGroundView(route, rect);
+    this.blitPerspectiveGround(ctx, route);
+    this.renderSortedWorld(ctx, route, rect);
 
-    // Apply Camera Translation
-    ctx.translate(-Math.floor(this.camX), -Math.floor(this.camY));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1;
+    this.renderScreenAtmosphere(ctx, route);
+    if (route.dark) this.renderDarkness(ctx, route);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.renderSectionBanner(ctx);
+    this.renderToast(ctx);
+  }
 
-    // 1. Terrain Grass Base
-    this.renderTerrain(ctx, route);
+  private backdropColor(route: RouteDefinition): string {
+    if (route.backdrop) return route.backdrop;
+    if (route.floors) return '#120f0d';
+    return route.theme === 'forest' ? '#0f2c1c' : route.theme === 'city' ? '#1c3f2b' : route.theme === 'water' ? '#0b3355' : route.theme === 'rock' ? '#2a2a22' : '#173a1a';
+  }
 
-    // 2. Freshwater Ponds with Aquatic Caustics & Wooden Piers
-    this.renderPonds(ctx, route);
+  /** Static ground (terrain, paths, ledges, cave floors) is rendered once per route. */
+  private ensureStaticGround(route: RouteDefinition): void {
+    if (this.staticRouteRef === route && this.staticCanvas) return;
+    const w = Math.ceil(route.worldWidth);
+    const h = Math.ceil(route.worldHeight);
+    if (!this.staticCanvas) this.staticCanvas = document.createElement('canvas');
+    this.staticCanvas.width = w;
+    this.staticCanvas.height = h;
+    const g = this.staticCanvas.getContext('2d')!;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    this.renderTerrain(g, route);
+    for (const t of route.terrain || []) drawTerrainPatch(g, t);
+    if (route.floors) drawCaveFloors(g, route.floors, w, h);
+    this.renderLedges(g, route);
+    this.renderPaths(g, route);
+    this.staticRouteRef = route;
+  }
 
-    // 3. Terraced Cliff Ledges with Carved Stone Stairs
-    this.renderLedges(ctx, route);
+  /** Top-down ground for the visible area: static cache + animated ground features. */
+  private renderGroundView(route: RouteDefinition, rect: { x: number; y: number; w: number; h: number }): void {
+    const gw = Math.ceil(rect.w) + 4;
+    const gh = Math.ceil(rect.h) + 4;
+    if (!this.groundCanvas) {
+      this.groundCanvas = document.createElement('canvas');
+      this.groundCtx = this.groundCanvas.getContext('2d');
+    }
+    const gc = this.groundCanvas;
+    if (gc.width < gw || gc.height < gh) {
+      gc.width = Math.max(gc.width, Math.ceil(gw / 128) * 128);
+      gc.height = Math.max(gc.height, Math.ceil(gh / 128) * 128);
+    }
+    const g = this.groundCtx!;
+    const ox = Math.floor(rect.x);
+    const oy = Math.floor(rect.y);
+    this.groundRect = { x: ox, y: oy, w: gw, h: gh };
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
+    g.fillStyle = this.backdropColor(route);
+    g.fillRect(0, 0, gw, gh);
 
+<<<<<<< HEAD
+    const sx = Math.max(0, ox);
+    const sy = Math.max(0, oy);
+    const ex = Math.min(route.worldWidth, ox + gw);
+    const ey = Math.min(route.worldHeight, oy + gh);
+    if (this.staticCanvas && ex > sx && ey > sy) {
+      g.drawImage(this.staticCanvas, sx, sy, ex - sx, ey - sy, sx - ox, sy - oy, ex - sx, ey - sy);
+=======
     // 4. Paths & Cobblestone Avenues
     this.renderPaths(ctx, route);
 
@@ -920,47 +1314,379 @@ export class RouteExplorationEngine {
       if (this.isInViewport(b.x + b.w / 2, b.y + b.h / 2, Math.max(b.w, b.h))) {
         this.renderBuilding(ctx, b);
       }
+>>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
     }
 
-    // 8.5 Ornate City Streetlamps with Warm Radial Glow
-    this.renderStreetlamps(ctx, route);
+    g.setTransform(1, 0, 0, 1, -ox, -oy);
+    this.camX = ox;
+    this.camY = oy;
+    const vis = (r: Rect, m = 40) => r.x + r.w > ox - m && r.x < ox + gw + m && r.y + r.h > oy - m && r.y < oy + gh + m;
 
+<<<<<<< HEAD
+    for (const w of route.waters || []) if (vis(w)) drawWater(g, w, this.time);
+    for (const b of route.bridges || []) if (vis(b)) drawBridge(g, b);
+    this.renderPonds(g, route);
+    this.renderFountains(g, route);
+    this.renderTallGrass(g, route);
+    for (const sw of route.switches || []) drawSwitchPlate(g, sw, this.getFlag(sw.flag), this.time);
+    for (const f of route.fishingSpots || []) drawFishingSpot(g, f, this.time);
+
+    // Drifting cloud shadows sell the scale of outdoor areas
+    if (!route.floors && !route.dark) {
+      g.fillStyle = 'rgba(10, 25, 20, 0.10)';
+      for (let i = 0; i < 4; i++) {
+        const span = route.worldWidth + 600;
+        const cx = ((i * 977 + this.time * 14) % span) - 300;
+        const cy = 140 + ((i * 431) % Math.max(200, route.worldHeight - 280));
+        if (cx < ox - 300 || cx > ox + gw + 300) continue;
+        g.beginPath();
+        g.ellipse(cx, cy, 190, 70, 0.12, 0, Math.PI * 2);
+        g.ellipse(cx + 120, cy + 26, 120, 50, 0, 0, Math.PI * 2);
+        g.fill();
+=======
     // 9. Ground Items (3D Poké Balls with Sparkle)
     for (const it of route.items) {
       if (!it.collected && this.isInViewport(it.x, it.y, 50)) {
         this.renderGroundItem(ctx, it);
+>>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
       }
     }
+  }
 
-    // 10. Trees BEHIND Player
-    this.renderTreesLayer(ctx, route, 'behind');
+  /** Draw the top-down ground view row by row with perspective scaling. */
+  private blitPerspectiveGround(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    const gc = this.groundCanvas;
+    if (!gc) return;
+    const cam = this.cam;
+    const W = this.viewW;
+    const H = this.viewH;
+    const gr = this.groundRect;
+    const band = 2;
+    for (let sy = 0; sy < H; sy += band) {
+      const y0 = cam.groundYAtScreen(sy);
+      const y1 = cam.groundYAtScreen(sy + band);
+      if (y0 === null || y1 === null) continue;
+      const s = cam.scaleAt((y0 + y1) * 0.5);
+      let srcX = cam.worldXAtScreen(0, s) - gr.x;
+      let srcW = W / s;
+      const srcY = y0 - gr.y;
+      const srcH = y1 - y0;
+      let dX = 0;
+      let dW = W;
+      if (srcX < 0) {
+        const cut = -srcX;
+        dX += cut * s;
+        dW -= cut * s;
+        srcW -= cut;
+        srcX = 0;
+      }
+      if (srcX + srcW > gc.width) {
+        const cut = srcX + srcW - gc.width;
+        dW -= cut * s;
+        srcW -= cut;
+      }
+      if (srcW <= 1 || srcY < 0 || srcY + srcH > gc.height) continue;
+      ctx.drawImage(gc, srcX, srcY, srcW, srcH, dX, sy, dW, band + 0.6);
+    }
+    // Atmospheric perspective: distant rows fade into a soft haze
+    if (!route.floors && !route.dark) {
+      const haze = ctx.createLinearGradient(0, 0, 0, H * 0.42);
+      haze.addColorStop(0, 'rgba(196, 226, 236, 0.20)');
+      haze.addColorStop(1, 'rgba(196, 226, 236, 0)');
+      ctx.fillStyle = haze;
+      ctx.fillRect(0, 0, W, H * 0.42);
+    }
+  }
 
+<<<<<<< HEAD
+  /** Every upright object is collected, depth-sorted by its ground anchor and drawn as a billboard. */
+  private renderSortedWorld(ctx: CanvasRenderingContext2D, route: RouteDefinition, rect: { x: number; y: number; w: number; h: number }): void {
+    const cam = this.cam;
+    const dpr = this.dpr;
+    const ents: { y: number; x: number; f: () => void }[] = [];
+    const inView = (x: number, y: number, mx = 140) => x > rect.x - mx && x < rect.x + rect.w + mx && y > rect.y - 12 && y < rect.y + rect.h + 240;
+    const add = (x: number, y: number, f: () => void, mx?: number) => {
+      if (inView(x, y, mx)) ents.push({ x, y, f });
+    };
+    const bb = (ax: number, ay: number) => cam.billboard(ctx, ax, ay, dpr);
+    const p = this.player;
+    const playerAnchor = p.y + 13;
+    const labels: { x: number; y: number; text: string; kind: RouteBuilding['type']; d: number }[] = [];
+
+    for (const b of route.buildings) {
+      const ay = b.y + b.h;
+      add(b.x + b.w / 2, ay, () => {
+        const behind = playerAnchor < ay && p.x > b.x - 16 && p.x < b.x + b.w + 16 && playerAnchor > b.y - 70;
+        const alpha = behind ? 0.42 : 1;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const { labelAnchor } = drawBuildingVolume(ctx, cam, b, route.architecture, alpha);
+        bb(b.x + b.w / 2, ay);
+        ctx.globalAlpha = alpha;
+        this.renderBuilding(ctx, b);
+        ctx.globalAlpha = 1;
+        labels.push({ x: labelAnchor.x, y: labelAnchor.y, text: b.label, kind: b.type, d: Math.hypot(p.x - (b.x + b.w / 2), p.y - ay) });
+      }, b.w);
+=======
     // 11. NPCs with Animated Interaction Prompts
     for (const npc of route.npcs) {
       if (this.isInViewport(npc.x, npc.y, 60)) {
         this.renderNPC(ctx, npc);
       }
+>>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
     }
 
-    // 12. Grass Particles
-    this.renderGrassParticles(ctx);
+    for (const t of this.treeCache) {
+      const ay = this.getTreeTrunkFootY(t);
+      add(t.x, ay, () => {
+        const s = bb(t.x, ay);
+        const occluding = ay > playerAnchor && Math.abs(t.x - p.x) < 34 * (t.scale || 1) && playerAnchor > ay - 78 * (t.scale || 1);
+        ctx.globalAlpha = occluding ? 0.55 : 1;
+        this.drawTree(ctx, t.x, t.y, t.scale || 1.0, t.type || 'broadleaf', t.colorVariant);
+        ctx.globalAlpha = 1;
+        void s;
+      });
+    }
+    for (const st of this.stoneCache) add(st.x, st.y + st.radius * 0.4, () => { bb(st.x, st.y + st.radius * 0.4); this.drawStone(ctx, st); });
+    for (const f of this.fenceCache) add(f.x + f.w / 2, f.y + f.h, () => { bb(f.x + f.w / 2, f.y + f.h); this.renderFences(ctx, route, [f]); }, f.w);
+    for (const lamp of route.streetlamps || []) add(lamp.x, lamp.y + 2, () => { bb(lamp.x, lamp.y + 2); this.renderStreetlamps(ctx, route, [lamp]); });
+    for (const bench of route.benches || []) add(bench.x + (bench.w || 28) / 2, bench.y + 14, () => { bb(bench.x + (bench.w || 28) / 2, bench.y + 14); this.renderBenches(ctx, route, [bench]); });
+    for (const sp of route.signposts || []) add(sp.x, sp.y + 16, () => { bb(sp.x, sp.y + 16); this.renderSignposts(ctx, route, [sp]); });
+    if (!route.isSpecialArea && route.exitX > 0) add(route.exitX - 30, 232, () => { bb(route.exitX - 30, 232); this.renderOverheadScenery(ctx, route); });
 
-    // 13. Player Character (Detailed Red/Ash with Animated Walking Cycle)
-    this.renderPlayer(ctx);
+    for (const it of route.items) {
+      if (it.collected || (it.requires && !this.isConditionMet(it.requires))) continue;
+      if (it.hidden && !this.revealedItems.has(it.id)) continue;
+      add(it.x, it.y + 7, () => { bb(it.x, it.y + 7); this.renderGroundItem(ctx, it); });
+    }
+    for (const portal of route.portals || []) {
+      const revealed = !portal.hidden || this.revealedPortals.has(portal.id);
+      const locked = revealed && !!portal.requires && !this.isConditionMet(portal.requires);
+      add(portal.x, portalAnchorY(portal), () => { bb(portal.x, portalAnchorY(portal)); drawPortal(ctx, portal, this.time, revealed, locked); });
+    }
+    for (const wf of route.waterfalls || []) add(wf.x + wf.w / 2, wf.y, () => { bb(wf.x + wf.w / 2, wf.y); drawWaterfall(ctx, wf, this.time); }, wf.w);
+    for (const bo of route.boulders || []) {
+      const pos = this.boulderPos.get(bo.id) || bo;
+      add(pos.x, pos.y, () => { bb(pos.x, pos.y); drawBoulder(ctx, { ...bo, x: pos.x, y: pos.y }); });
+    }
+    for (const ba of route.barriers || []) {
+      if (this.getFlag(ba.openFlag)) continue;
+      add(ba.x + ba.w / 2, ba.y + ba.h, () => { bb(ba.x + ba.w / 2, ba.y + ba.h); drawBarrier(ctx, ba, this.time); }, ba.w);
+    }
+    for (const lm of route.landmarks || []) add(lm.x, lm.y, () => { bb(lm.x, lm.y); drawLandmark(ctx, lm, this.time, this.getFlag('landmark:' + lm.id)); });
+    for (const c of route.crystals || []) add(c.x, c.y, () => { bb(c.x, c.y); drawCrystal(ctx, c, this.time); });
+    for (const nb of route.noticeBoards || []) add(nb.x, nb.y, () => { bb(nb.x, nb.y); drawNoticeBoard(ctx, nb, !!this.noticeBoardHasNew?.(nb), this.time); });
+    for (const enc of route.staticEncounters || []) {
+      if (this.getFlag(enc.doneFlag) || !this.isConditionMet(enc.requires)) continue;
+      add(enc.x, enc.y + 8, () => { bb(enc.x, enc.y + 8); this.drawWildSprite(ctx, enc.x, enc.y + 8, enc.speciesId, 'alert', 1.15); });
+    }
+    for (const lost of route.lostPokemon || []) {
+      if (this.getFlag(lost.foundFlag) || !this.isConditionMet(lost.requires)) continue;
+      add(lost.x, lost.y + 8, () => { bb(lost.x, lost.y + 8); this.drawWildSprite(ctx, lost.x, lost.y + 8, lost.speciesId, 'talk', 0.9); });
+    }
 
-    // 14. Trees IN FRONT OF Player
-    this.renderTreesLayer(ctx, route, 'front');
+    for (const npc of this.visibleNPCs()) add(npc.x, npc.y + 13, () => { bb(npc.x, npc.y + 13); this.renderNPC(ctx, npc); });
 
-    // 15. Overhead Exit Signpost & Scenery
-    this.renderOverheadScenery(ctx, route);
+    if (this.companion.info) {
+      const c = this.companion;
+      add(c.x, c.anchorY, () => { bb(c.x, c.anchorY); c.draw(ctx, this.time); });
+    }
+    ents.push({
+      x: p.x,
+      y: playerAnchor,
+      f: () => {
+        bb(p.x, playerAnchor);
+        this.renderGrassParticles(ctx);
+        this.renderPlayer(ctx);
+      },
+    });
 
-    // 16. Ambient Atmospheric Particles (Leaves & Pollen in the Breeze)
-    this.renderAtmosphere(ctx, route);
+    ents.sort((a, b) => a.y - b.y || a.x - b.x);
+    for (const e of ents) e.f();
 
+    // Building signage floats above roofs and is never occluded; distant labels fade out.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (const l of labels) {
+      const a = Math.max(0, Math.min(1, (620 - l.d) / 240));
+      if (a <= 0.02) continue;
+      this.drawBuildingLabel(ctx, l.x, l.y - 14, l.text, l.kind, a);
+    }
+  }
+
+  private drawBuildingLabel(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, kind: RouteBuilding['type'], alpha: number): void {
+    const accent = kind === 'gym' ? '#facc15' : kind === 'mart' ? '#60a5fa' : kind === 'center' ? '#fca5a5' : kind === 'house' ? '#86efac' : '#cbd5e1';
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = '700 10.5px system-ui, sans-serif';
+    const w = ctx.measureText(text).width + 22;
+    ctx.fillStyle = 'rgba(10, 15, 28, 0.82)';
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2, y - 10, w, 19, 9.5);
+    ctx.fill();
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.arc(x - w / 2 + 9, y - 0.5, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#f8fafc';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + 4, y);
     ctx.restore();
+  }
 
-    // 17. Active Map Section HUD Badge & Rare Area Warning Banner (Screen Space)
-    this.renderSectionBanner(ctx);
+  /** Overworld Pokémon (static encounters / lost Pokémon). */
+  private drawWildSprite(ctx: CanvasRenderingContext2D, x: number, footY: number, speciesId: number, marker: 'alert' | 'talk', scale: number): void {
+    const size = 50 * scale;
+    const bob = Math.abs(Math.sin(this.time * 2.2 + x)) * 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.beginPath();
+    ctx.ellipse(x, footY, size * 0.3, size * 0.11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const img = getPokemonSprite(speciesId);
+    if (img) {
+      const prev = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, x - size / 2, footY - size * 0.84 - bob, size, size);
+      ctx.imageSmoothingEnabled = prev;
+    }
+    if (Math.hypot(this.player.x - x, this.player.y - footY) < 220) drawMarker(ctx, x, footY - size * 0.9 - 6, marker, this.time);
+  }
+
+  private renderScreenAtmosphere(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    const W = this.viewW;
+    const H = this.viewH;
+    const indoor = !!route.floors || !!route.dark;
+    if (!indoor) {
+      // Soft diagonal sun shafts
+      for (let i = 0; i < 3; i++) {
+        const rx = ((i * W) / 3 + ((this.time * 6) % 90)) - 40;
+        const g = ctx.createLinearGradient(rx, 0, rx + 120, H);
+        g.addColorStop(0, 'rgba(254, 240, 138, 0.07)');
+        g.addColorStop(1, 'rgba(254, 240, 138, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(rx - 30, 0);
+        ctx.lineTo(rx + 60, 0);
+        ctx.lineTo(rx + 220, H);
+        ctx.lineTo(rx + 110, H);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    // Floating particles, projected into the scene (dust motes underground)
+    for (const pt of this.particles) {
+      const sp = this.cam.project(pt.x, pt.y);
+      if (sp.x < -10 || sp.x > W + 10 || sp.y < -10 || sp.y > H + 10) continue;
+      const lift = 28 * sp.s;
+      ctx.save();
+      ctx.translate(sp.x, sp.y - lift);
+      ctx.rotate(pt.rot);
+      ctx.globalAlpha = pt.alpha * (indoor ? 0.5 : 1);
+      const sz = pt.size * sp.s;
+      if (indoor) {
+        ctx.fillStyle = '#e7e5e4';
+        ctx.fillRect(-sz * 0.25, -sz * 0.25, sz * 0.5, sz * 0.5);
+      } else if (pt.type === 'leaf') {
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, sz, sz * 0.48, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (pt.type === 'blossom') {
+        ctx.fillStyle = '#f9a8d4';
+        ctx.beginPath();
+        ctx.arc(0, 0, sz * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = '#fef08a';
+        ctx.beginPath();
+        ctx.arc(0, 0, sz * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    // Gentle vignette focuses the eye on the trainer
+    const v = ctx.createRadialGradient(W / 2, H * 0.55, Math.min(W, H) * 0.35, W / 2, H * 0.55, Math.max(W, H) * 0.75);
+    v.addColorStop(0, 'rgba(0,0,0,0)');
+    v.addColorStop(1, indoor ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.22)');
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  /** Cave darkness with light pools around the trainer, crystals and exits. */
+  private renderDarkness(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
+    const pw = Math.round(this.viewW * this.dpr);
+    const ph = Math.round(this.viewH * this.dpr);
+    if (!this.darkCanvas) this.darkCanvas = document.createElement('canvas');
+    const dc = this.darkCanvas;
+    if (dc.width !== pw || dc.height !== ph) {
+      dc.width = pw;
+      dc.height = ph;
+    }
+    const d = dc.getContext('2d')!;
+    d.setTransform(1, 0, 0, 1, 0, 0);
+    d.globalCompositeOperation = 'source-over';
+    d.clearRect(0, 0, pw, ph);
+    d.fillStyle = `rgba(3, 4, 12, ${route.dark})`;
+    d.fillRect(0, 0, pw, ph);
+    d.globalCompositeOperation = 'destination-out';
+    const light = (wx: number, wy: number, radius: number, strength = 1) => {
+      const sp = this.cam.project(wx, wy);
+      const r = radius * sp.s * this.dpr;
+      const x = sp.x * this.dpr;
+      const y = (sp.y - 14 * sp.s) * this.dpr;
+      if (x < -r || x > pw + r || y < -r || y > ph + r) return;
+      const g = d.createRadialGradient(x, y, r * 0.1, x, y, r);
+      g.addColorStop(0, `rgba(0,0,0,${strength})`);
+      g.addColorStop(0.55, `rgba(0,0,0,${strength * 0.75})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      d.fillStyle = g;
+      d.fillRect(x - r, y - r, r * 2, r * 2);
+    };
+    const flicker = 1 + Math.sin(this.time * 9) * 0.015 + Math.sin(this.time * 23) * 0.01;
+    light(this.player.x, this.player.y, (this.hasLantern ? 220 : 130) * flicker);
+    for (const c of route.crystals || []) if (c.light) light(c.x, c.y, c.light, 0.8);
+    for (const pt of route.portals || []) if (pt.style === 'cave_exit') light(pt.x, pt.y - 10, 120, 0.9);
+    for (const sw of route.switches || []) if (this.getFlag(sw.flag)) light(sw.x, sw.y, 60, 0.6);
+    d.globalCompositeOperation = 'source-over';
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(dc, 0, 0);
+    // Warm lantern tint
+    if (this.hasLantern) {
+      const sp = this.cam.project(this.player.x, this.player.y);
+      const g = ctx.createRadialGradient(sp.x * this.dpr, sp.y * this.dpr, 4, sp.x * this.dpr, sp.y * this.dpr, 160 * sp.s * this.dpr);
+      g.addColorStop(0, 'rgba(255, 196, 120, 0.10)');
+      g.addColorStop(1, 'rgba(255, 196, 120, 0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, pw, ph);
+    }
+  }
+
+  private renderToast(ctx: CanvasRenderingContext2D): void {
+    const t = this.toast;
+    if (!t) return;
+    const a = Math.max(0, Math.min(1, t.t * 2, (2.6 - t.t) * 4));
+    const W = this.viewW;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.font = '800 13px system-ui, sans-serif';
+    const tw = Math.max(ctx.measureText(t.title).width, (ctx.font = '600 11px system-ui, sans-serif', ctx.measureText(t.sub).width));
+    const w = Math.min(W - 24, tw + 40);
+    const x = (W - w) / 2;
+    const y = this.viewH - 118;
+    ctx.fillStyle = 'rgba(10, 15, 28, 0.86)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, 44, 12);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(250, 204, 21, 0.6)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fde68a';
+    ctx.font = '800 13px system-ui, sans-serif';
+    ctx.fillText(t.title, W / 2, y + 19);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '600 11px system-ui, sans-serif';
+    ctx.fillText(t.sub, W / 2, y + 35);
+    ctx.restore();
   }
 
   private renderTerrain(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
@@ -1280,8 +2006,8 @@ export class RouteExplorationEngine {
   private renderTallGrass(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     const px = this.player.x;
     const py = this.player.y;
-    const camW = this.canvas ? this.canvas.width : 800;
-    const camH = this.canvas ? this.canvas.height : 480;
+    const camW = this.groundRect.w || this.viewW;
+    const camH = this.groundRect.h || this.viewH;
 
     for (const g of route.grassPatches) {
       // 1. Frustum Culling: skip patches outside camera view
@@ -1291,6 +2017,10 @@ export class RouteExplorationEngine {
         g.y + g.h < this.camY - 40 ||
         g.y > this.camY + camH + 40
       ) {
+        continue;
+      }
+      if (g.style && g.style !== 'grass') {
+        drawEncounterPatch(ctx, g, this.time);
         continue;
       }
 
@@ -2317,43 +3047,6 @@ export class RouteExplorationEngine {
       ctx.fill();
     }
 
-    // High-Contrast Glassmorphic Building Label Badge
-    const labelX = b.x + b.w / 2;
-    const labelY = b.y - 18;
-    const isGym = b.type === 'gym';
-    const isMart = b.type === 'mart';
-    const isCenter = b.type === 'center';
-    const isHouse = b.type === 'house';
-
-    const tagBg = isGym
-      ? 'rgba(113, 63, 18, 0.94)'
-      : isMart
-        ? 'rgba(30, 58, 138, 0.94)'
-        : isCenter
-          ? 'rgba(153, 27, 27, 0.94)'
-          : isHouse
-            ? 'rgba(22, 101, 52, 0.94)'
-            : 'rgba(15, 23, 42, 0.9)';
-
-    const tagBorder = isGym ? '#facc15' : isMart ? '#60a5fa' : isCenter ? '#fca5a5' : isHouse ? '#86efac' : '#94a3b8';
-    const tagIcon = isGym ? '🏆' : isMart ? '🛒' : isCenter ? '🏥' : isHouse ? '🏡' : '🚪';
-
-    ctx.font = '800 11px system-ui';
-    const textWidth = ctx.measureText(`${tagIcon} ${b.label}`).width;
-    const pillW = textWidth + 18;
-
-    ctx.fillStyle = tagBg;
-    ctx.strokeStyle = tagBorder;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(labelX - pillW / 2, labelY - 12, pillW, 21, 9);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${tagIcon} ${b.label}`, labelX, labelY + 2.5);
-
     ctx.restore();
   }
 
@@ -2417,234 +3110,105 @@ export class RouteExplorationEngine {
   }
 
   private renderNPC(ctx: CanvasRenderingContext2D, npc: RouteNPC): void {
-    ctx.save();
-
-    // 1. Contact Drop Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
-    ctx.beginPath();
-    ctx.ellipse(npc.x, npc.y + 13, 11, 5.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 2. High-Quality Pixel-Art Styled NPC Character Sprite
-    this.drawNPCCharacter(ctx, npc);
-
-    // 3. Proximity Interactive Indicator (💬 Speech bubble)
     const dist = Math.hypot(this.player.x - npc.x, this.player.y - npc.y);
-    if (dist < 55) {
-      const bob = Math.sin(this.time * 5) * 3;
-      ctx.font = '15px system-ui';
+    // NPCs turn to face a nearby trainer, otherwise keep their idle facing
+    let dir: 'up' | 'down' | 'left' | 'right' = npc.facing || 'down';
+    if (dist < 120) {
+      const dx = this.player.x - npc.x;
+      const dy = this.player.y - npc.y;
+      dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
+    }
+    const look = this.getNpcLook(npc);
+    drawTrainerSpriteCached(ctx, npc.x, npc.y, dir, 0, look, false, this.time + npc.x * 0.13, 1);
+    this.drawNpcProp(ctx, npc, dir);
+
+    // Status marker above the head: quest > rematch/trainer > talk
+    const quest = this.questMarkerFor ? this.questMarkerFor(npc) : null;
+    const trainerReady = !!npc.trainer && !this.getFlag('trainer:' + npc.trainer.id);
+    if (quest) drawMarker(ctx, npc.x, npc.y - 34, quest, this.time);
+    else if (trainerReady && dist < 260) drawMarker(ctx, npc.x, npc.y - 34, 'alert', this.time);
+    else if (dist < 55) drawMarker(ctx, npc.x, npc.y - 34, 'talk', this.time);
+
+    // Name tag only at conversational range keeps the scene uncluttered
+    if (dist < 150) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, (150 - dist) / 50);
+      ctx.font = '700 9px system-ui, sans-serif';
+      const w = ctx.measureText(npc.name).width + 12;
+      ctx.fillStyle = 'rgba(10, 15, 28, 0.82)';
+      ctx.beginPath();
+      ctx.roundRect(npc.x - w / 2, npc.y + 17, w, 13, 6.5);
+      ctx.fill();
+      ctx.fillStyle = '#f1f5f9';
       ctx.textAlign = 'center';
-      ctx.fillText('💬', npc.x, npc.y - 25 + bob);
+      ctx.textBaseline = 'middle';
+      ctx.fillText(npc.name, npc.x, npc.y + 23.5);
+      ctx.restore();
     }
-
-    // 4. Sleek Name Tag
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.roundRect(npc.x - 34, npc.y - 22, 68, 16, 6);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '900 9px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText(npc.name, npc.x, npc.y - 10);
-
-    ctx.restore();
   }
 
-  private drawNPCCharacter(ctx: CanvasRenderingContext2D, npc: RouteNPC): void {
-    const nx = npc.x;
-    const ny = npc.y;
+  private npcLooks = new Map<string, TrainerCustomization>();
+  /** Role-specific outfits for recognisable townsfolk; everyone else gets a varied deterministic look. */
+  private getNpcLook(npc: RouteNPC): TrainerCustomization {
+    const cacheKey = npc.id + '|' + npc.name;
+    const hit = this.npcLooks.get(cacheKey);
+    if (hit) return hit;
     const key = (npc.id + ' ' + npc.name + ' ' + (npc.avatar || '')).toLowerCase();
+    const base = getNpcAppearance(npc.id + npc.name);
+    const role = (palette: Partial<TrainerCustomization['palette']>, style: Partial<TrainerCustomization['style']>): TrainerCustomization => ({
+      ...base,
+      palette: { ...base.palette, ...palette },
+      style: { ...base.style, hasGlasses: false, hasScarf: false, hasSatchel: false, ...style },
+    });
+    let look: TrainerCustomization;
+    if (key.includes('angler') || key.includes('fisher')) look = role({ topMain: '#ea580c', bottomMain: '#1d4ed8', hatMain: '#facc15', hatSec: '#ca8a04' }, { hatType: 'straw_hat', bottomType: 'overalls' });
+    else if (key.includes('ranger')) look = role({ topMain: '#15803d', topSec: '#facc15', bottomMain: '#713f12', hatMain: '#a16207', hatSec: '#713f12' }, { hatType: 'sunhat', bottomType: 'jeans' });
+    else if (key.includes('botanist') || key.includes('gardener')) look = role({ topMain: '#f472b6', bottomMain: '#16a34a', hatMain: '#fef08a', hatSec: '#f472b6' }, { hatType: 'straw_hat', bottomType: 'skirt', hairStyle: 'long_fringe' });
+    else if (key.includes('officer') || key.includes('jenny')) look = role({ topMain: '#0369a1', topSec: '#f8fafc', bottomMain: '#1e3a8a', hair: '#0e7490', hatMain: '#0c4a6e', hatSec: '#0f172a' }, { hatType: 'sailor_cap', bottomType: 'skirt', hairStyle: 'ponytail' });
+    else if (key.includes('hiker') || key.includes('geologist') || key.includes('miner')) look = role({ topMain: '#92400e', topSec: '#fde68a', bottomMain: '#44403c', hatMain: '#f59e0b' }, { hatType: 'helmet', bottomType: 'jeans', hasSatchel: true });
+    else if (key.includes('sailor') || key.includes('dock') || key.includes('captain') || key.includes('ferry')) look = role({ topMain: '#f8fafc', topSec: '#1e3a8a', bottomMain: '#1e3a8a', hatMain: '#f8fafc', hatSec: '#1e3a8a' }, { hatType: 'sailor_cap', bottomType: 'jeans' });
+    else if (key.includes('scientist') || key.includes('researcher') || key.includes('professor')) look = role({ topMain: '#f1f5f9', topSec: '#38bdf8', bottomMain: '#334155' }, { hatType: 'none', hasGlasses: true, bottomType: 'jeans' });
+    else if (key.includes('bug catcher')) look = role({ topMain: '#65a30d', bottomMain: '#a16207', hatMain: '#fef08a' }, { hatType: 'straw_hat', bottomType: 'shorts' });
+    else if (key.includes('swimmer') || key.includes('surfer')) look = role({ topMain: '#06b6d4', topSec: '#f8fafc', bottomMain: '#0e7490' }, { hatType: 'none', bottomType: 'shorts' });
+    else if (key.includes('leader') || key.includes('rematch')) look = role({ topMain: '#7c2d12', topSec: '#facc15', bottomMain: '#1c1917' }, { hatType: 'none', hairStyle: 'spiky', bottomType: 'jeans' });
+    else if (key.includes('guide red')) look = getTrainerById('male_red');
+    else look = base;
+    this.npcLooks.set(cacheKey, look);
+    return look;
+  }
 
-    if (key.includes('angler') || key.includes('ned')) {
-      // ANGLER NED: Yellow bucket hat, blue overalls, holding fishing rod with line
-      // Legs
-      ctx.fillStyle = '#1e3a8a';
-      ctx.fillRect(nx - 5, ny + 3, 4, 8);
-      ctx.fillRect(nx + 1, ny + 3, 4, 8);
-      // Boots
-      ctx.fillStyle = '#78350f';
-      ctx.fillRect(nx - 6, ny + 10, 5, 3);
-      ctx.fillRect(nx + 1, ny + 10, 5, 3);
-      // Overalls & Shirt
-      ctx.fillStyle = '#0284c7';
-      ctx.fillRect(nx - 6, ny - 6, 12, 10);
-      ctx.fillStyle = '#ea580c';
-      ctx.fillRect(nx - 3, ny - 6, 6, 4);
-      // Head
-      ctx.fillStyle = '#fed7aa';
-      ctx.fillRect(nx - 4, ny - 14, 8, 8);
-      // Eyes
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(nx - 2, ny - 11, 2, 2);
-      ctx.fillRect(nx + 1, ny - 11, 2, 2);
-      // Yellow Bucket Hat
-      ctx.fillStyle = '#facc15';
-      ctx.fillRect(nx - 7, ny - 16, 14, 4);
-      ctx.fillRect(nx - 5, ny - 20, 10, 5);
-      // Fishing Rod
-      ctx.strokeStyle = '#92400e';
-      ctx.lineWidth = 1.8;
+  private drawNpcProp(ctx: CanvasRenderingContext2D, npc: RouteNPC, dir: string): void {
+    const key = (npc.id + ' ' + npc.name).toLowerCase();
+    if (key.includes('angler') || key.includes('fisher')) {
+      const side = dir === 'left' ? -1 : 1;
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.moveTo(nx + 4, ny - 2);
-      ctx.lineTo(nx + 16, ny - 16);
+      ctx.moveTo(npc.x + 5 * side, npc.y - 1);
+      ctx.lineTo(npc.x + 18 * side, npc.y - 18);
       ctx.stroke();
-      // Fishing Line drooping down
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.lineWidth = 0.8;
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+      ctx.lineWidth = 0.7;
       ctx.beginPath();
-      ctx.moveTo(nx + 16, ny - 16);
-      ctx.quadraticCurveTo(nx + 20, ny - 4, nx + 22, ny + 16);
+      ctx.moveTo(npc.x + 18 * side, npc.y - 18);
+      ctx.quadraticCurveTo(npc.x + 22 * side, npc.y - 4, npc.x + 24 * side, npc.y + 12);
       ctx.stroke();
-      // Red Bobber
       ctx.fillStyle = '#dc2626';
       ctx.beginPath();
-      ctx.arc(nx + 22, ny + 16, 2.2, 0, Math.PI * 2);
+      ctx.arc(npc.x + 24 * side, npc.y + 12, 2, 0, Math.PI * 2);
       ctx.fill();
-
-    } else if (key.includes('ranger') || key.includes('vance')) {
-      // RANGER VANCE: Green safari uniform, khaki hat, binoculars
-      // Pants
-      ctx.fillStyle = '#713f12';
-      ctx.fillRect(nx - 5, ny + 3, 4, 8);
-      ctx.fillRect(nx + 1, ny + 3, 4, 8);
-      // Boots
-      ctx.fillStyle = '#451a03';
-      ctx.fillRect(nx - 6, ny + 10, 5, 3);
-      ctx.fillRect(nx + 1, ny + 10, 5, 3);
-      // Ranger Park Uniform
-      ctx.fillStyle = '#15803d';
-      ctx.fillRect(nx - 6, ny - 6, 12, 10);
-      // Gold Badge
-      ctx.fillStyle = '#facc15';
-      ctx.fillRect(nx - 4, ny - 3, 3, 3);
-      // Head
-      ctx.fillStyle = '#fed7aa';
-      ctx.fillRect(nx - 4, ny - 14, 8, 8);
-      // Eyes
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(nx - 2, ny - 11, 2, 2);
-      ctx.fillRect(nx + 1, ny - 11, 2, 2);
-      // Safari Hat
-      ctx.fillStyle = '#a16207';
-      ctx.fillRect(nx - 8, ny - 16, 16, 3.5);
-      ctx.fillRect(nx - 5, ny - 20, 10, 5);
-      // Binoculars around neck
-      ctx.fillStyle = '#334155';
-      ctx.fillRect(nx - 3, ny - 2, 6, 3.5);
-
-    } else if (key.includes('botanist') || key.includes('clara') || key.includes('girl') || key.includes('beauty')) {
-      // BOTANIST CLARA: Pink dress/apron, green skirt, sunhat with flower ribbon
-      // Skirt
-      ctx.fillStyle = '#16a34a';
-      ctx.fillRect(nx - 6, ny + 2, 12, 8);
-      // Shoes
-      ctx.fillStyle = '#db2777';
-      ctx.fillRect(nx - 5, ny + 10, 4, 3);
-      ctx.fillRect(nx + 1, ny + 10, 4, 3);
-      // Apron Top
-      ctx.fillStyle = '#f472b6';
-      ctx.fillRect(nx - 5, ny - 6, 10, 9);
-      // Hair
-      ctx.fillStyle = '#78350f';
-      ctx.fillRect(nx - 6, ny - 15, 12, 10);
-      // Head
-      ctx.fillStyle = '#fed7aa';
-      ctx.fillRect(nx - 4, ny - 14, 8, 8);
-      // Eyes
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(nx - 2, ny - 11, 2, 2);
-      ctx.fillRect(nx + 1, ny - 11, 2, 2);
-      // Straw Sunhat
-      ctx.fillStyle = '#fef08a';
-      ctx.fillRect(nx - 8, ny - 16, 16, 3.5);
-      ctx.fillRect(nx - 5, ny - 20, 10, 5);
-      // Pink Flower Ribbon on hat
-      ctx.fillStyle = '#f472b6';
-      ctx.fillRect(nx - 5, ny - 16, 10, 2);
-      ctx.beginPath();
-      ctx.arc(nx + 3, ny - 15, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else if (key.includes('officer') || key.includes('jenny')) {
-      // OFFICER JENNY: Cyan police uniform, peaked cap with gold badge
-      // Pants
-      ctx.fillStyle = '#1e3a8a';
-      ctx.fillRect(nx - 5, ny + 3, 4, 8);
-      ctx.fillRect(nx + 1, ny + 3, 4, 8);
-      // Boots
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(nx - 6, ny + 10, 5, 3);
-      ctx.fillRect(nx + 1, ny + 10, 5, 3);
-      // Police Jacket
-      ctx.fillStyle = '#0284c7';
-      ctx.fillRect(nx - 6, ny - 6, 12, 10);
-      // White Tie & Gold Buttons
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(nx - 1, ny - 6, 2, 6);
-      ctx.fillStyle = '#facc15';
-      ctx.fillRect(nx - 1, ny + 1, 2, 2);
-      // Hair
-      ctx.fillStyle = '#0284c7';
-      ctx.fillRect(nx - 6, ny - 15, 12, 9);
-      // Head
-      ctx.fillStyle = '#fed7aa';
-      ctx.fillRect(nx - 4, ny - 14, 8, 8);
-      // Eyes
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(nx - 2, ny - 11, 2, 2);
-      ctx.fillRect(nx + 1, ny - 11, 2, 2);
-      // Peaked Police Cap
-      ctx.fillStyle = '#0369a1';
-      ctx.fillRect(nx - 7, ny - 18, 14, 5);
-      // Cap Brim
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(nx - 6, ny - 14, 12, 2);
-      // Gold Star Badge on Cap
-      ctx.fillStyle = '#facc15';
-      ctx.beginPath();
-      ctx.arc(nx, ny - 16, 2, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else {
-      // DEFAULT GUIDE / TRAINER RED:
-      // Jeans
-      ctx.fillStyle = '#1e3a8a';
-      ctx.fillRect(nx - 5, ny + 3, 4, 8);
-      ctx.fillRect(nx + 1, ny + 3, 4, 8);
-      // Red Shoes
-      ctx.fillStyle = '#dc2626';
-      ctx.fillRect(nx - 6, ny + 10, 5, 3);
-      ctx.fillRect(nx + 1, ny + 10, 5, 3);
-      // Red Trainer Vest
-      ctx.fillStyle = '#dc2626';
-      ctx.fillRect(nx - 6, ny - 6, 12, 10);
-      // White undershirt
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(nx - 2, ny - 6, 4, 5);
-      // Head
-      ctx.fillStyle = '#fed7aa';
-      ctx.fillRect(nx - 4, ny - 14, 8, 8);
-      // Eyes
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(nx - 2, ny - 11, 2, 2);
-      ctx.fillRect(nx + 1, ny - 11, 2, 2);
-      // Red Baseball Cap
-      ctx.fillStyle = '#dc2626';
-      ctx.fillRect(nx - 6, ny - 18, 12, 5);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(nx - 5, ny - 14, 10, 2);
     }
   }
 
-  private renderSignposts(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
-    if (!route.signposts || route.signposts.length === 0) return;
+  private renderSignposts(ctx: CanvasRenderingContext2D, route: RouteDefinition, list = route.signposts): void {
+    if (!list || list.length === 0) return;
 
+<<<<<<< HEAD
+    for (const sp of list) {
+=======
     for (const sp of route.signposts) {
       if (!this.isInViewport(sp.x, sp.y, 70)) continue;
+>>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
       ctx.save();
 
       // 1. Contact Drop Shadow
@@ -2671,12 +3235,7 @@ export class RouteExplorationEngine {
 
       // 4. Proximity Interactive Indicator (📋 Read bubble)
       const dist = Math.hypot(this.player.x - sp.x, this.player.y - sp.y);
-      if (dist < 50) {
-        const bob = Math.sin(this.time * 5) * 3;
-        ctx.font = '13px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText('📋', sp.x, sp.y - 24 + bob);
-      }
+      if (dist < 50) drawMarker(ctx, sp.x, sp.y - 30, 'talk', this.time);
 
       ctx.restore();
     }
@@ -2696,170 +3255,35 @@ export class RouteExplorationEngine {
   }
 
   private renderPlayer(ctx: CanvasRenderingContext2D): void {
-    const px = this.player.x;
-    const py = this.player.y;
-    const dir = this.player.dir;
-    const anim = this.player.animFrame;
-    const bob = anim === 1 ? -2 : anim === 3 ? 2 : 0;
-    const legSwing = anim === 1 ? -3.5 : anim === 3 ? 3.5 : 0;
-
-    ctx.save();
-
-    // 1. Realistic Elliptical Ground Drop Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
-    ctx.beginPath();
-    ctx.ellipse(px, py + 13, 12, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 2. Denim Jeans (Indigo with crease shading)
-    ctx.fillStyle = '#1e3a8a';
-    if (dir === 'down' || dir === 'up') {
-      ctx.fillRect(px - 6, py + 3 + bob + (dir === 'down' ? legSwing : -legSwing), 5, 9);
-      ctx.fillRect(px + 1, py + 3 + bob + (dir === 'down' ? -legSwing : legSwing), 5, 9);
-      // Knee highlight
-      ctx.fillStyle = '#2563eb';
-      ctx.fillRect(px - 5, py + 6 + bob + (dir === 'down' ? legSwing : -legSwing), 3, 2);
-      ctx.fillRect(px + 2, py + 6 + bob + (dir === 'down' ? -legSwing : legSwing), 3, 2);
-    } else {
-      ctx.fillRect(px - 5 + legSwing, py + 3 + bob, 10, 9);
-      ctx.fillStyle = '#2563eb';
-      ctx.fillRect(px - 3 + legSwing, py + 6 + bob, 6, 2);
-    }
-
-    // 3. Running Sneakers (Red with White Rubber Midsoles)
-    ctx.fillStyle = '#dc2626';
-    if (dir === 'down' || dir === 'up') {
-      ctx.fillRect(px - 7, py + 10 + bob, 6, 4);
-      ctx.fillRect(px + 1, py + 10 + bob, 6, 4);
-      ctx.fillStyle = '#ffffff'; // White soles
-      ctx.fillRect(px - 7, py + 13 + bob, 6, 2);
-      ctx.fillRect(px + 1, py + 13 + bob, 6, 2);
-    } else {
-      const shoeDir = dir === 'right' ? 1 : -1;
-      ctx.fillRect(px - 6 + legSwing, py + 10 + bob, 11, 4);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(px - 6 + legSwing + (shoeDir > 0 ? 2 : 0), py + 13 + bob, 9, 2);
-    }
-
-    // 4. Green Explorer Backpack (Behind player when facing up or side)
-    if (dir === 'up' || dir === 'left' || dir === 'right') {
-      ctx.fillStyle = '#15803d';
-      const bpX = dir === 'up' ? px - 6 : dir === 'left' ? px + 2 : px - 8;
-      ctx.fillRect(bpX, py - 6 + bob, 6, 11);
-      ctx.fillStyle = '#166534';
-      ctx.fillRect(bpX + 1, py - 3 + bob, 4, 6);
-      // Backpack buckle
-      ctx.fillStyle = '#facc15';
-      ctx.fillRect(bpX + 2, py - 1 + bob, 2, 2);
-    }
-
-    // 5. Red Trainer Vest / Jacket
-    ctx.fillStyle = '#dc2626';
-    ctx.fillRect(px - 7, py - 7 + bob, 14, 12);
-
-    // White Undershirt with Collar & Zipper
-    ctx.fillStyle = '#ffffff';
-    if (dir === 'down') {
-      ctx.fillRect(px - 3, py - 7 + bob, 6, 5);
-      // Vest center zipper
-      ctx.fillStyle = '#f8fafc';
-      ctx.fillRect(px - 1, py - 3 + bob, 2, 8);
-    } else if (dir === 'left' || dir === 'right') {
-      const colX = dir === 'left' ? px - 4 : px + 1;
-      ctx.fillRect(colX, py - 7 + bob, 3, 4);
-    }
-
-    // Arm Swings with Skin Hands
-    ctx.fillStyle = '#dc2626';
-    if (dir === 'down' || dir === 'up') {
-      ctx.fillRect(px - 9, py - 6 + bob - legSwing, 3, 7);
-      ctx.fillRect(px + 6, py - 6 + bob + legSwing, 3, 7);
-      // Skin hands
-      ctx.fillStyle = '#fed7aa';
-      ctx.fillRect(px - 9, py + 1 + bob - legSwing, 3, 3);
-      ctx.fillRect(px + 6, py + 1 + bob + legSwing, 3, 3);
-    }
-
-    // 6. Head / Face & Anime Eyes
-    ctx.fillStyle = '#fed7aa';
-    ctx.fillRect(px - 5, py - 17 + bob, 10, 10);
-
-    // Spiky Hair bangs peeking out
-    ctx.fillStyle = '#292524';
-    ctx.fillRect(px - 6, py - 18 + bob, 12, 3);
-    if (dir === 'down') {
-      ctx.fillRect(px - 5, py - 15 + bob, 2, 3);
-      ctx.fillRect(px + 3, py - 15 + bob, 2, 3);
-
-      // Expressive Anime Eyes with Catchlights
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(px - 3, py - 13 + bob, 2, 3);
-      ctx.fillRect(px + 1, py - 13 + bob, 2, 3);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(px - 3, py - 13 + bob, 1, 1);
-      ctx.fillRect(px + 1, py - 13 + bob, 1, 1);
-    } else if (dir === 'left') {
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(px - 4, py - 13 + bob, 2, 3);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(px - 4, py - 13 + bob, 1, 1);
-    } else if (dir === 'right') {
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(px + 2, py - 13 + bob, 2, 3);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(px + 3, py - 13 + bob, 1, 1);
-    }
-
-    // 7. Iconic Red Trainer Baseball Cap
-    ctx.fillStyle = '#dc2626';
-    ctx.fillRect(px - 6, py - 21 + bob, 12, 6);
-
-    // White Half-Circle Emblem on Cap
-    ctx.fillStyle = '#ffffff';
-    if (dir === 'down' || dir === 'left' || dir === 'right') {
-      ctx.fillRect(px - 2, py - 20 + bob, 4, 3);
-    }
-
-    // Curved Visor / Brim
-    ctx.fillStyle = '#ffffff';
-    const visorOffset = dir === 'left' ? -9 : dir === 'right' ? 3 : -5;
-    const visorW = dir === 'down' ? 10 : 7;
-    ctx.fillRect(px + visorOffset, py - 16 + bob, visorW, 2.5);
-
-    // Dark Under-Visor Shadow over Eyes
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(px + visorOffset, py - 14 + bob, visorW, 1.2);
-
-    // 8. Tall Grass Immersion: Overlapping grass blades covering legs when wading in grass
-    if (this.player.inGrass) {
-      const gSway = Math.sin(this.time * 3 + px * 0.1) * 2.5;
-      ctx.fillStyle = '#40916c';
+    const look = this.playerAppearance || getTrainerById(this.selectedTrainerId);
+    const p = this.player;
+    drawTrainerSpriteCached(ctx, p.x, p.y, p.dir, p.animFrame, look, p.inGrass, this.time, 1);
+    if (this.fishing) {
+      const f = this.fishing;
+      const side = f.spot.x < p.x ? -1 : 1;
+      const tipX = p.x + 20 * side;
+      const tipY = p.y - 22;
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
-      ctx.moveTo(px - 9, py + 14);
-      ctx.lineTo(px - 7 + gSway, py + 3);
-      ctx.lineTo(px - 4, py + 14);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#52b788';
+      ctx.moveTo(p.x + 5 * side, p.y - 2);
+      ctx.lineTo(tipX, tipY);
+      ctx.stroke();
+      const bob = f.bite ? Math.sin(this.time * 30) * 3 : Math.sin(this.time * 3) * 1.2;
+      const fx = p.x + (f.spot.x - p.x) * 0.85;
+      const fy = p.y + 4 + (f.spot.y - p.y) * 0.85 + bob;
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 0.8;
       ctx.beginPath();
-      ctx.moveTo(px - 3, py + 14);
-      ctx.lineTo(px + gSway, py + 1);
-      ctx.lineTo(px + 3, py + 14);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#40916c';
+      ctx.moveTo(tipX, tipY);
+      ctx.quadraticCurveTo((tipX + fx) / 2, Math.max(tipY, fy) + 10, fx, fy);
+      ctx.stroke();
+      ctx.fillStyle = '#ef4444';
       ctx.beginPath();
-      ctx.moveTo(px + 4, py + 14);
-      ctx.lineTo(px + 7 + gSway, py + 4);
-      ctx.lineTo(px + 9, py + 14);
-      ctx.closePath();
+      ctx.arc(fx, fy, 2.6, 0, Math.PI * 2);
       ctx.fill();
+      if (f.bite) drawMarker(ctx, p.x, p.y - 36, 'alert', this.time);
     }
-
-    ctx.restore();
   }
 
   public isPointOnRoad(x: number, y: number, route: RouteDefinition): boolean {
@@ -2885,6 +3309,8 @@ export class RouteExplorationEngine {
     if (route.fences && route.fences.length > 0) {
       return route.fences;
     }
+    // Exploration areas are hand-authored: never auto-generate props there
+    if (route.isSpecialArea) return route.fences || [];
     const fences: RouteFence[] = [];
     if (route.theme !== 'city') {
       for (const p of route.path) {
@@ -2906,6 +3332,7 @@ export class RouteExplorationEngine {
     if (route.stones && route.stones.length > 0) {
       return route.stones;
     }
+    if (route.isSpecialArea) return route.stones || [];
     const stones: RouteStone[] = [];
     for (let x = 160; x < route.worldWidth - 100; x += 320) {
       const sHash = Math.abs(Math.sin(x * 19.7 + route.id * 31.3));
@@ -2952,6 +3379,7 @@ export class RouteExplorationEngine {
     if (route.trees && route.trees.length > 0) {
       return route.trees;
     }
+    if (route.isSpecialArea) return route.trees || [];
 
     const trees: RouteTree[] = [];
     const isForest = route.theme === 'forest';
@@ -3060,11 +3488,12 @@ export class RouteExplorationEngine {
     return trees;
   }
 
-  public isBlocked(x: number, y: number, route: RouteDefinition): boolean {
+  public isBlocked(x: number, y: number, route: RouteDefinition, ignoreBoulder?: string): boolean {
     // 1. World Boundaries
     if (x < 24 || x > route.worldWidth - 24 || y < 65 || y > route.worldHeight - 35) {
       return true;
     }
+    if (this.isBlockedByFeatures(x, y + 8, route, ignoreBoulder)) return true;
 
     // 2. Buildings (with doorway entrance exception)
     for (const b of route.buildings) {
@@ -3083,7 +3512,7 @@ export class RouteExplorationEngine {
     }
 
     // 3. Fences (Solid Post-and-Rail)
-    const fences = this.getRouteFences(route);
+    const fences = this.cacheRoute === route ? this.fenceCache : this.getRouteFences(route);
     const footY = y + 8;
     for (const f of fences) {
       if (
@@ -3097,7 +3526,7 @@ export class RouteExplorationEngine {
     }
 
     // 4. Stones & Boulders
-    const stones = this.getRouteStones(route);
+    const stones = this.cacheRoute === route ? this.stoneCache : this.getRouteStones(route);
     for (const s of stones) {
       const dist = Math.hypot(x - s.x, footY - s.y);
       if (dist < s.radius + 8) {
@@ -3106,7 +3535,7 @@ export class RouteExplorationEngine {
     }
 
     // 5. Tree Trunks (Collision strictly with visible grounded trunk base)
-    const trees = this.getRouteTrees(route);
+    const trees = this.cacheRoute === route ? this.treeCache : this.getRouteTrees(route);
     for (const t of trees) {
       const trunkFootY = this.getTreeTrunkFootY(t);
       const trunkR = this.getTreeCollisionRadius(t);
@@ -3205,6 +3634,45 @@ export class RouteExplorationEngine {
       }
     }
 
+    return false;
+  }
+
+  /** Collision for the exploration-area features (foot position). */
+  private isBlockedByFeatures(x: number, footY: number, route: RouteDefinition, ignoreBoulder?: string): boolean {
+    const inRect = (r: Rect, m = 0) => x >= r.x - m && x <= r.x + r.w + m && footY >= r.y - m && footY <= r.y + r.h + m;
+    const onBridge = () => (route.bridges || []).some(b => inRect(b, 2));
+    if (route.floors && !isOnCaveFloor(route.floors, x, footY) && !onBridge()) return true;
+    for (const w of route.waters || []) {
+      if (w.kind === 'shallows') continue;
+      if (inRect(w, -4) && !onBridge()) return true;
+    }
+    for (const b of route.barriers || []) {
+      if (!this.getFlag(b.openFlag) && inRect(b, 6)) return true;
+    }
+    for (const b of route.boulders || []) {
+      if (b.id === ignoreBoulder) continue;
+      const pos = this.boulderPos.get(b.id) || b;
+      if (Math.hypot(x - pos.x, footY - pos.y) < (b.r || 18) + 7) return true;
+    }
+    for (const p of route.portals || []) {
+      if (p.hidden && !this.revealedPortals.has(p.id)) continue;
+      // The arch / boat behind the walk-in point is solid
+      if (p.style === 'cave' || p.style === 'cave_exit' || p.style === 'cracked_wall') {
+        if (x > p.x - 54 && x < p.x + 54 && footY > p.y - 44 && footY < p.y - 16) return true;
+      } else if (p.style === 'dock') {
+        if (x > p.x - 36 && x < p.x + 36 && footY > p.y - 18 && footY < p.y - 4) return true;
+      }
+    }
+    for (const l of route.landmarks || []) {
+      const r = l.style === 'lighthouse' ? 20 : 24;
+      if (Math.hypot(x - l.x, (footY - l.y) * 1.6) < r) return true;
+    }
+    for (const c of route.crystals || []) if (Math.hypot(x - c.x, footY - c.y) < 13 * (c.scale || 1)) return true;
+    for (const n of route.noticeBoards || []) if (x > n.x - 28 && x < n.x + 28 && footY > n.y - 8 && footY < n.y + 4) return true;
+    for (const w of route.waterfalls || []) if (x > w.x - 14 && x < w.x + w.w + 14 && footY > w.y - 30 && footY < w.y + 4) return true;
+    for (const e of route.staticEncounters || []) {
+      if (!this.getFlag(e.doneFlag) && this.isConditionMet(e.requires) && Math.hypot(x - e.x, footY - e.y - 8) < 18) return true;
+    }
     return false;
   }
 
@@ -3310,11 +3778,15 @@ export class RouteExplorationEngine {
     }
   }
 
-  private renderStreetlamps(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
-    if (!route.streetlamps || route.streetlamps.length === 0) return;
+  private renderStreetlamps(ctx: CanvasRenderingContext2D, route: RouteDefinition, list = route.streetlamps): void {
+    if (!list || list.length === 0) return;
 
+<<<<<<< HEAD
+    for (const lamp of list) {
+=======
     for (const lamp of route.streetlamps) {
       if (!this.isInViewport(lamp.x, lamp.y, 90)) continue;
+>>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
       ctx.save();
       const lx = lamp.x;
       const ly = lamp.y;
@@ -3387,11 +3859,15 @@ export class RouteExplorationEngine {
     }
   }
 
-  private renderBenches(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
-    if (!route.benches || route.benches.length === 0) return;
+  private renderBenches(ctx: CanvasRenderingContext2D, route: RouteDefinition, list = route.benches): void {
+    if (!list || list.length === 0) return;
 
+<<<<<<< HEAD
+    for (const b of list) {
+=======
     for (const b of route.benches) {
       if (!this.isInViewport(b.x, b.y, 60)) continue;
+>>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
       ctx.save();
       const bx = b.x;
       const by = b.y;
@@ -3520,8 +3996,8 @@ export class RouteExplorationEngine {
     ctx.restore();
   }
 
-  private renderFences(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
-    const fences = this.getRouteFences(route);
+  private renderFences(ctx: CanvasRenderingContext2D, route: RouteDefinition, list?: RouteFence[]): void {
+    const fences = list || this.getRouteFences(route);
     if (fences.length === 0) return;
 
     ctx.save();
@@ -3581,6 +4057,8 @@ export class RouteExplorationEngine {
     ctx.restore();
   }
 
+<<<<<<< HEAD
+=======
   private renderTreesLayer(ctx: CanvasRenderingContext2D, route: RouteDefinition, layer: 'behind' | 'front'): void {
     const trees = this.getRouteTrees(route);
     const playerFootY = this.player.y + 8;
@@ -3606,6 +4084,7 @@ export class RouteExplorationEngine {
     }
   }
 
+>>>>>>> 37664142b0760b5423e1be4e410baf168b8a5787
   private renderPonds(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
     if (!route.ponds || route.ponds.length === 0) return;
 
@@ -3719,9 +4198,17 @@ export class RouteExplorationEngine {
     for (const ledge of route.ledges) {
       ctx.save();
 
-      // 1. Drop shadow onto lower ground
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
-      ctx.fillRect(ledge.x, ledge.y + ledge.h, ledge.w, 8);
+      // 1. Elevation cues: sunlit upper terrace rim + long soft shadow on the lower ground
+      const rim = ctx.createLinearGradient(0, ledge.y - 70, 0, ledge.y);
+      rim.addColorStop(0, 'rgba(255, 255, 220, 0)');
+      rim.addColorStop(1, 'rgba(255, 255, 220, 0.10)');
+      ctx.fillStyle = rim;
+      ctx.fillRect(ledge.x, ledge.y - 70, ledge.w, 70);
+      const drop = ctx.createLinearGradient(0, ledge.y + ledge.h, 0, ledge.y + ledge.h + 30);
+      drop.addColorStop(0, 'rgba(0, 0, 0, 0.38)');
+      drop.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = drop;
+      ctx.fillRect(ledge.x, ledge.y + ledge.h, ledge.w, 30);
 
       // 2. Earth / Rock Cliff Stratification Face
       const cliffGrad = ctx.createLinearGradient(ledge.x, ledge.y, ledge.x, ledge.y + ledge.h);
@@ -3741,6 +4228,17 @@ export class RouteExplorationEngine {
       ctx.moveTo(ledge.x, ledge.y + ledge.h * 0.75);
       ctx.lineTo(ledge.x + ledge.w, ledge.y + ledge.h * 0.75);
       ctx.stroke();
+
+      // Vertical fractures give the rock face height
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.28)';
+      ctx.lineWidth = 1.4;
+      for (let fx = ledge.x + 14; fx < ledge.x + ledge.w - 6; fx += 23 + ((fx * 7) % 13)) {
+        ctx.beginPath();
+        ctx.moveTo(fx, ledge.y + 6);
+        ctx.lineTo(fx + 2, ledge.y + ledge.h * 0.55);
+        ctx.lineTo(fx - 1, ledge.y + ledge.h - 2);
+        ctx.stroke();
+      }
 
       // 3. Lush Green Overhanging Grass Lip on Top
       ctx.fillStyle = '#22552b';
@@ -3805,11 +4303,11 @@ export class RouteExplorationEngine {
 
     const s = this.activeSection;
     const isRare = !!s.isRareZone;
-    const cW = this.canvas.width;
+    const cW = this.viewW;
     const badgeW = Math.min(cW - 32, isRare ? 420 : 330);
     const badgeH = 46;
     const bx = (cW - badgeW) / 2;
-    const by = Math.min(125, Math.max(72, this.canvas.height * 0.16));
+    const by = Math.min(125, Math.max(64, this.viewH * 0.14));
 
     // 1. Soft Glassmorphic Drop Shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
@@ -4643,109 +5141,7 @@ export class RouteExplorationEngine {
     ctx.restore();
   }
 
-  private renderAtmosphere(ctx: CanvasRenderingContext2D, route: RouteDefinition): void {
-    // 1. Diagonal Volumetric Sunbeams / God-Rays filtering from top-left
-    const rayCount = 4;
-    for (let i = 0; i < rayCount; i++) {
-      const rayX = (route.worldWidth * (i / rayCount)) + ((this.time * 8) % 80) - 40;
-      const rayGrad = ctx.createLinearGradient(rayX, 0, rayX + 90, route.worldHeight);
-      rayGrad.addColorStop(0, 'rgba(254, 240, 138, 0.07)');
-      rayGrad.addColorStop(0.5, 'rgba(254, 240, 138, 0.03)');
-      rayGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
 
-      ctx.fillStyle = rayGrad;
-      ctx.beginPath();
-      ctx.moveTo(rayX - 30, 0);
-      ctx.lineTo(rayX + 50, 0);
-      ctx.lineTo(rayX + 170, route.worldHeight);
-      ctx.lineTo(rayX + 70, route.worldHeight);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // 2. Ambient Atmospheric Floating Particles (Leaves, Petals, Pollen)
-    if (this.particles.length === 0) return;
-    ctx.save();
-
-    for (const p of this.particles) {
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rot);
-      ctx.globalAlpha = p.alpha;
-
-      if (p.type === 'leaf') {
-        // Floating Emerald Leaf with Spine
-        ctx.fillStyle = '#22c55e';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, p.size, p.size * 0.48, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#15803d';
-        ctx.fillRect(-p.size * 0.7, -0.4, p.size * 1.4, 0.8);
-      } else if (p.type === 'blossom') {
-        // Cherry Blossom Petal
-        ctx.fillStyle = '#f472b6';
-        ctx.beginPath();
-        ctx.arc(0, 0, p.size * 0.65, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#fbcfe8';
-        ctx.beginPath();
-        ctx.arc(0.5, 0.5, p.size * 0.35, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        // Golden Sunlit Pollen Dust Mote
-        ctx.fillStyle = '#fef08a';
-        ctx.beginPath();
-        ctx.arc(0, 0, p.size * 0.45, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    ctx.restore();
-  }
-
-  private renderScreenHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, route: RouteDefinition): void {
-    ctx.save();
-
-    // Top-left Route Badge
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(10, 10, 220, 36, 10);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = '900 12.5px system-ui';
-    ctx.textAlign = 'left';
-    ctx.fillText(`🧭 ${route.locationLabel}`, 20, 26);
-    ctx.font = '600 10.5px system-ui';
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText(`Destination: ${route.destinationLabel}`, 20, 40);
-
-    // Compass indicator toward exit
-    if (route.exitX > 0) {
-      const progressPct = Math.min(100, Math.round((this.player.x / route.exitX) * 100));
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-      ctx.strokeStyle = '#facc15';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.roundRect(canvas.width - 130, 10, 120, 36, 10);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = '#facc15';
-      ctx.font = 'bold 11px system-ui';
-      ctx.textAlign = 'right';
-      ctx.fillText(`ROUTE ➔ ${progressPct}%`, canvas.width - 20, 26);
-      ctx.fillStyle = '#4ade80';
-      ctx.font = '9px system-ui';
-      ctx.fillText(`Reach Exit to Advance`, canvas.width - 20, 39);
-    }
-
-    ctx.restore();
-  }
 }
 
 export const routeExplorationEngine = new RouteExplorationEngine();

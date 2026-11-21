@@ -22,7 +22,11 @@ import { specFor } from './BuildingVolume';
 import { loadRouteModels, RouteModelsHandle, addWindSway, windTime } from './RouteModels';
 import { buildGround, buildWater, planFillerTrees } from './RouteGround';
 import { createCharacter, modelForTrainer, modelForNpc, Character3D } from './Characters3D';
+import { Pokemon3DLoader } from '../systems/Pokemon3DLoader';
+import { pokemon3DManager } from '../systems/Pokemon3DManager';
 import { RouteTree } from '../systems/RouteExplorationEngine';
+import { POKEMON_SPECIES_MAP } from '../data/pokemon';
+import { buildEncounterMon } from '../systems/EncounterSystem';
 
 const ROUTE_ID = 0;
 const WALK = 165;
@@ -40,6 +44,25 @@ const HERO_HEIGHT = 30;
 const SPRITE_URL = (id: number) => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
 type Dir = 'up' | 'down' | 'left' | 'right';
 
+interface OverworldPokemonEntity {
+  id: string;
+  speciesId: number;
+  name: string;
+  x: number;
+  z: number;
+  baseY: number;
+  size: number;
+  sprite: THREE.Sprite;
+  shadow: THREE.Mesh;
+  tag: THREE.Sprite;
+  model3D?: { obj: THREE.Object3D; mixer: THREE.AnimationMixer };
+  phase: number;
+  isStatic?: boolean;
+  isLost?: boolean;
+  isWild?: boolean;
+  encData?: any;
+}
+
 class FirstPersonCity {
   public active = false;
   /** Remembered so the 3D view comes back after battles, shops and menus. */
@@ -48,6 +71,9 @@ class FirstPersonCity {
   private scene: THREE.Scene | null = null;
   private camera = new THREE.PerspectiveCamera(58, 1, 8, 2600);
   private npcGroup = new THREE.Group();
+  private pokemonGroup = new THREE.Group();
+  private overworldPokemon: OverworldPokemonEntity[] = [];
+  private pokemonTexCache = new Map<number, THREE.Texture>();
   private partner: THREE.Sprite | null = null;
   private partnerShadow: THREE.Mesh | null = null;
   private partnerSpecies = -1;
@@ -75,6 +101,9 @@ class FirstPersonCity {
   private heroYaw = Math.PI;
   private npcModels: { c: Character3D; x: number; z: number; facing: number; sprite: THREE.Object3D | null }[] = [];
   private npcToken = 0;
+  /** Walking partner as the same 3D model used in battles (sprite stays as fallback). */
+  private partner3D: { obj: THREE.Object3D; mixer: THREE.AnimationMixer; idle?: THREE.AnimationAction; walk?: THREE.AnimationAction; on?: THREE.AnimationAction } | null = null;
+  private partner3DSpecies = -1;
   private camYaw = 0;
   private camDist = CAM_DIST;
   /** Portrait phones get a longer, higher camera boom (wider view of the world). */
@@ -198,6 +227,7 @@ class FirstPersonCity {
       this.fenceMeshes.push(mesh);
     }
     scene.add(this.npcGroup);
+    scene.add(this.pokemonGroup);
 
     this.heroShadow = this.blobShadow(11 * PEOPLE);
     this.partnerShadow = this.blobShadow(9);
@@ -390,7 +420,7 @@ class FirstPersonCity {
 
   // -------------------------------------------------------------- dynamic
   /** Name label with a constant on-screen size (never balloons near the camera). */
-  private nameTag(text: string, x: number, z: number): THREE.Sprite {
+  private nameTag(text: string, x: number, z: number, yOffset = 46 * PEOPLE): THREE.Sprite {
     const c = document.createElement('canvas');
     const ctx = c.getContext('2d')!;
     ctx.font = '700 22px system-ui, sans-serif';
@@ -410,7 +440,7 @@ class FirstPersonCity {
     tex.colorSpace = THREE.SRGBColorSpace;
     const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, sizeAttenuation: false, depthWrite: false, transparent: true }));
     tag.center.set(0.5, 0);
-    tag.position.set(x, 46 * PEOPLE, z);
+    tag.position.set(x, yOffset, z);
     tag.userData.ratio = w / 34;
     tag.userData.isTag = true;
     return tag;
@@ -420,6 +450,124 @@ class FirstPersonCity {
     const h = 0.03; // fraction of the viewport (clip-space units)
     for (const o of this.npcGroup.children) {
       if (o.userData.isTag) (o as THREE.Sprite).scale.set((h * o.userData.ratio) / this.camera.aspect, h, 1);
+    }
+    for (const o of this.pokemonGroup.children) {
+      if (o.userData.isTag) (o as THREE.Sprite).scale.set((h * o.userData.ratio) / this.camera.aspect, h, 1);
+    }
+  }
+
+  /** Loads high-definition 3D illustration / HOME CG model render with caching and transparent linear filtering. */
+  private loadPokemonTexture(id: number, cb: (tex: THREE.Texture) => void): void {
+    const cached = this.pokemonTexCache.get(id);
+    if (cached) {
+      cb(cached);
+      return;
+    }
+    const urls = [
+      `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/${id}.png`,
+      `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`,
+      `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`,
+    ];
+    const loader = new THREE.TextureLoader();
+    const tryUrl = (i: number) => {
+      if (i >= urls.length) return;
+      loader.load(
+        urls[i],
+        tex => {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.magFilter = THREE.LinearFilter;
+          tex.minFilter = THREE.LinearMipmapLinearFilter;
+          this.pokemonTexCache.set(id, tex);
+          cb(tex);
+        },
+        undefined,
+        () => tryUrl(i + 1)
+      );
+    };
+    tryUrl(0);
+  }
+
+  /** Spawns a Pokemon entity in 3D: High-res 3D illustration billboard + animated 3D GLB model fallback + shadow & name tag. */
+  private spawnOverworldPokemon(cfg: {
+    id: string;
+    speciesId: number;
+    name: string;
+    x: number;
+    z: number;
+    scale: number;
+    isStatic?: boolean;
+    isLost?: boolean;
+    isWild?: boolean;
+    encData?: any;
+  }): void {
+    const BASE_POKEMON_SIZE = 76;
+    const size = BASE_POKEMON_SIZE * cfg.scale;
+    const shadow = this.blobShadow(size * 0.22);
+    shadow.position.set(cfg.x, 0.2, cfg.z);
+    this.pokemonGroup.add(shadow);
+
+    const mat = new THREE.SpriteMaterial({ alphaTest: 0.35, transparent: true });
+    const sprite = new THREE.Sprite(mat);
+    sprite.center.set(0.5, 0.10);
+    sprite.scale.set(size, size, 1);
+    sprite.position.set(cfg.x, 0, cfg.z);
+    this.pokemonGroup.add(sprite);
+    this.occluders.push(sprite);
+
+    const tag = this.nameTag(cfg.name, cfg.x, cfg.z, Math.max(26, size * 0.8));
+    this.pokemonGroup.add(tag);
+
+    const mon: OverworldPokemonEntity = {
+      id: cfg.id,
+      speciesId: cfg.speciesId,
+      name: cfg.name,
+      x: cfg.x,
+      z: cfg.z,
+      baseY: 0,
+      size,
+      sprite,
+      shadow,
+      tag,
+      phase: Math.random() * Math.PI * 2,
+      isStatic: cfg.isStatic,
+      isLost: cfg.isLost,
+      isWild: cfg.isWild,
+      encData: cfg.encData,
+    };
+    this.overworldPokemon.push(mon);
+
+    // 1. High-Resolution 3D illustration texture
+    this.loadPokemonTexture(cfg.speciesId, tex => {
+      if (sprite.material) {
+        (sprite.material as THREE.SpriteMaterial).map = tex;
+        (sprite.material as THREE.SpriteMaterial).needsUpdate = true;
+      }
+    });
+
+    // 2. Real animated 3D mesh model if enabled and available
+    if (pokemon3DManager.isEnabled()) {
+      Pokemon3DLoader.getInstance()
+        .loadPokemon(cfg.speciesId)
+        .then(({ model, animations }) => {
+          if (!this.overworldPokemon.includes(mon)) return;
+          const box = new THREE.Box3().setFromObject(model);
+          const targetH = size * 0.55;
+          const k = targetH / Math.max(0.001, box.max.y - box.min.y);
+          model.scale.multiplyScalar(k);
+          model.position.y = -box.min.y * k;
+          const obj = new THREE.Group();
+          obj.add(model);
+          obj.position.set(cfg.x, 0, cfg.z);
+          obj.rotation.y = Math.PI * 0.2;
+          const mixer = new THREE.AnimationMixer(model);
+          const clip = (re: RegExp) => animations.find(a => re.test(a.name.toLowerCase()));
+          const idleClip = clip(/idle|wait/) || animations[0];
+          if (idleClip) mixer.clipAction(idleClip).play();
+          mon.model3D = { obj, mixer };
+          this.scene!.add(obj);
+          sprite.visible = false;
+        })
+        .catch(() => { });
     }
   }
 
@@ -483,6 +631,17 @@ class FirstPersonCity {
       this.npcGroup.remove(o);
       this.occluders = this.occluders.filter(x => x !== o);
     }
+
+    // Reset overworld Pokemon
+    for (const mon of this.overworldPokemon) {
+      if (mon.model3D) this.scene?.remove(mon.model3D.obj);
+      this.occluders = this.occluders.filter(x => x !== mon.sprite);
+    }
+    while (this.pokemonGroup.children.length > 0) {
+      this.pokemonGroup.remove(this.pokemonGroup.children[0]);
+    }
+    this.overworldPokemon = [];
+
     for (const n of eng.visibleNPCs()) {
       const w = 110;
       const h = 80;
@@ -500,7 +659,7 @@ class FirstPersonCity {
           this.occluders = this.occluders.filter(o => o !== sprite);
           this.npcModels.push({ c, x: n.x, z: n.y + 10, facing, sprite });
         })
-        .catch(() => {});
+        .catch(() => { });
     }
     this.sizeTags();
 
@@ -508,22 +667,114 @@ class FirstPersonCity {
     if (!info) {
       if (this.partner) this.partner.visible = false;
       this.partnerShadow!.visible = false;
-      return;
+    } else {
+      if (info.speciesId !== this.partnerSpecies) {
+        this.partnerSpecies = info.speciesId;
+        if (this.partner) this.scene!.remove(this.partner);
+        const size = [65, 82, 102][info.sizeClass];
+        this.partner = new THREE.Sprite(new THREE.SpriteMaterial({ alphaTest: 0.35, transparent: true }));
+        this.partner.center.set(0.5, 0.10);
+        this.partner.scale.set(size, size, 1);
+        this.scene!.add(this.partner);
+        this.loadPokemonTexture(info.speciesId, tex => {
+          if (this.partner && this.partnerSpecies === info.speciesId) {
+            (this.partner.material as THREE.SpriteMaterial).map = tex;
+            (this.partner.material as THREE.SpriteMaterial).needsUpdate = true;
+          }
+        });
+      }
+      this.partner!.visible = !this.partner3D;
+      this.partnerShadow!.visible = true;
+      if (info.speciesId !== this.partner3DSpecies && pokemon3DManager.isEnabled()) {
+        const species = info.speciesId;
+        this.partner3DSpecies = species;
+        if (this.partner3D) this.scene!.remove(this.partner3D.obj);
+        this.partner3D = null;
+        Pokemon3DLoader.getInstance()
+          .loadPokemon(species)
+          .then(({ model, animations }) => {
+            if (this.partner3DSpecies !== species) return;
+            const box = new THREE.Box3().setFromObject(model);
+            const targetH = [34, 46, 60][info.sizeClass];
+            const k = targetH / Math.max(0.001, box.max.y - box.min.y);
+            model.scale.multiplyScalar(k);
+            model.position.y = -box.min.y * k;
+            const obj = new THREE.Group();
+            obj.add(model);
+            const mixer = new THREE.AnimationMixer(model);
+            const clip = (re: RegExp) => animations.find(a => re.test(a.name.toLowerCase()));
+            const idleClip = clip(/idle|wait/) || animations[0];
+            const walkClip = clip(/walk|run|move/);
+            this.partner3D = { obj, mixer, idle: idleClip && mixer.clipAction(idleClip), walk: walkClip && mixer.clipAction(walkClip) };
+            this.scene!.add(obj);
+            this.partner!.visible = false;
+          })
+          .catch(() => { }); // no model for this species: keep the 3D illustration
+      }
     }
-    if (info.speciesId !== this.partnerSpecies) {
-      this.partnerSpecies = info.speciesId;
-      if (this.partner) this.scene!.remove(this.partner);
-      const tex = new THREE.TextureLoader().load(SPRITE_URL(info.speciesId));
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.magFilter = THREE.NearestFilter;
-      const size = [38, 46, 56][info.sizeClass] * 0.85;
-      this.partner = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, alphaTest: 0.4 }));
-      this.partner.center.set(0.5, 0.16);
-      this.partner.scale.set(size, size, 1);
-      this.scene!.add(this.partner);
+
+    // --------------------------------------------------------------------------
+    // Overworld Pokémon in 3D Chase Camera
+    // --------------------------------------------------------------------------
+    // 1. Static route encounters (Snorlax, legendaries, Lapras, etc.)
+    for (const enc of route.staticEncounters || []) {
+      if (eng.getFlag(enc.doneFlag) || !eng.isConditionMet(enc.requires)) continue;
+      const spec = POKEMON_SPECIES_MAP[enc.speciesId];
+      const name = spec?.name || 'Wild Pokémon';
+      this.spawnOverworldPokemon({
+        id: 'static_' + enc.speciesId,
+        speciesId: enc.speciesId,
+        name: `${name} Lv.${enc.level || 30}`,
+        x: enc.x,
+        z: enc.y + 8,
+        scale: 1.8,
+        isStatic: true,
+        encData: enc,
+      });
     }
-    this.partner!.visible = true;
-    this.partnerShadow!.visible = true;
+
+    // 2. Lost Pokémon sidequests
+    for (const lost of route.lostPokemon || []) {
+      if (eng.getFlag(lost.foundFlag) || !eng.isConditionMet(lost.requires)) continue;
+      const spec = POKEMON_SPECIES_MAP[lost.speciesId];
+      const name = spec?.name || 'Lost Pokémon';
+      this.spawnOverworldPokemon({
+        id: 'lost_' + lost.speciesId,
+        speciesId: lost.speciesId,
+        name: `Lost ${name} ❓`,
+        x: lost.x,
+        z: lost.y + 8,
+        scale: 1.25,
+        isLost: true,
+        encData: lost,
+      });
+    }
+
+    // 3. Ambient Wild Pokémon roaming in Route 1 & Viridian natural habitats
+    const ambientSpawns = [
+      { speciesId: 16, x: 260, z: 270, level: 3, name: 'Pidgey', scale: 1.1 },
+      { speciesId: 19, x: 440, z: 660, level: 3, name: 'Rattata', scale: 1.05 },
+      { speciesId: 10, x: 520, z: 290, level: 2, name: 'Caterpie', scale: 0.95 },
+      { speciesId: 60, x: 910, z: 630, level: 5, name: 'Poliwag', scale: 1.15 },
+      { speciesId: 54, x: 1120, z: 740, level: 6, name: 'Psyduck', scale: 1.25 },
+      { speciesId: 43, x: 940, z: 210, level: 5, name: 'Oddish', scale: 1.05 },
+      { speciesId: 25, x: 1640, z: 310, level: 9, name: 'Pikachu', scale: 1.25 },
+      { speciesId: 133, x: 1470, z: 190, level: 10, name: 'Eevee', scale: 1.2 },
+    ];
+    for (const sp of ambientSpawns) {
+      this.spawnOverworldPokemon({
+        id: `wild_${sp.speciesId}_${sp.x}`,
+        speciesId: sp.speciesId,
+        name: `${sp.name} Lv.${sp.level}`,
+        x: sp.x,
+        z: sp.z,
+        scale: sp.scale,
+        isWild: true,
+        encData: sp,
+      });
+    }
+
+    this.sizeTags();
   }
 
   // -------------------------------------------------------------- loop
@@ -614,14 +865,42 @@ class FirstPersonCity {
     if (this.partner && eng.companion.info) {
       const hop = moving ? Math.abs(Math.sin(this.walkPhase * 11)) * 3 : 0;
       // Walk the partner slightly to the camera's right so it never hides the trainer
-      const side = 36;
-      const ahead = 14; // and a little forward, level with the trainer rather than in front of the lens
+      const side = 32;
+      const ahead = 18; // and a little forward, level with the trainer rather than in front of the lens
       const px2 = eng.companion.x + Math.cos(this.camYaw) * side - Math.sin(this.camYaw) * ahead;
       const pz2 = eng.companion.y + 10 - Math.sin(this.camYaw) * side - Math.cos(this.camYaw) * ahead;
       this.partner.position.set(px2, hop, pz2);
+      if (this.partner3D) {
+        const pp = this.partner3D;
+        pp.obj.position.set(px2, 0, pz2);
+        pp.obj.rotation.y = this.heroYaw;
+        const next = moving && pp.walk ? pp.walk : pp.idle;
+        if (next && next !== pp.on) {
+          next.reset().play();
+          if (pp.on) pp.on.crossFadeTo(next, 0.2, false);
+          pp.on = next;
+        }
+        pp.mixer.update(dt * (moving && !pp.walk ? 1.8 : 1)); // no walk clip: a livelier idle
+      }
       this.partnerShadow!.position.set(px2, 0.3, pz2);
     }
     eng.refreshPrompt();
+
+    // Overworld Pokémon animations, mixers and wild encounter proximity
+    for (const mon of this.overworldPokemon) {
+      if (mon.model3D) {
+        mon.model3D.mixer.update(dt);
+      } else if (mon.sprite) {
+        mon.sprite.position.y = mon.baseY + Math.max(0, Math.sin(this.walkPhase * 2.2 + mon.x * 0.05) * 1.8);
+      }
+      if (mon.isWild && mon.encData && !busy && eng.onTriggerEncounter) {
+        const dist = Math.hypot(p.x - mon.x, p.y - mon.z);
+        if (dist < 34) {
+          eng.onTriggerEncounter(buildEncounterMon(mon.speciesId, mon.encData.level, 15), Math.round(p.x), Math.round(p.y));
+          break;
+        }
+      }
+    }
 
     this.placeCamera(1 - Math.exp(-dt * 5), 1 - Math.exp(-dt * 8));
     // Anything standing right in front of the lens is hidden so it never blocks the view of the trainer
@@ -634,6 +913,20 @@ class FirstPersonCity {
       if (o.userData.isTag) {
         const d = Math.hypot(o.position.x - cp.x, o.position.z - cp.z);
         o.visible = d > clear && d < 650;
+      }
+    }
+    for (const mon of this.overworldPokemon) {
+      const d = Math.hypot(mon.x - cp.x, mon.z - cp.z);
+      const visible = d > clear && d < 750;
+      if (mon.sprite) mon.sprite.visible = visible;
+      if (mon.model3D) mon.model3D.obj.visible = visible;
+      if (mon.shadow) mon.shadow.visible = visible;
+      if (mon.tag) mon.tag.visible = visible && d < 450;
+    }
+    for (const o of this.pokemonGroup.children) {
+      if (o.userData.isTag) {
+        const d = Math.hypot(o.position.x - cp.x, o.position.z - cp.z);
+        o.visible = d > clear && d < 450;
       }
     }
     this.renderer!.render(this.scene!, this.camera);

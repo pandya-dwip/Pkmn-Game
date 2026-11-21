@@ -26,7 +26,7 @@ export interface BuildingLike {
   wallColor?: string;
 }
 
-interface VolumeSpec {
+export interface VolumeSpec {
   eave: number; // art y-offset (from b.y) where walls meet the roof
   apex: number; // art y-offset of the ridge
   overhang: number;
@@ -45,7 +45,7 @@ const ROOF_STYLE: Record<string, [string, string]> = {
   wood: ['#92400e', '#451a03'],
 };
 
-function specFor(b: BuildingLike): VolumeSpec {
+export function specFor(b: BuildingLike): VolumeSpec {
   const depth = Math.min(84, Math.max(46, b.h * 0.78));
   switch (b.type) {
     case 'center':

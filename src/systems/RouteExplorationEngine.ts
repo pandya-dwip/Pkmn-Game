@@ -955,6 +955,18 @@ export class RouteExplorationEngine {
       if (tdist < 60) this.targetDest = null;
     }
 
+    if (this.worldStep(route, dt, isMoving)) return;
+
+    this.updateCompanionAndCamera(dt);
+    this.updatePrompt();
+  }
+
+  /**
+   * Everything that happens after the trainer moves: tall-grass encounters,
+   * section banners, discoveries, puzzles, item pickups and route exits.
+   * Shared by the 2.5D loop and the 3D chase view. Returns true on a scene change.
+   */
+  private worldStep(route: RouteDefinition, dt: number, isMoving: boolean): boolean {
     // Tall grass & wild encounters (only inside tall grass patches)
     let inGrassNow = false;
     let inEncounterPatch = false;
@@ -979,7 +991,7 @@ export class RouteExplorationEngine {
           this.player.grassSteps = 0;
           if (Math.random() < 0.6) {
             this.triggerWildBattle(currentGrassZone || (route.theme === 'forest' ? 'forest' : 'field'));
-            return;
+            return true;
           }
         }
       }
@@ -1022,18 +1034,26 @@ export class RouteExplorationEngine {
         this.isPaused = true;
         sound.beep(780, 0.25, 'triangle');
         this.onRouteExit(route.id + 1);
-        return;
+        return true;
       }
       if (route.id > 0 && this.player.x <= 40 && this.onRoutePreviousExit) {
         this.isPaused = true;
         sound.beep(660, 0.25, 'triangle');
         this.onRoutePreviousExit(route.id - 1);
-        return;
+        return true;
       }
     }
 
-    this.updateCompanionAndCamera(dt);
-    this.updatePrompt();
+    return false;
+  }
+
+  /** World logic for an external renderer that moves the trainer itself (3D chase view). */
+  public tickWorld(dt: number, isMoving: boolean): boolean {
+    const route = this.currentRoute;
+    if (!route) return true;
+    this.time += dt;
+    if (this.player.cooldownTimer > 0) this.player.cooldownTimer -= dt;
+    return this.worldStep(route, dt, isMoving);
   }
 
   private updateCompanionAndCamera(dt: number): void {
@@ -1202,6 +1222,45 @@ export class RouteExplorationEngine {
       y >= this.camY - margin &&
       y <= this.camY + this.canvas.height + margin
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Export hooks for the first-person city view (reuses this engine's art,
+  // collision, interactions and companion logic instead of duplicating them).
+  // ---------------------------------------------------------------------------
+
+  /** Top-down ground image (terrain, paths, water, grass, fountains) for a world rect. */
+  public snapshotGround(route: RouteDefinition, rect: { x: number; y: number; w: number; h: number }): HTMLCanvasElement {
+    this.rebuildCaches(route);
+    this.ensureStaticGround(route);
+    this.renderGroundView(route, rect);
+    const out = document.createElement('canvas');
+    out.width = Math.ceil(rect.w);
+    out.height = Math.ceil(rect.h);
+    out.getContext('2d')!.drawImage(this.groundCanvas!, 0, 0, out.width, out.height, 0, 0, out.width, out.height);
+    return out;
+  }
+
+  public worldProps(route: RouteDefinition): { trees: RouteTree[]; stones: RouteStone[]; fences: RouteFence[] } {
+    this.rebuildCaches(route);
+    return { trees: this.treeCache, stones: this.stoneCache, fences: this.fenceCache };
+  }
+
+  /** Paint one existing world object in absolute world coordinates (caller sets the transform). */
+  public paintProp(ctx: CanvasRenderingContext2D, route: RouteDefinition, kind: 'tree' | 'stone' | 'fence' | 'lamp' | 'bench' | 'sign' | 'building' | 'npc', o: any): void {
+    if (kind === 'tree') this.drawTree(ctx, o.x, o.y, o.scale || 1, o.type || 'broadleaf', o.colorVariant);
+    else if (kind === 'stone') this.drawStone(ctx, o);
+    else if (kind === 'fence') this.renderFences(ctx, route, [o]);
+    else if (kind === 'lamp') this.renderStreetlamps(ctx, route, [o]);
+    else if (kind === 'bench') this.renderBenches(ctx, route, [o]);
+    else if (kind === 'sign') this.renderSignposts(ctx, route, [o]);
+    else if (kind === 'building') this.renderBuilding(ctx, o);
+    else if (kind === 'npc') drawTrainerSpriteCached(ctx, o.x, o.y, o.facing || 'down', 0, this.getNpcLook(o), false, 0, 1);
+  }
+
+  /** Refresh the contextual A-button / prompt pill (used while the 2.5D loop is stopped). */
+  public refreshPrompt(): void {
+    this.updatePrompt();
   }
 
   private render(): void {

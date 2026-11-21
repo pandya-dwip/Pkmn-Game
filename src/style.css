@@ -8567,3 +8567,11 @@ tr:last-child td {
   #route-hud .hud-pill#hud-balls { display: none; }
   .hud-quest { top: 6px; left: 6px; max-width: 70%; }
 }
+
+/* First-person city view */
+.fp-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; touch-action: none; display: block; }
+#hud-fp-btn.hidden { display: none !important; }
+#hud-fp-btn.on { background: #dc2626 !important; color: #ffffff !important; }
+.fp-hint { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); z-index: 40; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 14px; border-radius: 12px; background: rgba(10, 15, 28, 0.86); color: #e2e8f0; font-size: 11.5px; pointer-events: none; white-space: nowrap; animation: fp-hint 3.2s ease forwards; }
+.fp-hint b { color: #fde68a; font-size: 12.5px; }
+@keyframes fp-hint { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }

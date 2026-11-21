@@ -1,0 +1,605 @@
+/**
+ * FirstPersonCity.ts
+ * Optional 3D third-person "chase camera" view of Route 1 and Viridian City.
+ *
+ * The camera follows behind and above your trainer (GTA-style). The scene is
+ * generated from the existing route data and reuses the 2.5D engine's artwork
+ * (ground image, building facades, trees, props, trainer/NPC sprites) as
+ * textures. Movement uses the engine's collision; grass encounters, item
+ * pickups, discoveries, route exits, interaction prompts and the walking
+ * partner all run through the engine, so gameplay is identical to 2.5D.
+ *
+ * Controls: Up/Down (W/S, joystick up/down) walk forward/back, Left/Right
+ * (A/D, joystick left/right) turn, A/Space/E interact, V toggles the view.
+ */
+
+import * as THREE from 'three';
+import { routeExplorationEngine as eng, RouteDefinition, RouteBuilding } from '../systems/RouteExplorationEngine';
+import { inputManager } from '../systems/InputManager';
+import { getRouteDefinition } from '../data/specialAreas';
+import { drawTrainerSpriteCached, getTrainerById, TrainerCustomization } from '../data/characters';
+import { specFor } from './BuildingVolume';
+
+const ROUTE_ID = 0;
+const WALK = 165;
+const TURN = 2.6;
+const CAM_DIST = 110; // boom length behind the trainer
+const CAM_HEIGHT = 62;
+const LOOK_AHEAD = 50;
+// The 2D art draws trees barely taller than people. In 3D, people are scaled
+// down and trees / lamps up so the world has believable proportions.
+const PEOPLE = 0.72;
+const TREES = 1.9;
+const LAMPS = 1.4;
+const SMALL_PROPS = 0.75; // fences, benches, signs
+const SPRITE_URL = (id: number) => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
+type Dir = 'up' | 'down' | 'left' | 'right';
+
+class FirstPersonCity {
+  public active = false;
+  /** Remembered so the 3D view comes back after battles, shops and menus. */
+  private wanted = false;
+  private renderer: THREE.WebGLRenderer | null = null;
+  private scene: THREE.Scene | null = null;
+  private camera = new THREE.PerspectiveCamera(58, 1, 8, 2600);
+  private npcGroup = new THREE.Group();
+  private partner: THREE.Sprite | null = null;
+  private partnerShadow: THREE.Mesh | null = null;
+  private partnerSpecies = -1;
+  private hero: THREE.Sprite | null = null;
+  private heroShadow: THREE.Mesh | null = null;
+  private heroFrames = new Map<string, THREE.CanvasTexture>();
+  private heroLook: TrainerCustomization | null = null;
+  public yaw = 0;
+  private camYaw = 0;
+  private camDist = CAM_DIST;
+  /** Portrait phones get a longer, higher camera boom (wider view of the world). */
+  private boom = 1;
+  private walkPhase = 0;
+  private raf = 0;
+  private last = 0;
+
+  public isAvailable(): boolean {
+    const r = eng.currentRoute;
+    return !!r && r.id === ROUTE_ID && !!document.getElementById('route')?.classList.contains('on');
+  }
+
+  public toggle(): void {
+    if (this.active) {
+      this.wanted = false;
+      this.exit(true);
+    } else {
+      this.wanted = true;
+      this.enter();
+    }
+  }
+
+  public enter(): void {
+    if (this.active || !this.isAvailable()) return;
+    const route = getRouteDefinition(ROUTE_ID);
+    if (!this.scene) this.build(route);
+    this.refreshDynamic(route);
+    eng.stop();
+    document.getElementById('route-viewport')!.appendChild(this.renderer!.domElement);
+    this.resize();
+    const d = eng.player.dir;
+    this.yaw = d === 'up' ? 0 : d === 'down' ? Math.PI : d === 'left' ? Math.PI / 2 : -Math.PI / 2;
+    this.camYaw = this.yaw;
+    this.camDist = CAM_DIST * this.boom;
+    this.placeCamera(1, 1);
+    this.active = true;
+    this.last = performance.now();
+    this.raf = requestAnimationFrame(this.tick);
+    this.updateButton();
+    this.hint('3D view', 'Up/Down walk · Left/Right turn · V to switch back');
+  }
+
+  public exit(resume: boolean): void {
+    if (!this.active) return;
+    this.active = false;
+    cancelAnimationFrame(this.raf);
+    this.renderer?.domElement.remove();
+    inputManager.resetTouch();
+    if (resume && document.getElementById('route')?.classList.contains('on')) eng.start();
+    this.updateButton();
+  }
+
+  // -------------------------------------------------------------- scene build
+  private build(route: RouteDefinition): void {
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.domElement.className = 'fp-canvas';
+    const scene = new THREE.Scene();
+    this.scene = scene;
+
+    const sky = document.createElement('canvas');
+    sky.width = 2;
+    sky.height = 256;
+    const sg = sky.getContext('2d')!;
+    const grad = sg.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#5fb4ea');
+    grad.addColorStop(0.55, '#a9dcf3');
+    grad.addColorStop(1, '#e6f6ea');
+    sg.fillStyle = grad;
+    sg.fillRect(0, 0, 2, 256);
+    const skyTex = new THREE.CanvasTexture(sky);
+    skyTex.colorSpace = THREE.SRGBColorSpace;
+    scene.background = skyTex;
+    scene.fog = new THREE.Fog(0xcfe9f2, 600, 2000);
+
+    scene.add(new THREE.HemisphereLight(0xeaf6ff, 0x4a6b3a, 2.2));
+    const sun = new THREE.DirectionalLight(0xfff1d6, 2.4);
+    sun.position.set(-1, 2.2, -0.8);
+    scene.add(sun);
+
+    // Ground: the engine's own top-down image of the whole route (paths, ponds, grass beds, plazas)
+    const W = route.worldWidth;
+    const H = route.worldHeight;
+    const gTex = new THREE.CanvasTexture(eng.snapshotGround(route, { x: 0, y: 0, w: W, h: H }));
+    gTex.colorSpace = THREE.SRGBColorSpace;
+    gTex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshLambertMaterial({ map: gTex }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(W / 2, 0, H / 2);
+    scene.add(ground);
+    const outer = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), new THREE.MeshLambertMaterial({ color: 0x24502f }));
+    outer.rotation.x = -Math.PI / 2;
+    outer.position.set(W / 2, -0.6, H / 2);
+    scene.add(outer);
+
+    for (const b of route.buildings) this.addBuilding(route, b);
+    this.addLedges(route);
+    this.addTallGrass(route);
+
+    const props = eng.worldProps(route);
+    const treeMats = new Map<string, THREE.SpriteMaterial>();
+    for (const t of props.trees) {
+      const scale = Math.round((t.scale || 1) * 10) / 10;
+      const key = `${t.type}|${t.colorVariant}|${scale}`;
+      let mat = treeMats.get(key);
+      if (!mat) {
+        const proto = { x: 0, y: 0, scale, type: t.type, colorVariant: t.colorVariant };
+        mat = this.material(180, 230, 90, 212, 0, eng.getTreeTrunkFootY(proto), ctx => eng.paintProp(ctx, route, 'tree', proto));
+        treeMats.set(key, mat);
+      }
+      this.addSprite(mat, 180, 230, 90, 212, t.x, eng.getTreeTrunkFootY(t), this.scene!, TREES);
+    }
+    for (const s of props.stones) this.addSprite(this.material(60, 56, 30, 44, s.x, s.y + s.radius * 0.4, c => eng.paintProp(c, route, 'stone', s)), 60, 56, 30, 44, s.x, s.y + s.radius * 0.4);
+    for (const l of route.streetlamps || []) this.addSprite(this.material(40, 56, 20, 50, l.x, l.y + 2, c => eng.paintProp(c, route, 'lamp', l)), 40, 56, 20, 50, l.x, l.y + 2, this.scene!, LAMPS);
+    for (const bn of route.benches || []) {
+      const w = (bn.w || 28) + 12;
+      this.addSprite(this.material(w, 30, w / 2, 24, bn.x + w / 2 - 6, bn.y + 14, c => eng.paintProp(c, route, 'bench', bn)), w, 30, w / 2, 24, bn.x + w / 2 - 6, bn.y + 14, this.scene!, SMALL_PROPS);
+    }
+    for (const sp of route.signposts || []) this.addSprite(this.material(50, 46, 25, 40, sp.x, sp.y + 16, c => eng.paintProp(c, route, 'sign', sp)), 50, 46, 25, 40, sp.x, sp.y + 16, this.scene!, SMALL_PROPS);
+    for (const f of props.fences) {
+      const w = f.w + 12;
+      const h = 34;
+      const mat = this.material(w, h, 6, h - 10, f.x, f.y + f.h, c => eng.paintProp(c, route, 'fence', f), true) as unknown as THREE.MeshBasicMaterial;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+      mesh.scale.y = SMALL_PROPS;
+      mesh.position.set(f.x - 6 + w / 2, (h / 2 - 10) * SMALL_PROPS, f.y + f.h);
+      scene.add(mesh);
+    }
+    scene.add(this.npcGroup);
+
+    this.heroShadow = this.blobShadow(11 * PEOPLE);
+    this.partnerShadow = this.blobShadow(9);
+    scene.add(this.heroShadow, this.partnerShadow);
+  }
+
+  private blobShadow(r: number): THREE.Mesh {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(r, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2;
+    m.scale.set(1, 0.55, 1);
+    return m;
+  }
+
+  /** Paint 2.5D artwork (world coords) into a texture so world point (ax, ay) lands on pixel (px, py). */
+  private material(w: number, h: number, px: number, py: number, ax: number, ay: number, draw: (c: CanvasRenderingContext2D) => void, mesh = false): THREE.SpriteMaterial {
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(w * 2);
+    c.height = Math.ceil(h * 2);
+    const ctx = c.getContext('2d')!;
+    ctx.scale(2, 2);
+    ctx.translate(px - ax, py - ay);
+    draw(ctx);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    // Alpha-test (not blending) keeps correct depth and drops the flat 2.5D ground shadows
+    if (mesh) return new THREE.MeshBasicMaterial({ map: tex, alphaTest: 0.45, side: THREE.DoubleSide }) as unknown as THREE.SpriteMaterial;
+    return new THREE.SpriteMaterial({ map: tex, alphaTest: 0.45 });
+  }
+
+  /** Upright props / people that should vanish when they come right up against the camera lens. */
+  private occluders: THREE.Sprite[] = [];
+
+  private addSprite(mat: THREE.SpriteMaterial, w: number, h: number, px: number, py: number, x: number, z: number, group: THREE.Object3D = this.scene!, k = 1): THREE.Sprite {
+    const s = new THREE.Sprite(mat);
+    this.occluders.push(s);
+    s.center.set(px / w, 1 - py / h);
+    s.scale.set(w * k, h * k, 1);
+    s.position.set(x, 0, z);
+    group.add(s);
+    return s;
+  }
+
+  /** Box + roof volume with the original facade artwork on the front. */
+  private addBuilding(route: RouteDefinition, b: RouteBuilding): void {
+    const scene = this.scene!;
+    const spec = specFor(b);
+    const front = b.y + b.h;
+    const depth = spec.depth;
+    const eaveH = b.h - spec.eave;
+    const apexH = b.h - spec.apex;
+    const cx = b.x + b.w / 2;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(b.w, Math.max(8, eaveH), depth), new THREE.MeshLambertMaterial({ color: spec.wall }));
+    body.position.set(cx, Math.max(8, eaveH) / 2, front - depth / 2 - 0.5);
+    scene.add(body);
+    const roofMat = new THREE.MeshLambertMaterial({ color: spec.roofLight });
+    const ov = spec.overhang;
+    if (spec.roof === 'flat') {
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(b.w + 8, 6, depth + 4), roofMat);
+      slab.position.set(cx, apexH, front - depth / 2);
+      scene.add(slab);
+    } else {
+      const shape = new THREE.Shape();
+      const half = b.w / 2 + ov;
+      shape.moveTo(-half, 0);
+      shape.lineTo(half, 0);
+      shape.lineTo(0, Math.max(6, apexH - eaveH));
+      shape.closePath();
+      const roof = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: depth + ov, bevelEnabled: false }), roofMat);
+      roof.position.set(cx, eaveH, front - depth - ov * 0.6);
+      scene.add(roof);
+    }
+    const fw = b.w + 48;
+    const fh = b.h + 70;
+    const mat = this.material(fw, fh, 24, b.h + 52, b.x, b.y + b.h, c => eng.paintProp(c, route, 'building', b), true) as unknown as THREE.MeshBasicMaterial;
+    const facade = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), mat);
+    facade.position.set(cx, fh / 2 - 18, front + 0.6);
+    scene.add(facade);
+  }
+
+  /** Terraces get a real raised rock face, with gaps left at their stairs. */
+  private addLedges(route: RouteDefinition): void {
+    const rock = new THREE.MeshLambertMaterial({ color: 0x7a5233 });
+    const lip = new THREE.MeshLambertMaterial({ color: 0x2f7a3c });
+    for (const l of route.ledges || []) {
+      const segs: [number, number][] = [];
+      let x0 = l.x;
+      for (const c of [...(l.stairs || [])].sort((a, b) => a.x - b.x)) {
+        segs.push([x0, c.x]);
+        x0 = c.x + c.w;
+      }
+      segs.push([x0, l.x + l.w]);
+      for (const [a, b] of segs) {
+        if (b - a < 4) continue;
+        const face = new THREE.Mesh(new THREE.BoxGeometry(b - a, 14, l.h), rock);
+        face.position.set((a + b) / 2, 7, l.y + l.h / 2);
+        const top = new THREE.Mesh(new THREE.BoxGeometry(b - a, 2, l.h + 2), lip);
+        top.position.set((a + b) / 2, 14.5, l.y + l.h / 2);
+        this.scene!.add(face, top);
+      }
+    }
+  }
+
+  /** Tall-grass beds become real blades (two instanced draw calls for the whole route). */
+  private addTallGrass(route: RouteDefinition): void {
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 64;
+    const g = c.getContext('2d')!;
+    for (let i = 0; i < 9; i++) {
+      const x = 6 + i * 6.5;
+      g.fillStyle = i % 3 === 0 ? '#2d6a3e' : i % 3 === 1 ? '#40916c' : '#52b788';
+      g.beginPath();
+      g.moveTo(x - 4, 64);
+      g.lineTo(x + Math.sin(i) * 5, 10 + (i % 4) * 6);
+      g.lineTo(x + 4, 64);
+      g.closePath();
+      g.fill();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide });
+    const geo = new THREE.PlaneGeometry(22, 16);
+    geo.translate(0, 8, 0);
+    const spots: [number, number][] = [];
+    for (const p of route.grassPatches) {
+      for (let y = p.y + 8; y < p.y + p.h - 4; y += 15) {
+        for (let x = p.x + 8; x < p.x + p.w - 4; x += 15) {
+          const h = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+          const j = h - Math.floor(h);
+          spots.push([x + (j - 0.5) * 8, y + (((j * 7) % 1) - 0.5) * 8]);
+        }
+      }
+    }
+    if (!spots.length) return;
+    const m4 = new THREE.Matrix4();
+    for (const rot of [0.4, 0.4 + Math.PI / 2]) {
+      const inst = new THREE.InstancedMesh(geo, mat, spots.length);
+      spots.forEach(([x, z], i) => {
+        m4.makeRotationY(rot + (i % 5) * 0.3);
+        m4.setPosition(x, 0, z);
+        inst.setMatrixAt(i, m4);
+      });
+      this.scene!.add(inst);
+    }
+  }
+
+  // -------------------------------------------------------------- dynamic
+  /** Name label with a constant on-screen size (never balloons near the camera). */
+  private nameTag(text: string, x: number, z: number): THREE.Sprite {
+    const c = document.createElement('canvas');
+    const ctx = c.getContext('2d')!;
+    ctx.font = '700 22px system-ui, sans-serif';
+    const w = Math.ceil(ctx.measureText(text).width) + 28;
+    c.width = w;
+    c.height = 34;
+    ctx.font = '700 22px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(10, 15, 28, 0.85)';
+    ctx.beginPath();
+    ctx.roundRect(0, 0, w, 34, 17);
+    ctx.fill();
+    ctx.fillStyle = '#f1f5f9';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, w / 2, 18);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, sizeAttenuation: false, depthWrite: false, transparent: true }));
+    tag.center.set(0.5, 0);
+    tag.position.set(x, 46 * PEOPLE, z);
+    tag.userData.ratio = w / 34;
+    tag.userData.isTag = true;
+    return tag;
+  }
+
+  private sizeTags(): void {
+    const h = 0.03; // fraction of the viewport (clip-space units)
+    for (const o of this.npcGroup.children) {
+      if (o.userData.isTag) (o as THREE.Sprite).scale.set((h * o.userData.ratio) / this.camera.aspect, h, 1);
+    }
+  }
+
+  private heroTexture(dir: Dir, frame: number): THREE.CanvasTexture {
+    const key = dir + frame;
+    let t = this.heroFrames.get(key);
+    if (!t) {
+      const c = document.createElement('canvas');
+      c.width = 88;
+      c.height = 112;
+      const ctx = c.getContext('2d')!;
+      ctx.scale(2, 2);
+      drawTrainerSpriteCached(ctx, 22, 40, dir, frame, this.heroLook!, false, 0, 1);
+      t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      this.heroFrames.set(key, t);
+    }
+    return t;
+  }
+
+  private refreshDynamic(route: RouteDefinition): void {
+    // The trainer's frames follow the current cosmetics
+    const look = eng.playerAppearance || getTrainerById(eng.selectedTrainerId);
+    if (look !== this.heroLook) {
+      this.heroLook = look;
+      this.heroFrames.forEach(t => t.dispose());
+      this.heroFrames.clear();
+      if (this.hero) {
+        (this.hero.material as THREE.SpriteMaterial).map = this.heroTexture('up', 0);
+        (this.hero.material as THREE.SpriteMaterial).needsUpdate = true;
+      }
+    }
+    if (!this.hero) {
+      this.hero = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.heroTexture('up', 0), alphaTest: 0.45 }));
+      this.hero.center.set(0.5, 1 - 53 / 56);
+      this.hero.scale.set(44 * PEOPLE, 56 * PEOPLE, 1);
+      this.scene!.add(this.hero);
+    }
+
+    for (const o of [...this.npcGroup.children]) {
+      const m = (o as THREE.Sprite).material as THREE.SpriteMaterial;
+      m.map?.dispose();
+      m.dispose();
+      this.npcGroup.remove(o);
+      this.occluders = this.occluders.filter(x => x !== o);
+    }
+    for (const n of eng.visibleNPCs()) {
+      const w = 110;
+      const h = 80;
+      const mat = this.material(w, h, w / 2, 68, n.x, n.y + 13, c => eng.paintProp(c, route, 'npc', { ...n, facing: 'down' }));
+      this.addSprite(mat, w, h, w / 2, 68, n.x, n.y + 13, this.npcGroup, PEOPLE);
+      this.npcGroup.add(this.nameTag(n.name, n.x, n.y + 13));
+    }
+    this.sizeTags();
+
+    const info = eng.companion.info;
+    if (!info) {
+      if (this.partner) this.partner.visible = false;
+      this.partnerShadow!.visible = false;
+      return;
+    }
+    if (info.speciesId !== this.partnerSpecies) {
+      this.partnerSpecies = info.speciesId;
+      if (this.partner) this.scene!.remove(this.partner);
+      const tex = new THREE.TextureLoader().load(SPRITE_URL(info.speciesId));
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.magFilter = THREE.NearestFilter;
+      const size = [38, 46, 56][info.sizeClass] * 0.85;
+      this.partner = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, alphaTest: 0.4 }));
+      this.partner.center.set(0.5, 0.16);
+      this.partner.scale.set(size, size, 1);
+      this.scene!.add(this.partner);
+    }
+    this.partner!.visible = true;
+    this.partnerShadow!.visible = true;
+  }
+
+  // -------------------------------------------------------------- loop
+  private tick = (now: number): void => {
+    if (!this.active) return;
+    const dt = Math.min(0.05, (now - this.last) / 1000);
+    this.last = now;
+    const route = eng.currentRoute;
+    // Battles, shops, menus and route changes hand control back to the 2.5D screens
+    if (!route || route.id !== ROUTE_ID || !document.getElementById('route')?.classList.contains('on')) {
+      this.exit(false);
+      return;
+    }
+
+    // Only one world loop at a time: anything that restarted the 2.5D loop (e.g. closing the map) is stopped again
+    eng.stop();
+    const busy =
+      eng.isPaused ||
+      document.getElementById('ov')?.style.display === 'flex' ||
+      !!document.querySelector('.xp-sheet, .kanto-map-modal-overlay');
+    const p = eng.player;
+    let moving = false;
+    let turning = 0;
+    let backwards = false;
+    if (!busy) {
+      const m = inputManager.getMovement();
+      turning = Math.abs(m.dx) > 0.15 ? Math.sign(m.dx) : 0;
+      this.yaw -= m.dx * TURN * dt;
+      const step = -m.dy * WALK * dt;
+      if (Math.abs(step) > 0.01) {
+        const nx = p.x - Math.sin(this.yaw) * step;
+        const ny = p.y - Math.cos(this.yaw) * step;
+        if (!this.blocked(nx, p.y, route)) p.x = nx;
+        if (!this.blocked(p.x, ny, route)) p.y = ny;
+        moving = true;
+        backwards = step < 0;
+      }
+    }
+
+    // World-facing direction for NPCs / interactions
+    const a = ((this.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    p.dir = a < Math.PI / 4 || a >= (7 * Math.PI) / 4 ? 'up' : a < (3 * Math.PI) / 4 ? 'left' : a < (5 * Math.PI) / 4 ? 'down' : 'right';
+
+    // Encounters, item pickups, discoveries and route exits: same rules as 2.5D
+    if (!busy && eng.tickWorld(dt, moving)) {
+      // A battle or route change just started: shut down cleanly (still "wanted",
+      // so the 3D view comes back on its own when the player returns).
+      this.exit(false);
+      return;
+    }
+
+    // Trainer sprite relative to the camera: back view while walking, side view while turning
+    this.walkPhase += moving ? dt : 0;
+    const frame = moving ? Math.floor(this.walkPhase / 0.12) % 4 : 0;
+    const viewDir: Dir = backwards ? 'down' : turning && !moving ? (turning < 0 ? 'left' : 'right') : 'up';
+    const mat = this.hero!.material as THREE.SpriteMaterial;
+    const tex = this.heroTexture(viewDir, frame);
+    if (mat.map !== tex) {
+      mat.map = tex;
+      mat.needsUpdate = true;
+    }
+    this.hero!.position.set(p.x, 0, p.y + 13);
+    this.heroShadow!.position.set(p.x, 0.3, p.y + 13);
+
+    eng.companion.update(dt, p.x, p.y);
+    if (this.partner && eng.companion.info) {
+      const hop = moving ? Math.abs(Math.sin(this.walkPhase * 11)) * 3 : 0;
+      this.partner.position.set(eng.companion.x, hop, eng.companion.y + 10);
+      this.partnerShadow!.position.set(eng.companion.x, 0.3, eng.companion.y + 10);
+    }
+    eng.refreshPrompt();
+
+    this.placeCamera(1 - Math.exp(-dt * 5), 1 - Math.exp(-dt * 8));
+    // Anything standing right in front of the lens is hidden so it never blocks the view of the trainer
+    const cp = this.camera.position;
+    const clear = Math.min(90, this.camDist * 0.7); // anything this close to the lens sits between camera and trainer
+    for (const o of this.occluders) o.visible = Math.hypot(o.position.x - cp.x, o.position.z - cp.z) > clear;
+    for (const o of this.npcGroup.children) {
+      if (o.userData.isTag) {
+        const d = Math.hypot(o.position.x - cp.x, o.position.z - cp.z);
+        o.visible = d > clear && d < 650;
+      }
+    }
+    this.renderer!.render(this.scene!, this.camera);
+    this.raf = requestAnimationFrame(this.tick);
+  };
+
+  /** Chase camera: trails behind the trainer, eases into turns, pulls in to avoid walls. */
+  private placeCamera(yawK: number, posK: number): void {
+    const p = eng.player;
+    let d = this.yaw - this.camYaw;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    this.camYaw += d * yawK;
+    const fx = -Math.sin(this.camYaw);
+    const fz = -Math.cos(this.camYaw);
+    const route = eng.currentRoute;
+    // Shorten the boom if a building sits between camera and trainer
+    const full = CAM_DIST * this.boom;
+    let want = full;
+    if (route) {
+      for (let t = 0.2; t <= 1.0001; t += 0.1) {
+        const x = p.x - fx * full * t;
+        const z = p.y + 6 - fz * full * t;
+        if (route.buildings.some(b => x > b.x - 6 && x < b.x + b.w + 6 && z > b.y - 6 && z < b.y + b.h + 6)) {
+          want = Math.max(36, full * (t - 0.12));
+          break;
+        }
+      }
+    }
+    this.camDist += (want - this.camDist) * (want < this.camDist ? 0.5 : posK);
+    const k = this.camDist / full;
+    const target = new THREE.Vector3(p.x - fx * this.camDist, CAM_HEIGHT * this.boom * (0.45 + 0.55 * k), p.y + 6 - fz * this.camDist);
+    this.camera.position.lerp(target, posK);
+    this.camera.lookAt(p.x + fx * LOOK_AHEAD, 14, p.y + 6 + fz * LOOK_AHEAD);
+  }
+
+  /** Engine collision plus a small standoff so you never clip into building walls. */
+  private blocked(x: number, y: number, route: RouteDefinition): boolean {
+    if (eng.isBlocked(x, y, route)) return true;
+    const pad = 10;
+    return route.buildings.some(b => x > b.x - pad && x < b.x + b.w + pad && y > b.y - pad && y < b.y + b.h + pad - 4);
+  }
+
+  private resize(): void {
+    const vp = document.getElementById('route-viewport');
+    if (!vp || !this.renderer) return;
+    const w = vp.clientWidth || 800;
+    const h = vp.clientHeight || 480;
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    this.camera.fov = w < h ? 74 : 58;
+    this.boom = w < h ? Math.min(1.7, 0.75 + 0.5 * (h / w)) : 1;
+    this.camera.updateProjectionMatrix();
+    this.sizeTags();
+  }
+
+  // -------------------------------------------------------------- HUD
+  public updateButton(): void {
+    // Bring the 3D view back after battles / menus if the player was using it
+    if (this.wanted && !this.active && this.isAvailable() && !eng.isPaused) this.enter();
+    const btn = document.getElementById('hud-fp-btn');
+    if (!btn) return;
+    btn.classList.toggle('hidden', !(this.active || this.isAvailable()));
+    btn.classList.toggle('on', this.active);
+    btn.title = this.active ? 'Back to 2.5D view (V)' : '3D view (V)';
+  }
+
+  private hint(title: string, sub: string): void {
+    const vp = document.getElementById('route-viewport');
+    if (!vp) return;
+    const el = document.createElement('div');
+    el.className = 'fp-hint';
+    el.innerHTML = `<b>${title}</b><span>${sub}</span>`;
+    vp.appendChild(el);
+    setTimeout(() => el.remove(), 3200);
+  }
+
+  public init(): void {
+    document.getElementById('hud-fp-btn')?.addEventListener('click', () => this.toggle());
+    window.addEventListener('keydown', e => {
+      if (e.key.toLowerCase() === 'v' && !(e.target instanceof HTMLInputElement)) this.toggle();
+    });
+    window.addEventListener('resize', () => this.active && this.resize());
+    setInterval(() => this.updateButton(), 300);
+  }
+}
+
+export const firstPersonCity = new FirstPersonCity();

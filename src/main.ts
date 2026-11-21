@@ -58,6 +58,7 @@ import { CompanionInfo } from './world/CompanionController';
 import { WorldCondition } from './world/WorldTypes';
 import { RouteNPC } from './systems/RouteExplorationEngine';
 import { buildEncounterMon } from './systems/EncounterSystem';
+import { firstPersonCity } from './world/FirstPersonCity';
 
 // ============================================================================
 // GLOBAL CONFIGURATION & TYPES
@@ -5564,6 +5565,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
+  firstPersonCity.init();
   titleScr();
 });
 
@@ -5576,6 +5578,7 @@ if (import.meta.env.DEV) {
     __getRoute: getRouteDefinition,
     __G: () => G,
     __B: () => B,
+    __fp: firstPersonCity,
     __selfcheck: () => import('./devtools/selfcheck').then(m => m.runSelfChecks()),
     __evolve: (uid: string, to: number) => {
       const m = G.team.find(x => x.uid === uid);

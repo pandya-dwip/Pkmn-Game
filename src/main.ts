@@ -5426,6 +5426,7 @@ document.addEventListener('DOMContentLoaded', () => {
       note([
         '<h1>CREDITS & ATTRIBUTION</h1>',
         '<b>3D Pokémon Models</b><br>Powered by the open-source Pokémon 3D API ecosystem:<br><a href="https://github.com/Pokemon-3D-api" target="_blank" style="color:#60a5fa">github.com/Pokemon-3D-api</a><br><a href="https://pokemon-3d-api.onrender.com" target="_blank" style="color:#60a5fa">pokemon-3d-api.onrender.com</a>',
+        '<br><b>3D Environment Models</b><br>3D view models: <a href="https://kenney.nl" target="_blank" style="color:#60a5fa">Kenney.nl</a> (Mini Characters, Fantasy Town Kit, City Kits Suburban & Commercial, Nature Kit) and <a href="https://quaternius.com" target="_blank" style="color:#60a5fa">Quaternius</a> (Stylized Nature MegaKit), all released under CC0 (public domain).',
         '<br><b>Legal Notice & Disclaimer</b><br>This game is an unofficial, non-commercial fan project created for educational and entertainment purposes. It is not affiliated with, endorsed by, or sponsored by Nintendo, GAME FREAK, or The Pokémon Company.',
         '<br>Pokémon, Pokémon character names, and Pokémon models are trademarks and copyrights of Nintendo, Creatures Inc., and GAME FREAK.',
       ]);

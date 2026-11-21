@@ -19,6 +19,10 @@ import { inputManager } from '../systems/InputManager';
 import { getRouteDefinition } from '../data/specialAreas';
 import { drawTrainerSpriteCached, getTrainerById, TrainerCustomization } from '../data/characters';
 import { specFor } from './BuildingVolume';
+import { loadRouteModels, RouteModelsHandle, addWindSway, windTime } from './RouteModels';
+import { buildGround, buildWater, planFillerTrees } from './RouteGround';
+import { createCharacter, modelForTrainer, modelForNpc, Character3D } from './Characters3D';
+import { RouteTree } from '../systems/RouteExplorationEngine';
 
 const ROUTE_ID = 0;
 const WALK = 165;
@@ -32,6 +36,7 @@ const PEOPLE = 0.72;
 const TREES = 1.9;
 const LAMPS = 1.4;
 const SMALL_PROPS = 0.75; // fences, benches, signs
+const HERO_HEIGHT = 30;
 const SPRITE_URL = (id: number) => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
 type Dir = 'up' | 'down' | 'left' | 'right';
 
@@ -51,6 +56,25 @@ class FirstPersonCity {
   private heroFrames = new Map<string, THREE.CanvasTexture>();
   private heroLook: TrainerCustomization | null = null;
   public yaw = 0;
+  // Billboard art that the Kenney 3D models replace once they have loaded
+  private treeSprites: THREE.Sprite[] = [];
+  private stoneSprites: THREE.Sprite[] = [];
+  private fenceMeshes: THREE.Mesh[] = [];
+  private houseParts = new Map<RouteBuilding, THREE.Object3D[]>();
+  private models: RouteModelsHandle | null = null;
+  private bladeMeshes: THREE.Object3D[] = [];
+  private waterUpdate: ((t: number) => void) | null = null;
+  /** Lawn trees added in 3D only; they collide here. */
+  private fillerTrees: RouteTree[] = [];
+  // Billboards / boxes replaced by 3D models once they load
+  private propSprites: THREE.Object3D[] = [];
+  private ledgeMeshes: THREE.Object3D[] = [];
+  // Animated 3D people (fall back to the sprites until loaded)
+  private heroModel: Character3D | null = null;
+  private heroModelKey = '';
+  private heroYaw = Math.PI;
+  private npcModels: { c: Character3D; x: number; z: number; facing: number; sprite: THREE.Object3D | null }[] = [];
+  private npcToken = 0;
   private camYaw = 0;
   private camDist = CAM_DIST;
   /** Portrait phones get a longer, higher camera boom (wider view of the world). */
@@ -126,29 +150,20 @@ class FirstPersonCity {
     const skyTex = new THREE.CanvasTexture(sky);
     skyTex.colorSpace = THREE.SRGBColorSpace;
     scene.background = skyTex;
-    scene.fog = new THREE.Fog(0xcfe9f2, 600, 2000);
+    scene.fog = new THREE.Fog(0xcfe9f2, 420, 920); // matches the model culling distance
 
     scene.add(new THREE.HemisphereLight(0xeaf6ff, 0x4a6b3a, 2.2));
     const sun = new THREE.DirectionalLight(0xfff1d6, 2.4);
     sun.position.set(-1, 2.2, -0.8);
     scene.add(sun);
 
-    // Ground: the engine's own top-down image of the whole route (paths, ponds, grass beds, plazas)
+    // Ground: lush tiled grass + the route's own art (paths, plazas, shores) minus its flat lawn
     const W = route.worldWidth;
     const H = route.worldHeight;
-    const gTex = new THREE.CanvasTexture(eng.snapshotGround(route, { x: 0, y: 0, w: W, h: H }));
-    gTex.colorSpace = THREE.SRGBColorSpace;
-    gTex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshLambertMaterial({ map: gTex }));
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.set(W / 2, 0, H / 2);
-    scene.add(ground);
-    const outer = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), new THREE.MeshLambertMaterial({ color: 0x24502f }));
-    outer.rotation.x = -Math.PI / 2;
-    outer.position.set(W / 2, -0.6, H / 2);
-    scene.add(outer);
+    buildGround(scene, route, eng.snapshotGround(route, { x: 0, y: 0, w: W, h: H }), this.renderer.capabilities.getMaxAnisotropy());
+    this.waterUpdate = buildWater(scene, route);
 
-    for (const b of route.buildings) this.addBuilding(route, b);
+    for (const b of route.buildings) this.houseParts.set(b, this.addBuilding(route, b));
     this.addLedges(route);
     this.addTallGrass(route);
 
@@ -163,15 +178,15 @@ class FirstPersonCity {
         mat = this.material(180, 230, 90, 212, 0, eng.getTreeTrunkFootY(proto), ctx => eng.paintProp(ctx, route, 'tree', proto));
         treeMats.set(key, mat);
       }
-      this.addSprite(mat, 180, 230, 90, 212, t.x, eng.getTreeTrunkFootY(t), this.scene!, TREES);
+      this.treeSprites.push(this.addSprite(mat, 180, 230, 90, 212, t.x, eng.getTreeTrunkFootY(t), this.scene!, TREES));
     }
-    for (const s of props.stones) this.addSprite(this.material(60, 56, 30, 44, s.x, s.y + s.radius * 0.4, c => eng.paintProp(c, route, 'stone', s)), 60, 56, 30, 44, s.x, s.y + s.radius * 0.4);
-    for (const l of route.streetlamps || []) this.addSprite(this.material(40, 56, 20, 50, l.x, l.y + 2, c => eng.paintProp(c, route, 'lamp', l)), 40, 56, 20, 50, l.x, l.y + 2, this.scene!, LAMPS);
+    for (const s of props.stones) this.stoneSprites.push(this.addSprite(this.material(60, 56, 30, 44, s.x, s.y + s.radius * 0.4, c => eng.paintProp(c, route, 'stone', s)), 60, 56, 30, 44, s.x, s.y + s.radius * 0.4));
+    for (const l of route.streetlamps || []) this.propSprites.push(this.addSprite(this.material(40, 56, 20, 50, l.x, l.y + 2, c => eng.paintProp(c, route, 'lamp', l)), 40, 56, 20, 50, l.x, l.y + 2, this.scene!, LAMPS));
     for (const bn of route.benches || []) {
       const w = (bn.w || 28) + 12;
-      this.addSprite(this.material(w, 30, w / 2, 24, bn.x + w / 2 - 6, bn.y + 14, c => eng.paintProp(c, route, 'bench', bn)), w, 30, w / 2, 24, bn.x + w / 2 - 6, bn.y + 14, this.scene!, SMALL_PROPS);
+      this.propSprites.push(this.addSprite(this.material(w, 30, w / 2, 24, bn.x + w / 2 - 6, bn.y + 14, c => eng.paintProp(c, route, 'bench', bn)), w, 30, w / 2, 24, bn.x + w / 2 - 6, bn.y + 14, this.scene!, SMALL_PROPS));
     }
-    for (const sp of route.signposts || []) this.addSprite(this.material(50, 46, 25, 40, sp.x, sp.y + 16, c => eng.paintProp(c, route, 'sign', sp)), 50, 46, 25, 40, sp.x, sp.y + 16, this.scene!, SMALL_PROPS);
+    for (const sp of route.signposts || []) this.propSprites.push(this.addSprite(this.material(50, 46, 25, 40, sp.x, sp.y + 16, c => eng.paintProp(c, route, 'sign', sp)), 50, 46, 25, 40, sp.x, sp.y + 16, this.scene!, SMALL_PROPS));
     for (const f of props.fences) {
       const w = f.w + 12;
       const h = 34;
@@ -180,12 +195,49 @@ class FirstPersonCity {
       mesh.scale.y = SMALL_PROPS;
       mesh.position.set(f.x - 6 + w / 2, (h / 2 - 10) * SMALL_PROPS, f.y + f.h);
       scene.add(mesh);
+      this.fenceMeshes.push(mesh);
     }
     scene.add(this.npcGroup);
 
     this.heroShadow = this.blobShadow(11 * PEOPLE);
     this.partnerShadow = this.blobShadow(9);
     scene.add(this.heroShadow, this.partnerShadow);
+    this.loadModels(route, props);
+  }
+
+  /** Swap billboard trees/rocks/fences/houses for Kenney 3D models; keep the billboards if loading fails. */
+  private loadModels(route: RouteDefinition, props: ReturnType<typeof eng.worldProps>): void {
+    const extraTrees = planFillerTrees(route, props.trees, (x, y) => this.canPlant(x, y, route));
+    loadRouteModels({
+      scene: this.scene!,
+      route,
+      trees: props.trees,
+      treeFootY: t => eng.getTreeTrunkFootY(t),
+      stones: props.stones,
+      fences: props.fences,
+      isFreeGround: (x, y) => !eng.isPointOnRoad(x, y - 8, route) && !eng.isBlocked(x, y - 8, route),
+      scale: { trees: 1.6, props: SMALL_PROPS },
+      extraTrees,
+      isDirtPath: p => (p.style ?? 'dirt') === 'dirt',
+      signText: b => (b.type === 'center' ? 'Pokémon Center' : b.type === 'mart' ? 'Poké Mart' : b.label.replace(/\s*\(.*\)\s*/, '')),
+    })
+      .then(handle => {
+        const drop = (o: THREE.Object3D) => this.scene!.remove(o);
+        [...this.treeSprites, ...this.stoneSprites, ...this.fenceMeshes].forEach(drop);
+        const gone = new Set<THREE.Object3D>([...this.treeSprites, ...this.stoneSprites]);
+        this.occluders = this.occluders.filter(o => !gone.has(o));
+        for (const b of handle.houses) this.houseParts.get(b)?.forEach(drop);
+        this.bladeMeshes.forEach(drop); // replaced by real 3D grass clumps
+        this.fillerTrees = extraTrees.inner;
+        if (handle.propsReplaced) {
+          this.propSprites.forEach(drop);
+          const gone2 = new Set(this.propSprites);
+          this.occluders = this.occluders.filter(o => !gone2.has(o));
+        }
+        this.ledgeMeshes.forEach(drop); // replaced by the rock embankment
+        this.models = handle;
+      })
+      .catch(err => console.warn('3D models unavailable, keeping billboard art:', err));
   }
 
   private blobShadow(r: number): THREE.Mesh {
@@ -225,7 +277,7 @@ class FirstPersonCity {
   }
 
   /** Box + roof volume with the original facade artwork on the front. */
-  private addBuilding(route: RouteDefinition, b: RouteBuilding): void {
+  private addBuilding(route: RouteDefinition, b: RouteBuilding): THREE.Object3D[] {
     const scene = this.scene!;
     const spec = specFor(b);
     const front = b.y + b.h;
@@ -236,12 +288,14 @@ class FirstPersonCity {
     const body = new THREE.Mesh(new THREE.BoxGeometry(b.w, Math.max(8, eaveH), depth), new THREE.MeshLambertMaterial({ color: spec.wall }));
     body.position.set(cx, Math.max(8, eaveH) / 2, front - depth / 2 - 0.5);
     scene.add(body);
+    const parts: THREE.Object3D[] = [body];
     const roofMat = new THREE.MeshLambertMaterial({ color: spec.roofLight });
     const ov = spec.overhang;
     if (spec.roof === 'flat') {
       const slab = new THREE.Mesh(new THREE.BoxGeometry(b.w + 8, 6, depth + 4), roofMat);
       slab.position.set(cx, apexH, front - depth / 2);
       scene.add(slab);
+      parts.push(slab);
     } else {
       const shape = new THREE.Shape();
       const half = b.w / 2 + ov;
@@ -252,6 +306,7 @@ class FirstPersonCity {
       const roof = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: depth + ov, bevelEnabled: false }), roofMat);
       roof.position.set(cx, eaveH, front - depth - ov * 0.6);
       scene.add(roof);
+      parts.push(roof);
     }
     const fw = b.w + 48;
     const fh = b.h + 70;
@@ -259,6 +314,8 @@ class FirstPersonCity {
     const facade = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), mat);
     facade.position.set(cx, fh / 2 - 18, front + 0.6);
     scene.add(facade);
+    parts.push(facade);
+    return parts;
   }
 
   /** Terraces get a real raised rock face, with gaps left at their stairs. */
@@ -280,6 +337,7 @@ class FirstPersonCity {
         const top = new THREE.Mesh(new THREE.BoxGeometry(b - a, 2, l.h + 2), lip);
         top.position.set((a + b) / 2, 14.5, l.y + l.h / 2);
         this.scene!.add(face, top);
+        this.ledgeMeshes.push(face, top);
       }
     }
   }
@@ -303,6 +361,7 @@ class FirstPersonCity {
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     const mat = new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide });
+    addWindSway(mat, 0.12);
     const geo = new THREE.PlaneGeometry(22, 16);
     geo.translate(0, 8, 0);
     const spots: [number, number][] = [];
@@ -325,6 +384,7 @@ class FirstPersonCity {
         inst.setMatrixAt(i, m4);
       });
       this.scene!.add(inst);
+      this.bladeMeshes.push(inst);
     }
   }
 
@@ -398,7 +458,24 @@ class FirstPersonCity {
       this.hero.scale.set(44 * PEOPLE, 56 * PEOPLE, 1);
       this.scene!.add(this.hero);
     }
+    // Animated 3D trainer wearing the chosen outfit colours
+    const heroKey = modelForTrainer(eng.selectedTrainerId) + '|' + look.palette.topMain + '|' + look.palette.bottomMain;
+    if (heroKey !== this.heroModelKey) {
+      this.heroModelKey = heroKey;
+      createCharacter(modelForTrainer(eng.selectedTrainerId), HERO_HEIGHT, { top: look.palette.topMain, bottom: look.palette.bottomMain })
+        .then(c => {
+          if (this.heroModelKey !== heroKey) return;
+          if (this.heroModel) this.scene!.remove(this.heroModel.object);
+          this.heroModel = c;
+          this.scene!.add(c.object);
+          this.hero!.visible = false;
+        })
+        .catch(err => console.warn('Trainer model unavailable, keeping sprite:', err));
+    }
 
+    const token = ++this.npcToken;
+    for (const n of this.npcModels) this.scene!.remove(n.c.object);
+    this.npcModels = [];
     for (const o of [...this.npcGroup.children]) {
       const m = (o as THREE.Sprite).material as THREE.SpriteMaterial;
       m.map?.dispose();
@@ -410,8 +487,20 @@ class FirstPersonCity {
       const w = 110;
       const h = 80;
       const mat = this.material(w, h, w / 2, 68, n.x, n.y + 13, c => eng.paintProp(c, route, 'npc', { ...n, facing: 'down' }));
-      this.addSprite(mat, w, h, w / 2, 68, n.x, n.y + 13, this.npcGroup, PEOPLE);
+      const sprite = this.addSprite(mat, w, h, w / 2, 68, n.x, n.y + 13, this.npcGroup, PEOPLE);
       this.npcGroup.add(this.nameTag(n.name, n.x, n.y + 13));
+      const facing = { up: Math.PI, down: 0, left: -Math.PI / 2, right: Math.PI / 2 }[n.facing || 'down'];
+      createCharacter(modelForNpc(n.id, n.name), HERO_HEIGHT * 0.97)
+        .then(c => {
+          if (token !== this.npcToken) return;
+          c.object.position.set(n.x, 0, n.y + 10);
+          c.object.rotation.y = facing;
+          this.scene!.add(c.object);
+          sprite.visible = false;
+          this.occluders = this.occluders.filter(o => o !== sprite);
+          this.npcModels.push({ c, x: n.x, z: n.y + 10, facing, sprite });
+        })
+        .catch(() => {});
     }
     this.sizeTags();
 
@@ -441,6 +530,8 @@ class FirstPersonCity {
   private tick = (now: number): void => {
     if (!this.active) return;
     const dt = Math.min(0.05, (now - this.last) / 1000);
+    windTime.value = now / 1000;
+    this.waterUpdate?.(now / 1000);
     this.last = now;
     const route = eng.currentRoute;
     // Battles, shops, menus and route changes hand control back to the 2.5D screens
@@ -498,12 +589,37 @@ class FirstPersonCity {
     }
     this.hero!.position.set(p.x, 0, p.y + 13);
     this.heroShadow!.position.set(p.x, 0.3, p.y + 13);
+    if (this.heroModel) {
+      // Face the direction of travel (toward the camera when stepping back)
+      const want = backwards ? this.yaw : this.yaw + Math.PI;
+      let d = want - this.heroYaw;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      this.heroYaw += d * Math.min(1, dt * 12);
+      this.heroModel.object.position.set(p.x, 0, p.y + 10);
+      this.heroModel.object.rotation.y = this.heroYaw;
+      this.heroModel.setAction(moving ? 'walk' : 'idle');
+      this.heroModel.update(dt * (moving ? 1.25 : 1));
+    }
+    for (const n of this.npcModels) {
+      const dx = p.x - n.x;
+      const dz = p.y + 10 - n.z;
+      const target = Math.hypot(dx, dz) < 120 ? Math.atan2(dx, dz) : n.facing;
+      let d = target - n.c.object.rotation.y;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      n.c.object.rotation.y += d * Math.min(1, dt * 6);
+      n.c.update(dt);
+    }
 
     eng.companion.update(dt, p.x, p.y);
     if (this.partner && eng.companion.info) {
       const hop = moving ? Math.abs(Math.sin(this.walkPhase * 11)) * 3 : 0;
-      this.partner.position.set(eng.companion.x, hop, eng.companion.y + 10);
-      this.partnerShadow!.position.set(eng.companion.x, 0.3, eng.companion.y + 10);
+      // Walk the partner slightly to the camera's right so it never hides the trainer
+      const side = 36;
+      const ahead = 14; // and a little forward, level with the trainer rather than in front of the lens
+      const px2 = eng.companion.x + Math.cos(this.camYaw) * side - Math.sin(this.camYaw) * ahead;
+      const pz2 = eng.companion.y + 10 - Math.sin(this.camYaw) * side - Math.cos(this.camYaw) * ahead;
+      this.partner.position.set(px2, hop, pz2);
+      this.partnerShadow!.position.set(px2, 0.3, pz2);
     }
     eng.refreshPrompt();
 
@@ -511,7 +627,9 @@ class FirstPersonCity {
     // Anything standing right in front of the lens is hidden so it never blocks the view of the trainer
     const cp = this.camera.position;
     const clear = Math.min(90, this.camDist * 0.7); // anything this close to the lens sits between camera and trainer
+    this.models?.updateOcclusion(cp.x, cp.z, clear);
     for (const o of this.occluders) o.visible = Math.hypot(o.position.x - cp.x, o.position.z - cp.z) > clear;
+    for (const n of this.npcModels) n.c.object.visible = Math.hypot(n.x - cp.x, n.z - cp.z) > clear;
     for (const o of this.npcGroup.children) {
       if (o.userData.isTag) {
         const d = Math.hypot(o.position.x - cp.x, o.position.z - cp.z);
@@ -551,9 +669,35 @@ class FirstPersonCity {
     this.camera.lookAt(p.x + fx * LOOK_AHEAD, 14, p.y + 6 + fz * LOOK_AHEAD);
   }
 
+  /** Open lawn well away from paths, tall grass, buildings, water and anything you can interact with. */
+  private canPlant(x: number, y: number, route: RouteDefinition): boolean {
+    if (eng.isBlocked(x, y - 8, route)) return false;
+    for (const [dx, dy] of [[0, 0], [46, 0], [-46, 0], [0, 46], [0, -46], [32, 32], [-32, 32], [32, -32], [-32, -32]]) {
+      if (eng.isPointOnRoad(x + dx, y + dy - 8, route)) return false;
+    }
+    const near = (r: { x: number; y: number; w: number; h: number }, m: number) => x > r.x - m && x < r.x + r.w + m && y > r.y - m && y < r.y + r.h + m;
+    if (route.grassPatches.some(g => near(g, 34))) return false;
+    if (route.buildings.some(b => near(b, 70))) return false;
+    if ((route.ponds || []).some(p => near(p, 46))) return false;
+    if ((route.ledges || []).some(l => near(l, 30))) return false;
+    const spots: { x: number; y: number }[] = [
+      ...route.npcs,
+      ...route.items,
+      ...(route.signposts || []),
+      ...(route.fountains || []),
+      ...(route.noticeBoards || []),
+      ...(route.portals || []),
+      { x: route.startX, y: route.startY },
+    ];
+    if (spots.some(o => Math.hypot(o.x - x, o.y - y) < 80)) return false;
+    if (route.exitX > 0 && x > route.exitX - 160) return false;
+    return x > 140;
+  }
+
   /** Engine collision plus a small standoff so you never clip into building walls. */
   private blocked(x: number, y: number, route: RouteDefinition): boolean {
     if (eng.isBlocked(x, y, route)) return true;
+    if (this.fillerTrees.some(t => Math.hypot(x - t.x, y + 8 - eng.getTreeTrunkFootY(t)) < 12)) return true;
     const pad = 10;
     return route.buildings.some(b => x > b.x - pad && x < b.x + b.w + pad && y > b.y - pad && y < b.y + b.h + pad - 4);
   }

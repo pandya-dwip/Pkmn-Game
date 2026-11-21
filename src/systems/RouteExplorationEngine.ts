@@ -1258,6 +1258,24 @@ export class RouteExplorationEngine {
     else if (kind === 'npc') drawTrainerSpriteCached(ctx, o.x, o.y, o.facing || 'down', 0, this.getNpcLook(o), false, 0, 1);
   }
 
+  /** Ground items currently visible (same rules as the 2.5D renderer). */
+  public visibleItems(): RouteItem[] {
+    const r = this.currentRoute;
+    if (!r) return [];
+    return r.items.filter(it => !it.collected && !(it.requires && !this.isConditionMet(it.requires)) && !(it.hidden && !this.revealedItems.has(it.id)));
+  }
+
+  /** Whether a portal is shown, and whether it is currently locked. */
+  public portalState(p: RoutePortal): { revealed: boolean; locked: boolean } {
+    const revealed = !p.hidden || this.revealedPortals.has(p.id);
+    return { revealed, locked: revealed && !!p.requires && !this.isConditionMet(p.requires) };
+  }
+
+  /** Current position of a pushable boulder. */
+  public boulderPosition(id: string): { x: number; y: number } | undefined {
+    return this.boulderPos.get(id);
+  }
+
   /** Refresh the contextual A-button / prompt pill (used while the 2.5D loop is stopped). */
   public refreshPrompt(): void {
     this.updatePrompt();

@@ -8575,3 +8575,9 @@ tr:last-child td {
 .fp-hint { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); z-index: 40; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 14px; border-radius: 12px; background: rgba(10, 15, 28, 0.86); color: #e2e8f0; font-size: 11.5px; pointer-events: none; white-space: nowrap; animation: fp-hint 3.2s ease forwards; }
 .fp-hint b { color: #fde68a; font-size: 12.5px; }
 @keyframes fp-hint { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+.fp-veil { position: absolute; inset: 0; z-index: 6; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 45%, #16233a 0%, #070b14 70%); transition: opacity 0.35s ease; pointer-events: none; }
+.fp-veil.out { opacity: 0; }
+.fp-veil-card { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #e2e8f0; font-size: 12px; }
+.fp-veil-card b { color: #fde68a; font-size: 16px; letter-spacing: 0.02em; }
+.fp-veil-card i { width: 120px; height: 3px; margin-top: 8px; border-radius: 2px; background: linear-gradient(90deg, transparent, #fde68a, transparent); background-size: 200% 100%; animation: fp-veil-bar 1.1s linear infinite; }
+@keyframes fp-veil-bar { from { background-position: 100% 0; } to { background-position: -100% 0; } }

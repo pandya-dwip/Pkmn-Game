@@ -1519,6 +1519,8 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
     eng.init(canvas);
     eng.loadRoute(routeDef, resumeX, resumeY);
     eng.start();
+    // Hand over to the 3D chase view straight away (it builds this location's scene behind its loading veil)
+    firstPersonCity.updateButton();
   }
   updateQuestHud();
   if (firstVisit) {
@@ -5580,6 +5582,8 @@ if (import.meta.env.DEV) {
     __G: () => G,
     __B: () => B,
     __fp: firstPersonCity,
+    __starter: starterScr,
+    __enterRoute: enterRouteExploration,
     __selfcheck: () => import('./devtools/selfcheck').then(m => m.runSelfChecks()),
     __evolve: (uid: string, to: number) => {
       const m = G.team.find(x => x.uid === uid);

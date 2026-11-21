@@ -1,31 +1,33 @@
 /**
  * RouteModels.ts
- * Real 3D models for the 3D chase view. All are CC0 (public domain):
- *  - Quaternius "Stylized Nature MegaKit" (quaternius.com): leafy textured trees,
- *    pines, bushes, flowers, ferns and rocks  -> public/models/quaternius/
- *  - Kenney "Nature Kit" / "City Kit (Suburban)" (kenney.nl): fences, palms,
- *    houses                                      -> public/models/kenney/
- * Files load lazily, only when the 3D view opens.
+ * Places real 3D models (see EnvironmentAssets.ts for sources, all CC0) for any
+ * location, driven by its LocationEnvironment config:
+ *  - the route's own trees, stones, fences, lamps, benches, signs and fountains,
+ *    at their existing positions (so collision and gameplay are unchanged);
+ *  - filler trees and the forest / cliff / skyline ring beyond the edges;
+ *  - ground cover, encounter grass, pebbles, ledge embankments;
+ *  - houses, Pokémon Centers, Marts, Gyms and gatehouses;
+ *  - per-zone decorations (rock formations, market stalls, ruins, crops...).
  *
- * Everything is placed from the existing route data, so collision and gameplay
- * are unchanged. Repeated models use GPU instancing; foliage and grass sway in
- * the wind via a small vertex-shader hook. Instances far from (or right in front
- * of) the camera are culled each frame. If loading fails, the caller keeps the
+ * Repeated models use GPU instancing; foliage and grass sway in the wind via a
+ * small vertex-shader hook. Instances far from (or right in front of) the
+ * camera are culled per instance. If loading fails, the caller keeps the
  * existing billboard art.
  */
 
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RouteDefinition, RouteBuilding, RouteTree, RouteStone, RouteFence, RoutePath } from '../systems/RouteExplorationEngine';
+import { environmentAssets, Loaded } from './EnvironmentAssets';
+import { LocationEnv, ZoneEnv, DecorRule, zoneAt, pickWeighted, modelKeysFor, WeightedModel } from './LocationEnvironment';
 
-const KENNEY = `${import.meta.env.BASE_URL}models/kenney/`;
-const QUAT = `${import.meta.env.BASE_URL}models/quaternius/`;
+export { windTime, addWindSway } from './EnvironmentAssets';
+
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
-/** Instances beyond this distance are culled (the scene fog hides the cut). */
-const FAR = 900;
 
 /** Which way the commercial buildings' storefronts face in model space (radians about Y). */
 const COMMERCIAL_ROTATION = Math.PI; // Kenney commercial storefronts face -Z
+/** Which way the suburban houses' front doors face in model space (radians about Y). */
+const HOUSE_ROTATION = 0;
 
 /** A sign board (4:1) rendered to a canvas: coloured panel, optional Poké Ball emblem, bold label. */
 function signBoard(text: string, bg: string, ink: string, band: string, ball: boolean): THREE.Mesh {
@@ -82,54 +84,10 @@ function signBoard(text: string, bg: string, ink: string, band: string, ball: bo
   return new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex }));
 }
 
-/** Which way the suburban houses' front doors face in model space (radians about Y). */
-const HOUSE_ROTATION = 0;
-const HOUSE_MODELS = ['a', 'c', 'd', 'f', 'h', 'k'];
-
 const hash = (x: number, y: number) => {
   const v = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
   return v - Math.floor(v);
 };
-
-// ---------------------------------------------------------------------------
-// Wind: shared clock + vertex shader sway for foliage / grass materials
-// ---------------------------------------------------------------------------
-export const windTime = { value: 0 };
-
-/**
- * Sway vertices by their height above the model base; phase varies per instance so trees don't
- * move in lockstep. An optional tint recolours the texture by its brightness (keeps leaf detail,
- * unlike multiplying a green texture, which turns pink into olive).
- */
-export function addWindSway(mat: THREE.Material, strength: number, tint?: THREE.Color): void {
-  // three.js caches programs by onBeforeCompile's source text: give each variant its own key
-  mat.customProgramCacheKey = () => `wind:${strength}:${tint ? 'tint' : 'plain'}`;
-  mat.onBeforeCompile = shader => {
-    if (tint) {
-      shader.uniforms.uTint = { value: tint };
-      shader.fragmentShader = 'uniform vec3 uTint;\n' + shader.fragmentShader.replace(
-        '#include <map_fragment>',
-        `#include <map_fragment>
-        float leafLum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-        diffuseColor.rgb = uTint * clamp(leafLum * 2.5, 0.0, 1.3);`
-      );
-    }
-    shader.uniforms.uWindTime = windTime;
-    shader.vertexShader = 'uniform float uWindTime;\n' + shader.vertexShader.replace(
-      '#include <begin_vertex>',
-      `#include <begin_vertex>
-      float windPhase = 0.0;
-      #ifdef USE_INSTANCING
-        windPhase = instanceMatrix[3].x * 0.013 + instanceMatrix[3].z * 0.021;
-      #endif
-      float windH = max(position.y, 0.0);
-      float windS = sin(uWindTime * 1.7 + windPhase + position.y * 0.35) * 0.6 + sin(uWindTime * 3.1 + windPhase * 1.7) * 0.25;
-      transformed.x += windS * ${strength.toFixed(4)} * windH;
-      transformed.z += windS * ${(strength * 0.6).toFixed(4)} * windH;`
-    );
-  };
-  mat.needsUpdate = true;
-}
 
 interface Placement {
   x: number;
@@ -146,7 +104,13 @@ interface InstancedSet {
   parts: { mesh: THREE.InstancedMesh; local: THREE.Matrix4 }[];
   inst: THREE.Matrix4[];
   items: Placement[];
-  hidden: Set<number>;
+}
+
+/** A round obstacle added by the 3D view only (filler trees, rock formations, tents...). */
+export interface Solid {
+  x: number;
+  z: number;
+  r: number;
 }
 
 export interface RouteModelsHandle {
@@ -154,6 +118,8 @@ export interface RouteModelsHandle {
   houses: Set<RouteBuilding>;
   /** Lamps, benches, signposts and fountains are now 3D models (drop their billboards). */
   propsReplaced: boolean;
+  /** Decorations that block the trainer and the camera boom. */
+  solids: Solid[];
   /** Cull instances too close to the lens or too far away. */
   updateOcclusion(cx: number, cz: number, clear: number): void;
 }
@@ -161,54 +127,28 @@ export interface RouteModelsHandle {
 export interface RouteModelInput {
   scene: THREE.Scene;
   route: RouteDefinition;
+  env: LocationEnv;
   trees: RouteTree[];
   treeFootY: (t: RouteTree) => number;
   stones: RouteStone[];
   fences: RouteFence[];
   /** Decorations must not land on roads or blocked tiles. */
   isFreeGround: (x: number, y: number) => boolean;
+  /** Open lawn well away from paths, grass, buildings and points of interest (safe for solid decor). */
+  canPlant: (x: number, y: number) => boolean;
+  /** The ground at this point is lawn (not sand, rock, snow, plaza...). */
+  isLawn: (x: number, y: number) => boolean;
+  /** Point is on a road / path. */
+  isRoad: (x: number, y: number) => boolean;
   scale: { trees: number; props: number };
+  /** Ground-cover density multiplier (lighter on phones). */
+  groundCover?: number;
   /** Extra trees: `inner` fill open lawn, `ring` is the forest beyond the edges (drawn with lighter models). */
   extraTrees?: { inner: RouteTree[]; ring: RouteTree[] };
   /** Dirt trails get pebbles along their edges. */
   isDirtPath?: (p: RoutePath) => boolean;
   /** Text for a building's sign board (Pokémon Center, Mart, Gym). */
   signText?: (b: RouteBuilding) => string;
-}
-
-type Loaded = { scene: THREE.Group; box: THREE.Box3 };
-
-/** Load a set of models; materials become matte Lambert (matching the scene), foliage gets wind. */
-async function loadAll(base: string, names: string[], ext: string, deepen: number): Promise<Map<string, Loaded>> {
-  const loader = new GLTFLoader();
-  const out = new Map<string, Loaded>();
-  await Promise.all(
-    names.map(async n => {
-      const gltf = await loader.loadAsync(base + n + ext);
-      gltf.scene.traverse(o => {
-        const m = o as THREE.Mesh;
-        if (!m.isMesh) return;
-        const toLambert = (mat: THREE.Material) => {
-          const std = mat as THREE.MeshStandardMaterial;
-          const l = new THREE.MeshLambertMaterial({
-            color: std.color.clone().multiplyScalar(deepen),
-            map: std.map,
-            vertexColors: std.vertexColors,
-            alphaTest: std.alphaTest,
-            transparent: false,
-            side: std.side,
-          });
-          l.name = std.name;
-          if (/leaf|leaves|flower|grass|fern/i.test(std.name)) addWindSway(l, /grass|flower/i.test(std.name) ? 0.05 : 0.018);
-          return l;
-        };
-        m.material = Array.isArray(m.material) ? m.material.map(toLambert) : toLambert(m.material);
-      });
-      gltf.scene.updateMatrixWorld(true);
-      out.set(n, { scene: gltf.scene, box: new THREE.Box3().setFromObject(gltf.scene) });
-    })
-  );
-  return out;
 }
 
 /** One InstancedMesh per mesh part of a model, all sharing the model's geometry and materials. */
@@ -231,30 +171,11 @@ function instance(model: Loaded, items: Placement[], parent: THREE.Object3D): In
     p.mesh.frustumCulled = false; // instances span the whole route; we cull per instance instead
     parent.add(p.mesh);
   }
-  return { parts, inst, items, hidden: new Set() };
+  return { parts, inst, items };
 }
 
-/** Recolour a model's foliage (blossom pinks, autumn golds, deep forest greens). */
-function tinted(model: Loaded, leafColor: string): Loaded {
-  const scene = model.scene.clone(true);
-  scene.traverse(o => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    const mats = (Array.isArray(m.material) ? m.material : [m.material]).map(mat => {
-      if (!/leaf|leaves/i.test(mat.name)) return mat;
-      const c = (mat as THREE.MeshLambertMaterial).clone();
-      c.color = new THREE.Color(0xffffff);
-      addWindSway(c, 0.018, new THREE.Color(leafColor));
-      return c;
-    });
-    m.material = Array.isArray(m.material) ? mats : mats[0];
-  });
-  scene.updateMatrixWorld(true);
-  return { scene, box: model.box };
-}
-
-/** 2D tree type / colour variant -> model, with a believable height (world px, before scaling). */
-function treeModel(t: RouteTree, h: number): { name: string; height: number } {
+/** Reference mapping (Route 1 / Pallet / Viridian): 2D tree type / colour variant -> model and height. */
+function referenceTreeModel(t: RouteTree, h: number): { name: string; height: number } {
   const v = t.colorVariant;
   if (v === 'blossom' || t.type === 'blossom') return { name: 'CommonTree_5#blossom', height: 78 };
   if (v === 'golden' || t.type === 'golden') return { name: 'CommonTree_2#golden', height: 82 };
@@ -284,45 +205,126 @@ function treeModel(t: RouteTree, h: number): { name: string; height: number } {
   }
 }
 
-export async function loadRouteModels(input: RouteModelInput): Promise<RouteModelsHandle> {
-  const { scene, route } = input;
-  const quatNames = [
-    'CommonTree_2', 'CommonTree_3', 'CommonTree_4', 'CommonTree_5', 'Pine_2', 'Pine_4', 'Pine_5',
-    'Bush_Common_Flowers', 'Flower_3_Group', 'Flower_4_Group', 'Fern_1', 'Plant_1_Big',
-    'Rock_Medium_1', 'Rock_Medium_2', 'Rock_Medium_3',
-    'Grass_Common_Short', 'Grass_Wispy_Short', 'Grass_Common_Tall', 'Clover_1', 'Plant_7', 'Plant_7_Big', 'Flower_3_Single',
-    'Pebble_Round_1', 'Pebble_Round_2', 'Pebble_Round_3', 'Pebble_Square_1',
-  ];
-  const kenneyNature = ['tree_palmTall', 'sign'].map(n => 'nature/' + n);
-  const townNames = ['lantern', 'stall-bench', 'fence', 'fountain-round-detail', 'hedge'].map(n => 'town/' + n);
-  const commercialNames = ['building-c', 'building-e', 'building-n'].map(n => 'commercial/' + n);
-  const houseNames = HOUSE_MODELS.map(c => 'suburban/building-type-' + c);
-  const [quat, kenney] = await Promise.all([loadAll(QUAT, quatNames, '.gltf', 1), loadAll(KENNEY, [...kenneyNature, ...houseNames, ...townNames, ...commercialNames], '.glb', 0.85)]);
+/** Zone skin first (keeping the rare blossom / golden accents of the data), then the reference mapping. */
+function treeModel(t: RouteTree, h: number, z: ZoneEnv): { name: string; height: number } {
+  const accent = t.colorVariant === 'blossom' || t.type === 'blossom' || t.colorVariant === 'golden' || t.type === 'golden';
+  const list = !accent && z.treeSkin ? z.treeSkin[t.type || 'broadleaf'] || z.treeSkin['*'] : undefined;
+  if (list && list.length) {
+    const [name, , height] = pickWeighted(list, h);
+    return { name, height };
+  }
+  return referenceTreeModel(t, h);
+}
 
-  const variants = new Map<string, Loaded>([
-    ['CommonTree_5#blossom', tinted(quat.get('CommonTree_5')!, '#ff9cc6')],
-    ['CommonTree_2#golden', tinted(quat.get('CommonTree_2')!, '#ffb347')],
-    ['CommonTree_4#dark', tinted(quat.get('CommonTree_4')!, '#3f7a3a')],
-    // These sample a purple region of the shared leaf atlas; keep the lawn green
-    ['Clover_1#green', tinted(quat.get('Clover_1')!, '#4f9a34')],
-    ['Plant_7#green', tinted(quat.get('Plant_7')!, '#5aa83c')],
-    ['Plant_7_Big#green', tinted(quat.get('Plant_7_Big')!, '#4c8f30')],
-  ]);
-  // Prefixes: k: Kenney nature, t: Kenney fantasy town, (none): Quaternius
-  const model = (n: string): Loaded =>
-    variants.get(n) || (n.startsWith('k:') ? kenney.get('nature/' + n.slice(2))! : n.startsWith('t:') ? kenney.get('town/' + n.slice(2))! : quat.get(n)!);
+/** Reference ring mapping (lighter models). */
+function referenceRingModel(t: RouteTree, h: number): { name: string; height: number } {
+  const blossom = t.type === 'blossom';
+  const name = blossom ? 'CommonTree_5#blossom' : t.type === 'conifer' || h < 0.35 ? 'Pine_5' : t.colorVariant === 'dark' ? 'CommonTree_4#dark' : 'CommonTree_5';
+  return { name, height: blossom ? 80 : 98 };
+}
+
+/** Ground cover per lawn style: [model, cumulative roll band, target size]. Rolls above the last band leave a gap. */
+const LAWNS: Record<Exclude<ZoneEnv['lawn'], 'none'>, { keep: number; list: [string, number, number][] }> = {
+  lush: {
+    keep: 0.8,
+    list: [
+      ['Grass_Common_Short', 0.5, 13],
+      ['Grass_Wispy_Short', 0.66, 14],
+      ['Clover_1#green', 0.78, 10],
+      ['Plant_7#green', 0.87, 10],
+      ['Plant_7_Big#green', 0.93, 14],
+      ['Flower_3_Single', 1, 15],
+    ],
+  },
+  meadow: {
+    keep: 0.85,
+    list: [
+      ['Grass_Common_Short', 0.36, 13],
+      ['Grass_Wispy_Short', 0.52, 15],
+      ['Clover_1#green', 0.62, 10],
+      ['Flower_3_Single', 0.74, 15],
+      ['k:flower_yellowA', 0.82, 11],
+      ['k:flower_purpleA', 0.9, 12],
+      ['Plant_7_Big#green', 1, 14],
+    ],
+  },
+  dry: {
+    keep: 0.6,
+    list: [
+      ['Grass_Wispy_Short#olive', 0.45, 15],
+      ['k:grass_leafs#olive', 0.68, 11],
+      ['Grass_Common_Short#olive', 0.85, 12],
+      ['k:rock_smallFlatA', 1, 7],
+    ],
+  },
+  sparse: {
+    keep: 0.42,
+    list: [
+      ['Grass_Common_Short', 0.55, 13],
+      ['Grass_Wispy_Short', 0.8, 14],
+      ['Clover_1#green', 1, 10],
+    ],
+  },
+};
+
+/** Everything the reference placement code may use regardless of location. */
+const BASE_KEYS = [
+  'CommonTree_2', 'CommonTree_3', 'CommonTree_4', 'CommonTree_5', 'Pine_2', 'Pine_4', 'Pine_5',
+  'CommonTree_5#blossom', 'CommonTree_2#golden', 'CommonTree_4#dark',
+  'Bush_Common_Flowers', 'Flower_3_Group', 'Flower_4_Group', 'Fern_1', 'Plant_1_Big',
+  'Rock_Medium_1', 'Rock_Medium_2', 'Rock_Medium_3', 'Grass_Common_Tall',
+  'Pebble_Round_1', 'Pebble_Round_2', 'Pebble_Round_3', 'Pebble_Square_1',
+  'k:tree_palmTall', 'k:sign', 't:lantern', 't:stall-bench', 't:fence', 't:fountain-round-detail', 't:hedge',
+  'c:building-c', 'c:building-e', 'c:building-n', 'c:building-d',
+];
+
+const CIVIC: Record<'center' | 'mart' | 'gym' | 'gate', { model: string; sign: string; ink: string; band: string }> = {
+  center: { model: 'c:building-e', sign: '#dc2626', ink: '#ffffff', band: '#fecaca' },
+  mart: { model: 'c:building-c', sign: '#1d4ed8', ink: '#ffffff', band: '#bfdbfe' },
+  gym: { model: 'c:building-n', sign: '#a16207', ink: '#fef3c7', band: '#fde68a' },
+  gate: { model: 'c:building-d', sign: '#7f1d1d', ink: '#fee2e2', band: '#fca5a5' },
+};
+
+/** Model keys a location needs (loaded before its fade-in lifts). */
+export function routeModelKeys(route: RouteDefinition, env: LocationEnv): Set<string> {
+  const keys = modelKeysFor(env);
+  BASE_KEYS.forEach(k => keys.add(k));
+  for (const z of env.zones) if (z.lawn !== 'none') LAWNS[z.lawn].list.forEach(([k]) => keys.add(k));
+  for (const g of route.grassPatches) {
+    if (g.style === 'dunes') keys.add('k:grass_large#olive');
+    if (g.style === 'rubble') ['k:rock_smallA', 'k:rock_smallC', 'k:rock_smallFlatA'].forEach(k => keys.add(env.underground ? k + '#cave' : k));
+  }
+  return keys;
+}
+
+export async function loadRouteModels(input: RouteModelInput): Promise<RouteModelsHandle> {
+  const { scene, route, env } = input;
+  const W = route.worldWidth;
+  const H = route.worldHeight;
+  const FAR = env.drawDistance;
+  const loaded = await environmentAssets.loadMany(routeModelKeys(route, env));
+  if (!loaded.size) throw new Error('no environment models could be loaded');
+  const has = (n: string) => loaded.has(n);
+  const model = (n: string): Loaded => loaded.get(n)!;
 
   const group = new THREE.Group();
   group.name = 'route-models';
   const sets: InstancedSet[] = [];
+  const solids: Solid[] = [];
   const bucket = new Map<string, Placement[]>();
   const put = (n: string, p: Placement) => {
+    if (!has(n)) return;
     if (!bucket.has(n)) bucket.set(n, []);
     bucket.get(n)!.push(p);
   };
   const sized = (n: string, along: 'y' | 'xz', target: number) => {
+    if (!has(n)) return 1;
     const size = model(n).box.getSize(new THREE.Vector3());
-    return target / (along === 'y' ? size.y : Math.max(size.x, size.z));
+    return target / Math.max(0.0001, along === 'y' ? size.y : Math.max(size.x, size.z));
+  };
+  const zoneEnd = (z: ZoneEnv) => {
+    const i = env.zones.indexOf(z);
+    return i + 1 < env.zones.length ? env.zones[i + 1].from : W;
   };
 
   // Trees at the existing trunk foot (so collision still matches), plus undergrowth
@@ -330,11 +332,13 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
   const inner = input.extraTrees?.inner || [];
   for (const t of [...input.trees, ...inner]) {
     const h = hash(t.x, t.y);
-    const { name, height } = treeModel(t, h);
+    const z = zoneAt(env, t.x);
+    let { name, height } = treeModel(t, h, z);
+    if (!has(name)) ({ name, height } = referenceTreeModel(t, h));
     const s = sized(name, 'y', height * (t.scale || 1) * input.scale.trees * (0.88 + h * 0.24));
     put(name, { x: t.x, z: input.treeFootY(t), rot: h * Math.PI * 2, sx: s, sy: s, sz: s });
 
-    if (h < 0.55) {
+    if (h < 0.55 && z.lawn !== 'none') {
       const a = h * 40;
       const r = 22 + h * 34;
       const dx = t.x + Math.cos(a) * r;
@@ -348,47 +352,85 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
     }
   }
 
-  // Forest ring beyond the edges: lighter tree models, culled a little sooner
+  // Beyond the edges: forest ring, cliff walls or a distant skyline
   for (const t of input.extraTrees?.ring || []) {
     const h = hash(t.x, t.y);
-    const blossom = t.type === 'blossom';
-    const name = blossom ? 'CommonTree_5#blossom' : t.type === 'conifer' || h < 0.35 ? 'Pine_5' : t.colorVariant === 'dark' ? 'CommonTree_4#dark' : 'CommonTree_5';
-    const s = sized(name, 'y', (blossom ? 80 : 98) * (t.scale || 1) * input.scale.trees);
-    put(name, { x: t.x, z: t.y, rot: h * Math.PI * 2, sx: s, sy: s, sz: s, far: 950 });
+    const z = zoneAt(env, Math.max(0, Math.min(W - 1, t.x)));
+    const cityZone = z.houses.some(m => m.startsWith('c:'));
+    const outside = t.y < 0 || t.y > H;
+    if (env.ring === 'skyline' && cityZone && t.y < 0) {
+      // Low-detail city blocks fill the northern horizon behind the city
+      if (h < 0.5) {
+        const names = ['c:low-detail-building-a', 'c:low-detail-building-b', 'c:low-detail-building-c', 'c:low-detail-building-g', 'c:low-detail-building-h', 'c:low-detail-building-j'];
+        const n = names[Math.floor(h * 60) % names.length];
+        if (has(n)) {
+          const s = sized(n, 'xz', 60 + h * 30);
+          put(n, { x: t.x, z: t.y - 120, rot: Math.round(h * 4) * (Math.PI / 2), sx: s, sy: s * (1 + h), sz: s, far: 1400 });
+        }
+      }
+      continue;
+    }
+    if (env.ring === 'cliffs' && outside && h < 0.45) {
+      const n = h < 0.15 ? 'k:rock_tallA' : h < 0.3 ? 'k:rock_tallC' : 'k:rock_tallB';
+      if (has(n)) {
+        const s = sized(n, 'y', 120 + h * 160);
+        put(n, { x: t.x, z: t.y + (t.y < 0 ? -40 : 40), rot: h * 9, sx: s * 1.4, sy: s, sz: s * 1.4, far: 1400 });
+        continue;
+      }
+    }
+    const pick = z.ringTrees?.length ? pickWeighted(z.ringTrees, h) : null;
+    let { name, height } = pick ? { name: pick[0], height: pick[2] + 6 } : referenceRingModel(t, h);
+    if (!has(name)) ({ name, height } = referenceRingModel(t, h));
+    const s = sized(name, 'y', height * (t.scale || 1) * input.scale.trees);
+    put(name, { x: t.x, z: t.y, rot: h * Math.PI * 2, sx: s, sy: s, sz: s, far: FAR + 50 });
   }
 
-  // Lawn: short grass clumps, clover and small plants everywhere that is open ground
+  // Lawn: grass clumps, clover, flowers or dry tufts on open lawn, per zone style
   const inPatch = (x: number, y: number) => route.grassPatches.some(g => x > g.x - 4 && x < g.x + g.w + 4 && y > g.y - 4 && y < g.y + g.h + 4);
-  const lawn: [string, number, number][] = [
-    ['Grass_Common_Short', 0.5, 13],
-    ['Grass_Wispy_Short', 0.66, 14],
-    ['Clover_1#green', 0.78, 10],
-    ['Plant_7#green', 0.87, 10],
-    ['Plant_7_Big#green', 0.93, 14],
-    ['Flower_3_Single', 1, 15],
-  ];
-  for (let y = 75; y < route.worldHeight - 40; y += 32) {
-    for (let x = 30; x < route.worldWidth - 30; x += 32) {
+  for (let y = 75; y < H - 40; y += 32) {
+    for (let x = 30; x < W - 30; x += 32) {
+      const z = zoneAt(env, x);
+      if (z.lawn === 'none') continue;
+      const lawn = LAWNS[z.lawn];
       const h = hash(x * 0.37, y * 1.91);
-      if (h > 0.8) continue;
+      if (h > lawn.keep * (input.groundCover ?? 1)) continue;
       const lx = x + (hash(y, x) - 0.5) * 26;
       const ly = y + (h - 0.5) * 26;
-      if (inPatch(lx, ly) || !input.isFreeGround(lx, ly)) continue;
+      if (inPatch(lx, ly) || !input.isFreeGround(lx, ly) || !input.isLawn(lx, ly)) continue;
       const roll = hash(lx, ly);
-      const [name, , target] = lawn.find(([, cut]) => roll < cut)!;
+      const hit = lawn.list.find(([, cut]) => roll < cut);
+      if (!hit) continue;
+      const [name, , target] = hit;
       // Leafy plants are wide and flat: size them by footprint, grasses by height
-      const s = sized(name, name.startsWith('Grass') || name.startsWith('Flower') ? 'y' : 'xz', target * (0.8 + h * 0.5));
-      put(name, { x: lx, z: ly, rot: roll * 7, sx: s, sy: s, sz: s, far: 500 });
+      const byY = /grass|flower/i.test(name) || name.startsWith('Grass') || name.startsWith('Flower');
+      const s = sized(name, byY ? 'y' : 'xz', target * (0.8 + h * 0.5));
+      put(name, { x: lx, z: ly, rot: roll * 7, sx: s, sy: s, sz: s, far: Math.min(500, FAR) });
     }
   }
 
-  // Encounter patches: dense knee-high 3D grass
+  // Encounter patches: dense knee-high grass, reeds, dune grass or rubble
   for (const g of route.grassPatches) {
-    for (let y = g.y + 6; y < g.y + g.h - 2; y += 15) {
-      for (let x = g.x + 6; x < g.x + g.w - 2; x += 15) {
+    const style = g.style || 'grass';
+    const z = zoneAt(env, g.x + g.w / 2);
+    const step = style === 'rubble' ? 22 : style === 'dunes' ? 19 : 15;
+    for (let y = g.y + 6; y < g.y + g.h - 2; y += step) {
+      for (let x = g.x + 6; x < g.x + g.w - 2; x += step) {
         const h = hash(x, y);
-        const s = sized('Grass_Common_Tall', 'y', 24 * (0.85 + h * 0.35));
-        put('Grass_Common_Tall', { x: x + (h - 0.5) * 9, z: y + (hash(y, x) - 0.5) * 9, rot: h * 6.28, sx: s * 1.25, sy: s, sz: s * 1.25, far: 700 });
+        const px = x + (h - 0.5) * 9;
+        const pz = y + (hash(y, x) - 0.5) * 9;
+        if (style === 'rubble') {
+          // Underground rubble loses the grass caps
+          const n = ['k:rock_smallA', 'k:rock_smallC', 'k:rock_smallFlatA'][Math.floor(h * 30) % 3] + (env.underground ? '#cave' : '');
+          const s = sized(n, 'xz', 9 + h * 9);
+          put(n, { x: px, z: pz, rot: h * 6.28, sx: s, sy: s, sz: s, far: 600 });
+        } else if (style === 'dunes') {
+          const s = sized('k:grass_large#olive', 'y', 14 * (0.8 + h * 0.5));
+          put('k:grass_large#olive', { x: px, z: pz, rot: h * 6.28, sx: s * 1.3, sy: s, sz: s * 1.3, far: 650 });
+        } else {
+          const n = z.tallGrass && has(z.tallGrass) ? z.tallGrass : 'Grass_Common_Tall';
+          const s = sized(n, 'y', (style === 'reeds' ? 32 : 24) * (0.85 + h * 0.35));
+          put(n, { x: px, z: pz, rot: h * 6.28, sx: s * 1.25, sy: s, sz: s * 1.25, far: 700 });
+        }
       }
     }
   }
@@ -424,7 +466,7 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
   }
 
   // Fences: wooden post-and-rail segments along each fence rectangle
-  {
+  if (has('t:fence')) {
     const fm = model('t:fence');
     const size = fm.box.getSize(new THREE.Vector3());
     const c = fm.box.getCenter(new THREE.Vector3());
@@ -446,6 +488,7 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
     put('t:lantern', { x: l.x, z: l.y, rot: 0, sx: s, sy: s, sz: s });
   }
   for (const b of route.benches || []) {
+    if (!has('t:stall-bench')) break;
     const w = b.w || 28;
     const size = model('t:stall-bench').box.getSize(new THREE.Vector3());
     const s = (w * 1.15) / size.z;
@@ -485,78 +528,140 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
     }
   }
 
+  // Zone decorations: rock formations, ruins, stalls, crops, lily pads...
+  const poi = [...route.npcs, ...route.items, ...(route.portals || []), ...(route.signposts || []), ...(route.noticeBoards || []), ...(route.landmarks || []), { x: route.startX, y: route.startY }];
+  const nearPoi = (x: number, y: number, d: number) => poi.some(o => Math.hypot(o.x - x, o.y - y) < d);
+  const nearSolid = (x: number, y: number, d: number) => solids.some(s => Math.hypot(s.x - x, s.z - y) < s.r + d);
+  const roadWithin = (x: number, y: number, d: number) => [[d, 0], [-d, 0], [0, d], [0, -d]].some(([ox, oy]) => input.isRoad(x + ox, y + oy));
+  env.zones.forEach((z, zi) => {
+    const x0 = z.from;
+    const x1 = zoneEnd(z);
+    const buildings = route.buildings.filter(b => b.x + b.w / 2 >= x0 && b.x + b.w / 2 < x1);
+    z.decor.forEach((rule: DecorRule, ri) => {
+      const want = Math.max(rule.density >= 1 ? 1 : 0, Math.round((rule.density * (x1 - x0)) / 1000));
+      let placed = 0;
+      for (let i = 0; i < want * 6 && placed < want; i++) {
+        const h1 = hash(i * 13.7 + zi * 101 + ri * 7.3, ri * 31.1 + zi * 3.3);
+        const h2 = hash(i * 5.3 + ri * 17.9, zi * 41.7 + i * 0.37);
+        let x = x0 + 30 + h1 * (x1 - x0 - 60);
+        let y = 75 + h2 * (H - 120);
+        let rot = h1 * Math.PI * 2;
+        switch (rule.where) {
+          case 'open':
+            if (rule.solid ? !input.canPlant(x, y) : !input.isFreeGround(x, y) || inPatch(x, y) || input.isRoad(x, y) || nearPoi(x, y, 40)) continue;
+            if (rule.solid && nearSolid(x, y, 30)) continue;
+            break;
+          case 'roadside': {
+            if (input.isRoad(x, y) || !input.isFreeGround(x, y) || !roadWithin(x, y, 26) || inPatch(x, y) || nearPoi(x, y, 46)) continue;
+            if (route.buildings.some(b => x > b.x - 24 && x < b.x + b.w + 24 && y > b.y - 24 && y < b.y + b.h + 40)) continue;
+            if (rule.solid && (roadWithin(x, y, 12) || nearSolid(x, y, 24))) continue;
+            break;
+          }
+          case 'building': {
+            if (!buildings.length) return;
+            const b = buildings[Math.floor(h1 * 997) % buildings.length];
+            const side = Math.floor(h2 * 4);
+            if (side === 0) [x, y] = [b.x - 16, b.y + b.h * (0.3 + h2 * 0.6)];
+            else if (side === 1) [x, y] = [b.x + b.w + 16, b.y + b.h * (0.3 + h2 * 0.6)];
+            else [x, y] = [side === 2 ? b.x + 12 + h1 * 10 : b.x + b.w - 12 - h1 * 10, b.y + b.h + 12];
+            if (Math.abs(x - (b.x + b.w / 2)) < 34 && y > b.y + b.h) continue; // keep the doorway clear
+            if (!input.isFreeGround(x, y) || input.isRoad(x, y) || nearPoi(x, y, 36)) continue;
+            rot = side < 2 ? Math.PI / 2 : 0;
+            break;
+          }
+          case 'water': {
+            const pools = [...(route.ponds || []), ...(route.waters || []).filter(w => w.kind === 'lake' || w.kind === 'river')];
+            if (!pools.length) return;
+            const p = pools[Math.floor(h1 * 991) % pools.length];
+            x = p.x + 14 + h1 * Math.max(1, p.w - 28);
+            y = p.y + 14 + h2 * Math.max(1, p.h - 28);
+            const pier = (p as { pier?: { x: number; y: number; w: number; h: number } }).pier;
+            if (pier && x > pier.x - 16 && x < pier.x + pier.w + 16 && y > pier.y - 16 && y < pier.y + pier.h + 16) continue;
+            break;
+          }
+          case 'edge': {
+            // Just beyond the walkable boundary, so landmarks frame the route without blocking it
+            const north = h2 < 0.55;
+            y = north ? 10 + h2 * 80 : H - 20 + (h2 - 0.55) * 120;
+            if ((route.portals || []).some(p => Math.abs(p.x - x) < 120 && Math.abs(p.y - y) < 160)) continue;
+            if (route.buildings.some(b => x > b.x - 60 && x < b.x + b.w + 60 && Math.abs(y - (b.y + b.h / 2)) < b.h / 2 + 60)) continue;
+            if (route.exitX > 0 && x > route.exitX - 120) continue;
+            if (nearSolid(x, y, 26)) continue;
+            break;
+          }
+        }
+        const [name, , target] = pickWeighted(rule.models, hash(x, y));
+        if (!has(name)) continue;
+        const s = sized(name, rule.fit || 'y', target * (0.85 + h2 * 0.3));
+        put(name, { x, z: y, rot, sx: s, sy: s, sz: s, far: rule.solid ? FAR + 100 : Math.min(FAR, 640) });
+        if (rule.solid) solids.push({ x, z: y, r: rule.solid });
+        placed++;
+      }
+    });
+  });
+
   for (const [name, items] of bucket) sets.push(instance(model(name), items, group));
 
-  // Houses: Kenney suburban models fitted to each house footprint, door facing the street (south)
+  // Houses: per-zone models fitted to each house footprint, door facing the street (south)
   const houses = new Set<RouteBuilding>();
-  const texLoader = new THREE.TextureLoader();
-  const recolors = ['colormap', 'variation-b', 'variation-c'].map(v => {
-    const t = texLoader.load(KENNEY + 'suburban/Textures/' + v + '.png');
-    t.flipY = false;
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.magFilter = THREE.NearestFilter;
-    return t;
-  });
-  for (const b of route.buildings) {
-    if (b.type !== 'house') continue;
-    const h = hash(b.x, b.y);
-    const m = kenney.get(houseNames[Math.floor(h * houseNames.length) % houseNames.length])!;
-    const obj = m.scene.clone(true);
-    const tex = recolors[Math.floor(h * 97) % recolors.length];
-    obj.traverse(o => {
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      const mat = (mesh.material as THREE.MeshLambertMaterial).clone();
-      mat.map = tex;
-      mesh.material = mat;
-    });
-    obj.rotation.y = HOUSE_ROTATION;
+  const place = (b: RouteBuilding, key: string, skin: THREE.Texture | null, maxH?: number): { s: number; size: THREE.Vector3; front: number } | null => {
+    if (!has(key)) return null;
+    const obj = model(key).scene.clone(true);
+    if (skin) {
+      obj.traverse(o => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const mat = (mesh.material as THREE.MeshLambertMaterial).clone();
+        mat.map = skin;
+        mesh.material = mat;
+      });
+    }
+    obj.rotation.y = key.startsWith('c:') ? COMMERCIAL_ROTATION : HOUSE_ROTATION;
     obj.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(obj);
     const size = box.getSize(new THREE.Vector3());
-    const s = Math.min((b.w * 1.05) / size.x, (b.h * 1.0) / size.z);
-    obj.scale.setScalar(s);
-    const c = box.getCenter(new THREE.Vector3());
-    obj.position.set(b.x + b.w / 2 - c.x * s, -box.min.y * s, b.y + b.h - box.max.z * s);
-    group.add(obj);
-    houses.add(b);
-  }
-
-  // Pokémon Center, Poké Mart and Gym: 3D commercial buildings with a sign board over the door
-  const civic: Record<string, { model: string; sign: string; ink: string; band: string }> = {
-    center: { model: 'commercial/building-e', sign: '#dc2626', ink: '#ffffff', band: '#fecaca' },
-    mart: { model: 'commercial/building-c', sign: '#1d4ed8', ink: '#ffffff', band: '#bfdbfe' },
-    gym: { model: 'commercial/building-n', sign: '#a16207', ink: '#fef3c7', band: '#fde68a' },
-  };
-  for (const b of route.buildings) {
-    const spec = civic[b.type];
-    if (!spec) continue;
-    const obj = kenney.get(spec.model)!.scene.clone(true);
-    obj.name = 'civic-' + b.type;
-    obj.rotation.y = COMMERCIAL_ROTATION;
-    obj.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(obj);
-    const size = box.getSize(new THREE.Vector3());
-    const s = Math.min((b.w * 1.05) / size.x, (b.h * 1.05) / size.z);
+    let s = Math.min((b.w * 1.05) / size.x, (b.h * (b.type === 'house' ? 1.0 : 1.05)) / size.z);
+    if (maxH && size.y * s > maxH) s = maxH / size.y;
     obj.scale.setScalar(s);
     const c = box.getCenter(new THREE.Vector3());
     const front = b.y + b.h;
     obj.position.set(b.x + b.w / 2 - c.x * s, -box.min.y * s, front - box.max.z * s);
     group.add(obj);
+    houses.add(b);
+    return { s, size, front };
+  };
+  for (const b of route.buildings) {
+    if (b.type !== 'house') continue;
+    const z = zoneAt(env, b.x + b.w / 2);
+    if (!z.houses.length) continue;
+    const h = hash(b.x, b.y);
+    const key = z.houses[Math.floor(h * z.houses.length) % z.houses.length];
+    const skins = z.houseSkins.filter(p => p.startsWith(key.startsWith('c:') ? 'commercial' : 'suburban'));
+    const skin = skins.length ? environmentAssets.texture(skins[Math.floor(h * 97) % skins.length]) : null;
+    place(b, key, skin, z.maxBuildingHeight);
+  }
+
+  // Pokémon Center, Poké Mart, Gym and gatehouses: 3D buildings with a sign board over the door
+  for (const b of route.buildings) {
+    const spec = CIVIC[b.type as keyof typeof CIVIC];
+    if (!spec) continue;
+    const z = zoneAt(env, b.x + b.w / 2);
+    const key = z.civic?.[b.type as keyof typeof CIVIC] && has(z.civic[b.type as keyof typeof CIVIC]!) ? z.civic[b.type as keyof typeof CIVIC]! : spec.model;
+    const r = place(b, key, null, b.type === 'gym' ? Math.max(z.maxBuildingHeight || 0, 160) : z.maxBuildingHeight);
+    if (!r) continue;
+    const { s, size, front } = r;
     // Coloured roof cap in the sign colour gives each civic building its identity from afar
-    const roofH = size.y * s;
-    const cap = new THREE.Mesh(
-      new THREE.BoxGeometry(size.x * s * 0.98, 3.5, size.z * s * 0.98),
-      new THREE.MeshLambertMaterial({ color: spec.sign })
-    );
-    cap.position.set(b.x + b.w / 2, roofH + 1.2, front - (size.z * s) / 2);
-    group.add(cap);
+    const roofH = Math.min(size.y * s, b.type === 'gym' ? 999 : z.maxBuildingHeight || 999);
+    if (b.type !== 'gate') {
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(size.x * s * 0.98, 3.5, size.z * s * 0.98), new THREE.MeshLambertMaterial({ color: spec.sign }));
+      cap.position.set(b.x + b.w / 2, roofH + 1.2, front - (size.z * s) / 2);
+      group.add(cap);
+    }
     const board = signBoard(input.signText?.(b) || b.label, spec.sign, spec.ink, spec.band, b.type === 'center');
     const bw = Math.min(b.w * 0.85, 110);
     board.scale.set(bw, bw / 4, 1);
     board.position.set(b.x + b.w / 2, Math.min(size.y * s * 0.62, 46), front + 1.5);
     group.add(board);
-    houses.add(b);
   }
 
   scene.add(group);
@@ -568,6 +673,7 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
   return {
     houses,
     propsReplaced: true,
+    solids,
     // Visible instances are packed to the front and mesh.count trimmed, so culled
     // instances cost nothing on the GPU. Only rebuilt when the camera has moved.
     updateOcclusion(cx, cz, clear) {
@@ -592,3 +698,5 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
     },
   };
 }
+
+export type { WeightedModel };

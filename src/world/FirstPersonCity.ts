@@ -44,6 +44,25 @@ const HERO_HEIGHT = 30;
 const SPRITE_URL = (id: number) => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
 type Dir = 'up' | 'down' | 'left' | 'right';
 
+/** Canonical visual height of Pokémon in world units (trainer HERO_HEIGHT is 30). */
+function getPokemonVisualHeight(speciesId: number, sizeClass: 0 | 1 | 2 = 0): number {
+  const custom: Record<number, number> = {
+    10: 12, // Caterpie (0.3m caterpillar)
+    13: 12, // Weedle
+    16: 15, // Pidgey (0.3m bird)
+    19: 14, // Rattata (0.3m mouse)
+    25: 19, // Pikachu (0.4m mascot)
+    43: 15, // Oddish (0.5m plant)
+    54: 22, // Psyduck (0.8m duck)
+    60: 16, // Poliwag (0.6m tadpole)
+    133: 17, // Eevee (0.3m)
+    143: 54, // Snorlax (2.1m giant)
+    131: 52, // Lapras (2.5m)
+  };
+  if (custom[speciesId]) return custom[speciesId];
+  return [18, 26, 38][sizeClass];
+}
+
 interface OverworldPokemonEntity {
   id: string;
   speciesId: number;
@@ -54,7 +73,7 @@ interface OverworldPokemonEntity {
   size: number;
   sprite: THREE.Sprite;
   shadow: THREE.Mesh;
-  tag: THREE.Sprite;
+  tag?: THREE.Sprite | null;
   model3D?: { obj: THREE.Object3D; mixer: THREE.AnimationMixer };
   phase: number;
   isStatic?: boolean;
@@ -77,6 +96,8 @@ class FirstPersonCity {
   private partner: THREE.Sprite | null = null;
   private partnerShadow: THREE.Mesh | null = null;
   private partnerSpecies = -1;
+  private partnerPos = new THREE.Vector3();
+  private partnerInitialized = false;
   private hero: THREE.Sprite | null = null;
   private heroShadow: THREE.Mesh | null = null;
   private heroFrames = new Map<string, THREE.CanvasTexture>();
@@ -494,15 +515,15 @@ class FirstPersonCity {
     name: string;
     x: number;
     z: number;
-    scale: number;
+    scale?: number;
     isStatic?: boolean;
     isLost?: boolean;
     isWild?: boolean;
     encData?: any;
   }): void {
-    const BASE_POKEMON_SIZE = 76;
-    const size = BASE_POKEMON_SIZE * cfg.scale;
-    const shadow = this.blobShadow(size * 0.22);
+    const vHeight = getPokemonVisualHeight(cfg.speciesId) * (cfg.scale || 1);
+    const size = vHeight / 0.55;
+    const shadow = this.blobShadow(vHeight * 0.4);
     shadow.position.set(cfg.x, 0.2, cfg.z);
     this.pokemonGroup.add(shadow);
 
@@ -514,8 +535,11 @@ class FirstPersonCity {
     this.pokemonGroup.add(sprite);
     this.occluders.push(sprite);
 
-    const tag = this.nameTag(cfg.name, cfg.x, cfg.z, Math.max(26, size * 0.8));
-    this.pokemonGroup.add(tag);
+    let tag: THREE.Sprite | null = null;
+    if (cfg.isStatic || cfg.isLost) {
+      tag = this.nameTag(cfg.name, cfg.x, cfg.z, Math.max(16, vHeight + 6));
+      this.pokemonGroup.add(tag);
+    }
 
     const mon: OverworldPokemonEntity = {
       id: cfg.id,
@@ -551,8 +575,7 @@ class FirstPersonCity {
         .then(({ model, animations }) => {
           if (!this.overworldPokemon.includes(mon)) return;
           const box = new THREE.Box3().setFromObject(model);
-          const targetH = size * 0.55;
-          const k = targetH / Math.max(0.001, box.max.y - box.min.y);
+          const k = vHeight / Math.max(0.001, box.max.y - box.min.y);
           model.scale.multiplyScalar(k);
           model.position.y = -box.min.y * k;
           const obj = new THREE.Group();
@@ -564,7 +587,7 @@ class FirstPersonCity {
           const idleClip = clip(/idle|wait/) || animations[0];
           if (idleClip) mixer.clipAction(idleClip).play();
           mon.model3D = { obj, mixer };
-          this.scene!.add(obj);
+          this.pokemonGroup.add(obj);
           sprite.visible = false;
         })
         .catch(() => { });
@@ -663,18 +686,21 @@ class FirstPersonCity {
     }
     this.sizeTags();
 
+    this.partnerInitialized = false;
     const info = eng.companion.info;
     if (!info) {
       if (this.partner) this.partner.visible = false;
-      this.partnerShadow!.visible = false;
+      if (this.partner3D) this.partner3D.obj.visible = false;
+      if (this.partnerShadow) this.partnerShadow.visible = false;
     } else {
+      const vHeight = getPokemonVisualHeight(info.speciesId, info.sizeClass);
+      const spriteSize = vHeight / 0.55;
       if (info.speciesId !== this.partnerSpecies) {
         this.partnerSpecies = info.speciesId;
         if (this.partner) this.scene!.remove(this.partner);
-        const size = [65, 82, 102][info.sizeClass];
         this.partner = new THREE.Sprite(new THREE.SpriteMaterial({ alphaTest: 0.35, transparent: true }));
         this.partner.center.set(0.5, 0.10);
-        this.partner.scale.set(size, size, 1);
+        this.partner.scale.set(spriteSize, spriteSize, 1);
         this.scene!.add(this.partner);
         this.loadPokemonTexture(info.speciesId, tex => {
           if (this.partner && this.partnerSpecies === info.speciesId) {
@@ -695,8 +721,7 @@ class FirstPersonCity {
           .then(({ model, animations }) => {
             if (this.partner3DSpecies !== species) return;
             const box = new THREE.Box3().setFromObject(model);
-            const targetH = [34, 46, 60][info.sizeClass];
-            const k = targetH / Math.max(0.001, box.max.y - box.min.y);
+            const k = vHeight / Math.max(0.001, box.max.y - box.min.y);
             model.scale.multiplyScalar(k);
             model.position.y = -box.min.y * k;
             const obj = new THREE.Group();
@@ -707,7 +732,7 @@ class FirstPersonCity {
             const walkClip = clip(/walk|run|move/);
             this.partner3D = { obj, mixer, idle: idleClip && mixer.clipAction(idleClip), walk: walkClip && mixer.clipAction(walkClip) };
             this.scene!.add(obj);
-            this.partner!.visible = false;
+            if (this.partner) this.partner.visible = false;
           })
           .catch(() => { }); // no model for this species: keep the 3D illustration
       }
@@ -727,7 +752,7 @@ class FirstPersonCity {
         name: `${name} Lv.${enc.level || 30}`,
         x: enc.x,
         z: enc.y + 8,
-        scale: 1.8,
+        scale: 1.0,
         isStatic: true,
         encData: enc,
       });
@@ -744,7 +769,7 @@ class FirstPersonCity {
         name: `Lost ${name} ❓`,
         x: lost.x,
         z: lost.y + 8,
-        scale: 1.25,
+        scale: 1.0,
         isLost: true,
         encData: lost,
       });
@@ -752,14 +777,14 @@ class FirstPersonCity {
 
     // 3. Ambient Wild Pokémon roaming in Route 1 & Viridian natural habitats
     const ambientSpawns = [
-      { speciesId: 16, x: 260, z: 270, level: 3, name: 'Pidgey', scale: 1.1 },
-      { speciesId: 19, x: 440, z: 660, level: 3, name: 'Rattata', scale: 1.05 },
-      { speciesId: 10, x: 520, z: 290, level: 2, name: 'Caterpie', scale: 0.95 },
-      { speciesId: 60, x: 910, z: 630, level: 5, name: 'Poliwag', scale: 1.15 },
-      { speciesId: 54, x: 1120, z: 740, level: 6, name: 'Psyduck', scale: 1.25 },
-      { speciesId: 43, x: 940, z: 210, level: 5, name: 'Oddish', scale: 1.05 },
-      { speciesId: 25, x: 1640, z: 310, level: 9, name: 'Pikachu', scale: 1.25 },
-      { speciesId: 133, x: 1470, z: 190, level: 10, name: 'Eevee', scale: 1.2 },
+      { speciesId: 16, x: 260, z: 270, level: 3, name: 'Pidgey' },
+      { speciesId: 19, x: 440, z: 660, level: 3, name: 'Rattata' },
+      { speciesId: 10, x: 520, z: 290, level: 2, name: 'Caterpie' },
+      { speciesId: 60, x: 910, z: 630, level: 5, name: 'Poliwag' },
+      { speciesId: 54, x: 1120, z: 740, level: 6, name: 'Psyduck' },
+      { speciesId: 43, x: 940, z: 210, level: 5, name: 'Oddish' },
+      { speciesId: 25, x: 1640, z: 310, level: 9, name: 'Pikachu' },
+      { speciesId: 133, x: 1470, z: 190, level: 10, name: 'Eevee' },
     ];
     for (const sp of ambientSpawns) {
       this.spawnOverworldPokemon({
@@ -768,7 +793,6 @@ class FirstPersonCity {
         name: `${sp.name} Lv.${sp.level}`,
         x: sp.x,
         z: sp.z,
-        scale: sp.scale,
         isWild: true,
         encData: sp,
       });
@@ -861,18 +885,43 @@ class FirstPersonCity {
       n.c.update(dt);
     }
 
-    eng.companion.update(dt, p.x, p.y);
-    if (this.partner && eng.companion.info) {
-      const hop = moving ? Math.abs(Math.sin(this.walkPhase * 11)) * 3 : 0;
-      // Walk the partner slightly to the camera's right so it never hides the trainer
-      const side = 32;
-      const ahead = 18; // and a little forward, level with the trainer rather than in front of the lens
-      const px2 = eng.companion.x + Math.cos(this.camYaw) * side - Math.sin(this.camYaw) * ahead;
-      const pz2 = eng.companion.y + 10 - Math.sin(this.camYaw) * side - Math.cos(this.camYaw) * ahead;
-      this.partner.position.set(px2, hop, pz2);
+    if ((this.partner || this.partner3D) && eng.companion.info) {
+      // Forward and right vectors relative to trainer's facing direction
+      const fX = -Math.sin(this.heroYaw);
+      const fZ = -Math.cos(this.heroYaw);
+      const rX = -fZ; // 90 deg right
+      const rZ = fX;
+
+      // Position beside trainer: 18 units to the right, 4 units back
+      let sideDist = 18;
+      const trailDist = 4;
+      let targetX = p.x + rX * sideDist - fX * trailDist;
+      let targetZ = p.y + 10 + rZ * sideDist - fZ * trailDist;
+
+      // If the right side is blocked by wall/tree, flip to the left side
+      if (route && this.blocked(targetX, targetZ, route)) {
+        sideDist = -18;
+        targetX = p.x + rX * sideDist - fX * trailDist;
+        targetZ = p.y + 10 + rZ * sideDist - fZ * trailDist;
+      }
+
+      if (!this.partnerInitialized) {
+        this.partnerPos.set(targetX, 0, targetZ);
+        this.partnerInitialized = true;
+      } else {
+        const k = moving ? Math.min(1, dt * 10) : Math.min(1, dt * 6);
+        this.partnerPos.x += (targetX - this.partnerPos.x) * k;
+        this.partnerPos.z += (targetZ - this.partnerPos.z) * k;
+      }
+
+      const hop = moving ? Math.abs(Math.sin(this.walkPhase * 11)) * 2.5 : 0;
+      if (this.partner) {
+        this.partner.position.set(this.partnerPos.x, hop, this.partnerPos.z);
+        this.partner.visible = !this.partner3D;
+      }
       if (this.partner3D) {
         const pp = this.partner3D;
-        pp.obj.position.set(px2, 0, pz2);
+        pp.obj.position.set(this.partnerPos.x, 0, this.partnerPos.z);
         pp.obj.rotation.y = this.heroYaw;
         const next = moving && pp.walk ? pp.walk : pp.idle;
         if (next && next !== pp.on) {
@@ -880,9 +929,16 @@ class FirstPersonCity {
           if (pp.on) pp.on.crossFadeTo(next, 0.2, false);
           pp.on = next;
         }
-        pp.mixer.update(dt * (moving && !pp.walk ? 1.8 : 1)); // no walk clip: a livelier idle
+        pp.mixer.update(dt * (moving && !pp.walk ? 1.8 : 1));
       }
-      this.partnerShadow!.position.set(px2, 0.3, pz2);
+      if (this.partnerShadow) {
+        this.partnerShadow.position.set(this.partnerPos.x, 0.25, this.partnerPos.z);
+        this.partnerShadow.visible = true;
+      }
+
+      // Synchronize 2D companion coordinates for interactions
+      eng.companion.x = this.partnerPos.x;
+      eng.companion.y = this.partnerPos.z;
     }
     eng.refreshPrompt();
 
@@ -895,7 +951,7 @@ class FirstPersonCity {
       }
       if (mon.isWild && mon.encData && !busy && eng.onTriggerEncounter) {
         const dist = Math.hypot(p.x - mon.x, p.y - mon.z);
-        if (dist < 34) {
+        if (dist < 28) {
           eng.onTriggerEncounter(buildEncounterMon(mon.speciesId, mon.encData.level, 15), Math.round(p.x), Math.round(p.y));
           break;
         }
@@ -918,15 +974,15 @@ class FirstPersonCity {
     for (const mon of this.overworldPokemon) {
       const d = Math.hypot(mon.x - cp.x, mon.z - cp.z);
       const visible = d > clear && d < 750;
-      if (mon.sprite) mon.sprite.visible = visible;
+      if (mon.sprite) mon.sprite.visible = visible && !mon.model3D;
       if (mon.model3D) mon.model3D.obj.visible = visible;
       if (mon.shadow) mon.shadow.visible = visible;
-      if (mon.tag) mon.tag.visible = visible && d < 450;
+      if (mon.tag) mon.tag.visible = visible && d < 350;
     }
     for (const o of this.pokemonGroup.children) {
       if (o.userData.isTag) {
         const d = Math.hypot(o.position.x - cp.x, o.position.z - cp.z);
-        o.visible = d > clear && d < 450;
+        o.visible = d > clear && d < 350;
       }
     }
     this.renderer!.render(this.scene!, this.camera);

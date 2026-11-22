@@ -10,6 +10,7 @@
  * - Preserves exact route position upon returning from battle!
  */
 
+import { drawArchFacade } from '../world/ArchFacade2D';
 import { sound } from '../audio/SoundSynthesizer';
 import { generateEncounterMon, EncounterMon } from './EncounterSystem';
 import { inputManager } from './InputManager';
@@ -2257,6 +2258,10 @@ export class RouteExplorationEngine {
     // League landmarks: the stadium and grand civic halls have their own artwork
     if (b.type === 'stadium') {
       drawStadium(ctx, b, this.time);
+      ctx.restore();
+      return;
+    }
+    if (b.model3d?.startsWith('gen:') && drawArchFacade(ctx, b, b.model3d)) {
       ctx.restore();
       return;
     }

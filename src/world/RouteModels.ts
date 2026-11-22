@@ -21,6 +21,7 @@ import { environmentAssets, Loaded } from './EnvironmentAssets';
 import { LocationEnv, ZoneEnv, DecorRule, zoneAt, pickWeighted, modelKeysFor, WeightedModel } from './LocationEnvironment';
 
 export { windTime, addWindSway } from './EnvironmentAssets';
+import { buildArchitecture } from './ProceduralArchitecture';
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
@@ -297,7 +298,7 @@ export function routeModelKeys(route: RouteDefinition, env: LocationEnv): Set<st
   BASE_KEYS.forEach(k => keys.add(k));
   for (const z of env.zones) if (z.lawn !== 'none') LAWNS[z.lawn].list.forEach(([k]) => keys.add(k));
   for (const b of route.buildings) {
-    if (b.model3d) keys.add(b.model3d);
+    if (b.model3d && !b.model3d.startsWith('gen:')) keys.add(b.model3d);
     if (b.type === 'stadium') ['p:colosseum', 'p:flag_red', 'p:horse_statue'].forEach(k => keys.add(k));
   }
   for (const g of route.grassPatches) {
@@ -739,6 +740,15 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
   };
   for (const b of route.buildings) {
     if (b.type !== 'house') continue;
+    // Procedural, textured architecture (League city): built in code over the footprint
+    if (b.model3d?.startsWith('gen:')) {
+      const arch = buildArchitecture(b, b.model3d);
+      if (arch) {
+        group.add(arch);
+        houses.add(b);
+        continue;
+      }
+    }
     const z = zoneAt(env, b.x + b.w / 2);
     const own = b.model3d && has(b.model3d) ? b.model3d : null;
     if (!own && !z.houses.length) continue;

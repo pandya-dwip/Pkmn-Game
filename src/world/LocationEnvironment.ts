@@ -207,6 +207,13 @@ const INDIGO_TREES: WeightedModel[] = [
   ['p:spruce', 2, 100],
   ['CommonTree_5', 1, 66],
 ];
+/** Indigo League City: procedural textured trees (see ProceduralTrees.ts). */
+const LEAGUE_RING_TREES: WeightedModel[] = [
+  ['g:cypress', 3, 100],
+  ['g:oak', 2, 72],
+  ['g:plane', 2, 90],
+];
+const TOPIARY: WeightedModel[] = [['g:topiary', 2, 24], ['g:cone', 1, 30]];
 const SNOW_TREES: WeightedModel[] = [
   ['p:pine_snow', 3, 100],
   ['p:birch_snow', 2, 90],
@@ -653,9 +660,9 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
   110: outdoor(
     [
       zone(0, 'Gateway Plaza', {
-        treeSkin: { '*': [['p:cypress', 2, 96], ['CommonTree_5', 2, 68], ['p:cherry', 1, 52]] },
+        treeSkin: { '*': [['g:plane', 2, 90], ['g:cypress', 2, 96], ['g:blossom', 1, 56]] },
         filler: [],
-        ringTrees: INDIGO_TREES,
+        ringTrees: LEAGUE_RING_TREES,
         houses: ['c:building-a'],
         houseSkins: [],
         fountain: 'p:fountain_pedestal',
@@ -665,13 +672,14 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
           { models: [['t:hedge-large', 1, 18]], density: 14, where: 'building', fit: 'y' },
           { models: FLOWERS, density: 60, where: 'building' },
           { models: [['p:flag_red', 1, 56]], density: 10, where: 'roadside' },
+          { models: TOPIARY, density: 14, where: 'building' },
           { models: [['p:market_stand', 1, 34]], density: 3, where: 'roadside', solid: 12 },
         ],
       }),
       zone(640, "Competitors' Quarter", {
-        treeSkin: { '*': [['CommonTree_2', 2, 88], ['CommonTree_3', 2, 92], ['p:poplar', 2, 96], ['p:birch', 1, 90]], conifer: [['p:spruce', 1, 104]] },
+        treeSkin: { '*': [['g:oak', 3, 72], ['g:plane', 2, 88], ['g:blossom', 1, 56]], conifer: [['g:cypress', 1, 98]] },
         filler: [],
-        ringTrees: INDIGO_TREES,
+        ringTrees: LEAGUE_RING_TREES,
         houses: ['p:timber_tall'],
         houseSkins: [],
         lawn: 'lush',
@@ -684,9 +692,9 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(1700, 'Garden of Legends', {
-        treeSkin: { '*': [['p:blossom_white', 2, 60], ['CommonTree_5', 2, 68], ['p:cypress', 2, 96], ['p:willow', 1, 56]] },
+        treeSkin: { '*': [['g:blossom', 3, 58], ['g:oak', 2, 68], ['g:cypress', 1, 94], ['p:willow', 1, 56]] },
         filler: [],
-        ringTrees: CELADON_TREES,
+        ringTrees: LEAGUE_RING_TREES,
         houses: ['p:greenhouse'],
         houseSkins: [],
         fountain: 'p:wishing_well',
@@ -700,9 +708,9 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         ],
       }),
       zone(2600, 'Hall of Fame', {
-        treeSkin: { '*': [['p:cypress', 3, 100], ['CommonTree_5', 1, 68]] },
+        treeSkin: { '*': [['g:cypress', 3, 100], ['g:plane', 1, 88]] },
         filler: [],
-        ringTrees: INDIGO_TREES,
+        ringTrees: LEAGUE_RING_TREES,
         houses: ['p:grand_hall'],
         houseSkins: [],
         maxBuildingHeight: 210,
@@ -711,12 +719,13 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
           { models: [['p:flag_banner', 1, 64]], density: 10, where: 'roadside' },
           { models: [['t:hedge-large', 1, 18]], density: 12, where: 'building', fit: 'y' },
           { models: [['k:statue_column', 1, 60]], density: 6, where: 'roadside', solid: 8 },
+          { models: TOPIARY, density: 18, where: 'building' },
         ],
       }),
       zone(3080, 'Indigo Stadium', {
-        treeSkin: { '*': [['p:cypress', 3, 100], ['p:poplar', 1, 96]] },
+        treeSkin: { '*': [['g:cypress', 3, 100], ['g:plane', 1, 90]] },
         filler: [],
-        ringTrees: INDIGO_TREES,
+        ringTrees: LEAGUE_RING_TREES,
         houses: [],
         houseSkins: [],
         civic: { stadium: 'p:colosseum' },
@@ -725,6 +734,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
         decor: [
           { models: [['t:banner-red', 1, 40], ['t:banner-green', 1, 40]], density: 6, where: 'building' },
           { models: [['p:flag_red', 1, 60]], density: 14, where: 'edge' },
+          { models: TOPIARY, density: 12, where: 'roadside' },
         ],
       }),
     ],
@@ -733,7 +743,7 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
       camera: CAMERA_CITY,
       baseGround: 'grass',
       sky: ['#3d8ee0', '#a5d4f2', '#fbe6c2'],
-      fog: { color: 0xe9e4d8, near: 460, far: 1000 },
+      fog: { color: 0xd6e6ef, near: 560, far: 1300 },
       hemi: { sky: 0xfff4e0, ground: 0x4a6b3a, intensity: 2.25 },
       sun: { color: 0xffe3b8, intensity: 2.6, dir: [-1, 1.8, -0.9] },
       drawDistance: 950,

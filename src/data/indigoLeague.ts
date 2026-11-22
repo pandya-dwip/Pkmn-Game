@@ -58,87 +58,87 @@ const BUILDINGS: B[] = [
   { type: 'center', x: 160, y: 520, w: 130, h: 110, label: 'Pokémon Center' },
   { type: 'mart', x: 400, y: 524, w: 120, h: 106, label: 'Poké Mart' },
   {
-    type: 'house', x: 230, y: 1110, w: 200, h: 120, label: 'League Welcome Center', facade: 'hall', model3d: 'c:building-a',
+    type: 'house', x: 230, y: 1110, w: 200, h: 120, label: 'League Welcome Center', facade: 'hall', model3d: 'gen:welcome',
     occupant: 'Guide Aiko',
     dialogue: 'Welcome to Indigo League City! Fifteen of Kanto\'s finest trainers are staying here for the Championship. Go and meet them - they all have a story. When you are ready, the Indigo Stadium is at the far east end of the Grand Boulevard.',
   },
 
   // Competitors' Quarter - north promenade
   {
-    type: 'house', x: 720, y: 196, w: 200, h: 134, label: "Competitors' Lodge - Sunrise Wing", roofStyle: 'terracotta', wallColor: '#f5ead6', model3d: 'p:timber_tall',
+    type: 'house', x: 720, y: 196, w: 200, h: 134, label: "Competitors' Lodge - Sunrise Wing", roofStyle: 'terracotta', wallColor: '#f5ead6', model3d: 'gen:lodge',
     occupant: 'Lodge Keeper Hana',
     dialogue: 'Every competitor gets a room with a view of the stadium. Ace Trainer Jake asked for the earliest wake-up call. Rival Blue asked for none - he said he does not sleep before a tournament.',
   },
   {
-    type: 'house', x: 960, y: 196, w: 200, h: 134, label: "Competitors' Lodge - Sunset Wing", roofStyle: 'slate', wallColor: '#ede7f6', model3d: 's:building-type-t',
+    type: 'house', x: 960, y: 196, w: 200, h: 134, label: "Competitors' Lodge - Sunset Wing", roofStyle: 'slate', wallColor: '#ede7f6', model3d: 'gen:lodge_slate',
     occupant: 'Lodge Keeper Oren',
     dialogue: 'Quiet hours start at ten. Black Belt Daisuke has been politely reminded four times. He apologises, then does push-ups more quietly.',
   },
   {
-    type: 'house', x: 1200, y: 214, w: 150, h: 116, label: "Trainer's Café", roofStyle: 'wood', wallColor: '#fde7c8', model3d: 'p:cottage',
+    type: 'house', x: 1200, y: 214, w: 150, h: 116, label: "Trainer's Café", roofStyle: 'wood', wallColor: '#fde7c8', model3d: 'gen:cafe',
     occupant: 'Barista Lou',
     dialogue: 'Moomoo Milk lattes and berry scones! Lass Emily orders a Pecha tea every morning. Veteran Marcus has had the same order for forty years.',
   },
   {
-    type: 'house', x: 1390, y: 200, w: 200, h: 130, label: 'Strategy Library', facade: 'hall', model3d: 'p:stone_house',
+    type: 'house', x: 1390, y: 200, w: 200, h: 130, label: 'Strategy Library', facade: 'hall', model3d: 'gen:library',
     occupant: 'Librarian Sage',
     dialogue: 'Every Championship battle since the League was founded is recorded here. Scientist Edison has borrowed every single volume. Twice.',
   },
 
   // Competitors' Quarter - Grand Boulevard
   {
-    type: 'house', x: 720, y: 650, w: 210, h: 130, label: 'Training Dojo', roofStyle: 'wood', wallColor: '#e7d3b0', model3d: 'p:station',
+    type: 'house', x: 720, y: 650, w: 210, h: 130, label: 'Training Dojo', roofStyle: 'wood', wallColor: '#e7d3b0', model3d: 'gen:dojo',
     occupant: 'Sensei Goro',
     dialogue: 'Strength is nothing without control. The competitors train in the yard outside every morning - you are welcome to watch.',
   },
   {
-    type: 'house', x: 980, y: 656, w: 170, h: 124, label: 'Move Tutor Hall', roofStyle: 'azure', wallColor: '#e0f2fe', model3d: 'p:timber_house',
+    type: 'house', x: 980, y: 656, w: 170, h: 124, label: 'Move Tutor Hall', roofStyle: 'azure', wallColor: '#e0f2fe', model3d: 'gen:tutor',
     occupant: 'Move Tutor Inez',
     dialogue: 'A move is only as good as the moment you choose to use it. That is the one lesson I teach every competitor.',
   },
   {
-    type: 'house', x: 1200, y: 660, w: 160, h: 120, label: 'Berry Market', roofStyle: 'emerald', wallColor: '#ecfccb', model3d: 'p:hut_b',
+    type: 'house', x: 1200, y: 660, w: 160, h: 120, label: 'Berry Market', roofStyle: 'emerald', wallColor: '#ecfccb', model3d: 'gen:market',
     occupant: 'Grocer Pim',
     dialogue: 'Oran, Sitrus, Pecha, Chesto - fresh from the Garden of Legends! Botanist Flora grows half of them herself.',
   },
   {
-    type: 'house', x: 1400, y: 650, w: 200, h: 130, label: "Competitors' Lounge", facade: 'hall', model3d: 'c:building-g',
+    type: 'house', x: 1400, y: 650, w: 200, h: 130, label: "Competitors' Lounge", facade: 'hall', model3d: 'gen:lounge',
     occupant: 'Host Renata',
     dialogue: 'This is where the competitors watch each other\'s matches on the big screen. The arguments get louder than the stadium crowd.',
   },
 
   // Competitors' Quarter - south promenade
   {
-    type: 'house', x: 720, y: 1110, w: 180, h: 130, label: 'Pokémon Fan Club', roofStyle: 'terracotta', wallColor: '#fce7f3', model3d: 's:building-type-n',
+    type: 'house', x: 720, y: 1110, w: 180, h: 130, label: 'Pokémon Fan Club', roofStyle: 'terracotta', wallColor: '#fce7f3', model3d: 'gen:fanclub',
     occupant: 'Fan Club Chair Mabel',
     dialogue: 'We have a poster of every competitor! Young Prodigy Leo signed his three times. He is very proud of his signature.',
   },
   {
-    type: 'house', x: 940, y: 1110, w: 260, h: 130, label: 'Plateau Grand Hotel', facade: 'tower', model3d: 'c:building-skyscraper-a',
+    type: 'house', x: 940, y: 1110, w: 260, h: 130, label: 'Plateau Grand Hotel', facade: 'tower', model3d: 'gen:hotel',
     occupant: 'Concierge Bellamy',
     dialogue: 'Every suite is booked for the Championship. Families of the competitors have travelled from all over Kanto to watch.',
   },
   {
-    type: 'house', x: 1260, y: 1110, w: 200, h: 130, label: 'Trainer School', roofStyle: 'azure', wallColor: '#f1f5f9', model3d: 'p:timber_tall',
+    type: 'house', x: 1260, y: 1110, w: 200, h: 130, label: 'Trainer School', roofStyle: 'azure', wallColor: '#f1f5f9', model3d: 'gen:school',
     occupant: 'Teacher Ruth',
     dialogue: 'The children here dream of competing one day. Today they are studying type matchups - by watching the real competitors train.',
   },
 
   // Garden of Legends
   {
-    type: 'house', x: 2200, y: 206, w: 220, h: 124, label: 'Conservatory', roofStyle: 'emerald', wallColor: '#ecfdf5', model3d: 'p:greenhouse',
+    type: 'house', x: 2200, y: 206, w: 220, h: 124, label: 'Conservatory', roofStyle: 'emerald', wallColor: '#ecfdf5', model3d: 'gen:conservatory',
     occupant: 'Gardener Hugo',
     dialogue: 'Rare plants from every corner of Kanto grow under this glass. Botanist Flora has been helping me since she arrived - she has a gift.',
   },
   {
-    type: 'house', x: 1820, y: 214, w: 180, h: 116, label: 'Garden Pavilion', roofStyle: 'emerald', wallColor: '#fefce8', model3d: 'p:cottage',
+    type: 'house', x: 1820, y: 214, w: 180, h: 116, label: 'Garden Pavilion', roofStyle: 'emerald', wallColor: '#fefce8', model3d: 'gen:pavilion',
     occupant: 'Poet Wren',
     dialogue: 'People come to the gardens to be calm before they battle. I come to write about them. Most of my poems are about nerves.',
   },
 
   // Hall of Fame district
   {
-    type: 'house', x: 2680, y: 150, w: 320, h: 180, label: 'Pokémon League Headquarters', facade: 'tower', model3d: 'p:grand_hall',
+    type: 'house', x: 2680, y: 150, w: 320, h: 180, label: 'Pokémon League Headquarters', facade: 'tower', model3d: 'gen:hq',
     occupant: 'League Director Hayes',
     dialogue: 'The Pokémon League was founded on this plateau to give every trainer in Kanto the same fair chance to become Champion. That promise is older than this building - and it still holds.',
   },
@@ -148,7 +148,7 @@ const BUILDINGS: B[] = [
     dialogue: 'Every champion\'s team is recorded in this hall forever. There is a space on the newest wall. It has been waiting a long time for a name.',
   },
   {
-    type: 'house', x: 2700, y: 1100, w: 280, h: 140, label: "Champions' Gallery", facade: 'hall', model3d: 'c:building-m',
+    type: 'house', x: 2700, y: 1100, w: 280, h: 140, label: "Champions' Gallery", facade: 'hall', model3d: 'gen:gallery',
     occupant: 'Gallery Guide Teo',
     dialogue: 'Portraits of every champion and their partner Pokémon. Look closely - in every painting, the trainer is looking at their partner, not at the painter.',
   },

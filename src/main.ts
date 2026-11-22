@@ -36,6 +36,7 @@ import { getRouteDefinition, AREA_INFO, SPECIAL_AREAS } from './data/specialArea
 import { INDIGO_LEAGUE_ID } from './data/indigoLeague';
 import { setBattleArena, biomeAt } from './ui/WildArena';
 import { COMPETITOR_PROFILES, CompetitorProfile } from './data/leagueCompetitors';
+import { ChatCard } from './ui/ChatCard';
 import { QUESTS, QuestReward, getQuestDef } from './data/quests';
 import {
   QuestLog,
@@ -988,51 +989,67 @@ async function competitorConversation(npc: RouteNPC): Promise<void> {
   }
   const status = competitorStatus(cid);
   const firstMeeting = !hasFlag('met:' + npc.id);
-  const head = `<div class="dlg-head">${escH(trainer.name)}</div><p class="dlg-sub">${escH(trainer.title)} · from ${escH(profile.home)}</p>`;
-  const opener = firstMeeting ? profile.greeting : profile.status[status];
   if (firstMeeting) setFlag('met:' + npc.id);
 
-  const topics = ['YOUR JOURNEY', 'YOUR TEAM', 'ANY ADVICE?', 'THE CHAMPIONSHIP', 'GOODBYE'];
-  let line = opener;
-  for (;;) {
-    const c = await pick(`${head}<p class="dlg">"${escH(line)}"</p>`, topics.map(h => ({ h })));
-    if (c === 0) {
-      await note([head, ...profile.journey.map(l => `<p class="dlg">"${escH(l)}"</p>`)]);
-      line = 'Anything else you want to know?';
-    } else if (c === 1) {
-      const team = trainer.team
-        .map(m => `<span class="comp-mon">${img(m.id)}<span><b>${escH(POKEMON_SPECIES_MAP[m.id]?.name || '???')}</b>Lv. ${m.lv}</span></span>`)
-        .join('');
-      await note([head, `<p class="dlg">"${escH(profile.team)}"</p>`, `<div class="comp-team">${team}</div>`, `<p class="dlg-sub">Battle style: ${escH(trainer.style)}</p>`]);
-      line = 'Think you can handle them?';
-    } else if (c === 2) {
-      await note([head, `<p class="dlg">"${escH(profile.advice)}"</p>`]);
-      line = 'Use it well.';
-    } else if (c === 3) {
-      line = profile.status[status];
-    } else {
-      break;
-    }
-  }
+  const STATUS_CHIP: Record<CompetitorStatus, { text: string; tone: 'info' | 'good' | 'warn' | 'muted' }> = {
+    waiting: { text: 'Awaiting the draw', tone: 'info' },
+    rival: { text: 'Your next opponent', tone: 'warn' },
+    active: { text: 'Still in the bracket', tone: 'good' },
+    beatenByYou: { text: 'Knocked out by you', tone: 'muted' },
+    outByOther: { text: 'Eliminated', tone: 'muted' },
+    afterYouWon: { text: 'You are Champion', tone: 'good' },
+  };
+  const ACCENTS = ['#dc2626', '#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#ca8a04', '#db2777'];
+  const chat = new ChatCard({
+    name: trainer.name,
+    subtitle: `${trainer.title} · from ${profile.home}`,
+    avatar: trainer.avatar || '🧢',
+    accent: ACCENTS[cid % ACCENTS.length],
+    status: STATUS_CHIP[status],
+  });
 
-  // Meeting everyone is its own small achievement
-  if (firstMeeting) {
-    const met = CHAMPIONSHIP_OPPONENTS.filter((_, i) => hasFlag('met:il_comp_' + (i + 1))).length;
-    if (met === CHAMPIONSHIP_OPPONENTS.length && !hasFlag('met:all_competitors')) {
-      setFlag('met:all_competitors');
-      G.money = (G.money || 0) + 3000;
-      G.rv = (G.rv || 0) + 2;
-      save();
-      refreshHudCounters();
-      sound.discovery();
-      await note([
-        `<h3>Every competitor met!</h3>`,
-        `<p class="dlg">You have spoken with all fifteen of your fellow competitors. Word spreads fast in Indigo League City - the League sends a gift to every trainer who takes the time to know their rivals.</p>`,
-        `<b>Received ₽3,000 and 2 Revives!</b>`,
-      ]);
-    } else {
-      routeExplorationEngine.showToast('Competitor met', `${met} of ${CHAMPIONSHIP_OPPONENTS.length} competitors`);
+  try {
+    await chat.say(firstMeeting ? profile.greeting : profile.status[status]);
+    const topics = ['Tell me about your journey', 'What is your team like?', 'Any advice?', 'About the Championship…', 'Goodbye'];
+    for (;;) {
+      const c = await chat.choose(topics);
+      if (c === 0) {
+        await chat.say([...profile.journey, 'Anything else you want to know?']);
+      } else if (c === 1) {
+        await chat.say(profile.team);
+        const team = trainer.team
+          .map(m => `<span class="comp-mon">${img(m.id)}<span><b>${escH(POKEMON_SPECIES_MAP[m.id]?.name || '???')}</b>Lv. ${m.lv}</span></span>`)
+          .join('');
+        await chat.sayHTML(`<div class="chat-card-title">${escH(trainer.name.split(' ').pop() || trainer.name)}'s team</div><div class="comp-team">${team}</div><div class="chat-card-foot">Battle style: ${escH(trainer.style)}</div>`);
+        await chat.say('Think you can handle them?');
+      } else if (c === 2) {
+        await chat.say([profile.advice, 'Use it well.']);
+      } else if (c === 3) {
+        await chat.say(profile.status[status]);
+      } else {
+        await chat.say(status === 'rival' ? 'See you on the field. Bring everything you have.' : 'Good talking to you. See you around the Plateau!');
+        break;
+      }
     }
+
+    // Meeting everyone is its own small achievement
+    if (firstMeeting) {
+      const met = CHAMPIONSHIP_OPPONENTS.filter((_, i) => hasFlag('met:il_comp_' + (i + 1))).length;
+      if (met === CHAMPIONSHIP_OPPONENTS.length && !hasFlag('met:all_competitors')) {
+        setFlag('met:all_competitors');
+        G.money = (G.money || 0) + 3000;
+        G.rv = (G.rv || 0) + 2;
+        save();
+        refreshHudCounters();
+        sound.discovery();
+        chat.system(`<b>Every competitor met!</b><br>You have spoken with all fifteen of your fellow competitors. The League sends a gift to every trainer who takes the time to know their rivals.<br><b>Received ₽3,000 and 2 Revives!</b>`);
+        await chat.choose(['Awesome!'], false);
+      } else {
+        routeExplorationEngine.showToast('Competitor met', `${met} of ${CHAMPIONSHIP_OPPONENTS.length} competitors`);
+      }
+    }
+  } finally {
+    await chat.close();
   }
 }
 

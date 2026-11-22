@@ -24,6 +24,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { buildProceduralTree } from './ProceduralTrees';
 
 const BASE = import.meta.env.BASE_URL;
 const KENNEY = `${BASE}models/kenney/`;
@@ -184,6 +185,8 @@ class EnvironmentAssetManager {
   }
 
   private async loadRaw(name: string): Promise<Loaded> {
+    // Procedural ornamental trees: generated in code, no file to fetch
+    if (name.startsWith('g:')) return buildProceduralTree(name);
     const gltf = await this.loader.loadAsync(urlFor(name));
     const isNatureKit = name.startsWith('k:');
     const isPoly = name.startsWith('p:');

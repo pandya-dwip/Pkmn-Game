@@ -13,11 +13,15 @@
 import { Camera25D } from './Camera25D';
 import { shade } from './FeatureRenderer';
 
+import { ARCH_STYLES } from './ProceduralArchitecture';
+import { archEave, archRoofTones } from './ArchFacade2D';
+
 export type Architecture = 'stone' | 'wood' | 'brick' | 'stucco' | 'glass' | 'volcanic' | 'marble' | 'timber';
 
 export interface BuildingLike {
   type: 'center' | 'mart' | 'gym' | 'gate' | 'house' | 'stadium';
   facade?: 'hall' | 'tower' | 'temple';
+  model3d?: string;
   x: number;
   y: number;
   w: number;
@@ -49,6 +53,13 @@ const ROOF_STYLE: Record<string, [string, string]> = {
 export function specFor(b: BuildingLike): VolumeSpec {
   const depth = Math.min(84, Math.max(46, b.h * 0.78));
   if (b.type === 'stadium') return { eave: 40, apex: 30, overhang: 6, roof: 'flat', wall: '#e7dcc4', roofLight: '#cbbd9c', roofDark: '#8f8167', depth: Math.min(b.h * 0.85, 360) };
+  const arch = b.model3d?.startsWith('gen:') ? ARCH_STYLES[b.model3d] : undefined;
+  if (arch) {
+    const [l, d] = archRoofTones(arch);
+    const eave = archEave(b, arch);
+    const roof = arch.roof === 'flat' ? 'flat' : arch.roof === 'gable' ? 'gable' : 'hip';
+    return { eave, apex: roof === 'gable' ? 2 : roof === 'hip' ? 4 : eave, overhang: roof === 'flat' ? 2 : 6, roof, wall: arch.wall === 'glass' ? '#cbd5e1' : arch.color, roofLight: l, roofDark: d, depth: Math.min(b.h * 0.8, 120) };
+  }
   if (b.facade === 'tower') return { eave: 8, apex: 2, overhang: 4, roof: 'flat', wall: '#cbd5e1', roofLight: '#94a3b8', roofDark: '#475569', depth: Math.min(b.h * 0.8, 120) };
   if (b.facade === 'temple') return { eave: 20, apex: -6, overhang: 10, roof: 'gable', wall: '#f8fafc', roofLight: '#e2e8f0', roofDark: '#94a3b8', depth: Math.min(b.h * 0.8, 130) };
   if (b.facade === 'hall') return { eave: 18, apex: 8, overhang: 6, roof: 'hip', wall: '#f1ece2', roofLight: '#1e3a8a', roofDark: '#172554', depth: Math.min(b.h * 0.8, 110) };

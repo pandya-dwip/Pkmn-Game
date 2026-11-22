@@ -14,6 +14,7 @@ import { RouteDefinition, RouteTree, RouteTreeType, FoliageColorVariant, RouteNP
 import { Rect, RoutePortal, RouteNoticeBoard, RouteFishingSpot } from '../world/WorldTypes';
 import { KANTO_JOURNEY_ROUTES } from './routes';
 import { registerAreaEncounters } from '../systems/EncounterSystem';
+import { indigoLeagueCity, INDIGO_LEAGUE_ID } from './indigoLeague';
 
 // ---------------------------------------------------------------------------
 // Builders
@@ -92,6 +93,7 @@ export const AREA = {
   TIDEWHISPER_GROTTO: 107,
   SKYREACH_TRAIL: 108,
   SKYREACH_SUMMIT: 109,
+  INDIGO_LEAGUE: INDIGO_LEAGUE_ID,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -739,6 +741,7 @@ export const SPECIAL_AREAS: RouteDefinition[] = [
   tidewhisperGrotto,
   skyreachTrail,
   skyreachSummit,
+  indigoLeagueCity,
 ];
 
 // ---------------------------------------------------------------------------
@@ -849,7 +852,12 @@ const ROUTE_AUGMENTS: Record<number, RouteAugment> = {
     noticeBoards: [{ id: 'nb_saffron', x: 2110, y: 300, title: 'Saffron Notice Board', questIds: ['q_trainer_gauntlet'] }],
   },
   7: { architecture: 'volcanic' },
-  8: { architecture: 'marble' },
+  8: {
+    architecture: 'marble',
+    portals: [
+      portal({ id: 'r8_league', x: 3200, y: 600, style: 'trail', label: 'Indigo League City', target: AREA.INDIGO_LEAGUE, targetX: 210, targetY: 820 }),
+    ],
+  },
 };
 
 const augmented = new Set<number>();
@@ -888,7 +896,7 @@ export function isSpecialArea(id: number | undefined | null): boolean {
 export interface AreaInfo {
   id: number;
   name: string;
-  kind: 'forest' | 'cave' | 'coast' | 'mountain';
+  kind: 'forest' | 'cave' | 'coast' | 'mountain' | 'city';
   parentRouteId: number;
   fastTravel: boolean;
   blurb: string;
@@ -898,7 +906,7 @@ export interface AreaInfo {
 
 export const AREA_INFO: AreaInfo[] = [
   { id: AREA.WHISPERING_THICKET, name: 'Whispering Thicket', kind: 'forest', parentRouteId: 1, fastTravel: true, blurb: 'Hidden forest off the Viridian Forest trail.', map: [150, 300] },
-  { id: AREA.MOSSVEIL_GROVE, name: 'Mossveil Grove', kind: 'forest', parentRouteId: 5, fastTravel: true, blurb: 'Ancient grove north of the Safari outskirts.', map: [470, 565] },
+  { id: AREA.MOSSVEIL_GROVE, name: 'Mossveil Grove', kind: 'forest', parentRouteId: 5, fastTravel: true, blurb: 'Ancient grove north of the Safari outskirts.', map: [440, 540] },
   { id: AREA.GLIMMERSTONE_1F, name: 'Glimmerstone Cavern', kind: 'cave', parentRouteId: 2, fastTravel: false, blurb: 'Crystal cave in the Mt. Moon foothills.', map: [430, 150] },
   { id: AREA.GLIMMERSTONE_B1, name: 'Glimmerstone Depths', kind: 'cave', parentRouteId: 2, fastTravel: false, blurb: 'The cavern\'s lower floor.' },
   { id: AREA.SALTWIND_SHORE, name: 'Saltwind Shore', kind: 'coast', parentRouteId: 3, fastTravel: true, blurb: 'Fishing village on the southern coast.', map: [760, 600] },
@@ -906,4 +914,5 @@ export const AREA_INFO: AreaInfo[] = [
   { id: AREA.TIDEWHISPER_GROTTO, name: 'Tidewhisper Grotto', kind: 'cave', parentRouteId: 3, fastTravel: false, blurb: 'Sea cave beneath Coral Isle.' },
   { id: AREA.SKYREACH_TRAIL, name: 'Skyreach Trail', kind: 'mountain', parentRouteId: 4, fastTravel: true, blurb: 'Mountain switchbacks above Celadon.', map: [390, 255] },
   { id: AREA.SKYREACH_SUMMIT, name: 'Skyreach Summit', kind: 'mountain', parentRouteId: 4, fastTravel: false, blurb: 'Snowfields above the clouds.' },
+  { id: AREA.INDIGO_LEAGUE, name: 'Indigo League City', kind: 'city', parentRouteId: 8, fastTravel: true, blurb: 'Capital of the Pokémon League, home of the Indigo Stadium.', map: [100, 262] },
 ];

@@ -33,6 +33,9 @@ import { characterSelectionView } from './ui/CharacterSelectionView';
 import { kantoWorldMapView } from './ui/KantoWorldMapView';
 import { getTrainerCharacter, drawCustomTrainerSprite, TrainerCustomization } from './data/characters';
 import { getRouteDefinition, AREA_INFO, SPECIAL_AREAS } from './data/specialAreas';
+import { INDIGO_LEAGUE_ID } from './data/indigoLeague';
+import { setBattleArena, biomeAt } from './ui/WildArena';
+import { COMPETITOR_PROFILES, CompetitorProfile } from './data/leagueCompetitors';
 import { QUESTS, QuestReward, getQuestDef } from './data/quests';
 import {
   QuestLog,
@@ -952,6 +955,138 @@ function refreshHudCounters(): void {
 const escH = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const dlg = (speaker: string, line: string) => `<div class="dlg-head">${escH(speaker)}</div><p class="dlg">"${escH(line)}"</p>`;
 
+// ============================================================================
+// INDIGO LEAGUE CITY: conversations with the Championship competitors
+// ============================================================================
+type CompetitorStatus = keyof CompetitorProfile['status'];
+
+/** Where a competitor stands in the player's tournament right now. */
+function competitorStatus(cid: number): CompetitorStatus {
+  const t = G?.tournament;
+  const champion = G?.phase === 'ELITE_FOUR_HUB' || !!(t && t.history.length >= 4 && t.history[3]?.some(m => m.winnerId === 0));
+  if (champion) {
+    return 'afterYouWon';
+  }
+  if (!t || !t.history.length) return 'waiting';
+  for (const round of t.history) {
+    for (const m of round) {
+      if ((m.trainerAId === cid || m.trainerBId === cid) && m.winnerId !== cid) return m.winnerId === 0 ? 'beatenByYou' : 'outByOther';
+    }
+  }
+  if (t.activeIds[0] === 0 && t.activeIds[1] === cid) return 'rival';
+  return 'active';
+}
+
+/** A real conversation: greeting, then the player chooses what to talk about. */
+async function competitorConversation(npc: RouteNPC): Promise<void> {
+  const cid = npc.competitorId!;
+  const trainer = G.tournament?.trainers?.[cid] || { ...CHAMPIONSHIP_OPPONENTS[cid - 1], id: cid };
+  const profile = COMPETITOR_PROFILES[trainer.name];
+  if (!profile) {
+    await note([dlg(npc.name, npc.dialogue)]);
+    return;
+  }
+  const status = competitorStatus(cid);
+  const firstMeeting = !hasFlag('met:' + npc.id);
+  const head = `<div class="dlg-head">${escH(trainer.name)}</div><p class="dlg-sub">${escH(trainer.title)} · from ${escH(profile.home)}</p>`;
+  const opener = firstMeeting ? profile.greeting : profile.status[status];
+  if (firstMeeting) setFlag('met:' + npc.id);
+
+  const topics = ['YOUR JOURNEY', 'YOUR TEAM', 'ANY ADVICE?', 'THE CHAMPIONSHIP', 'GOODBYE'];
+  let line = opener;
+  for (;;) {
+    const c = await pick(`${head}<p class="dlg">"${escH(line)}"</p>`, topics.map(h => ({ h })));
+    if (c === 0) {
+      await note([head, ...profile.journey.map(l => `<p class="dlg">"${escH(l)}"</p>`)]);
+      line = 'Anything else you want to know?';
+    } else if (c === 1) {
+      const team = trainer.team
+        .map(m => `<span class="comp-mon">${img(m.id)}<span><b>${escH(POKEMON_SPECIES_MAP[m.id]?.name || '???')}</b>Lv. ${m.lv}</span></span>`)
+        .join('');
+      await note([head, `<p class="dlg">"${escH(profile.team)}"</p>`, `<div class="comp-team">${team}</div>`, `<p class="dlg-sub">Battle style: ${escH(trainer.style)}</p>`]);
+      line = 'Think you can handle them?';
+    } else if (c === 2) {
+      await note([head, `<p class="dlg">"${escH(profile.advice)}"</p>`]);
+      line = 'Use it well.';
+    } else if (c === 3) {
+      line = profile.status[status];
+    } else {
+      break;
+    }
+  }
+
+  // Meeting everyone is its own small achievement
+  if (firstMeeting) {
+    const met = CHAMPIONSHIP_OPPONENTS.filter((_, i) => hasFlag('met:il_comp_' + (i + 1))).length;
+    if (met === CHAMPIONSHIP_OPPONENTS.length && !hasFlag('met:all_competitors')) {
+      setFlag('met:all_competitors');
+      G.money = (G.money || 0) + 3000;
+      G.rv = (G.rv || 0) + 2;
+      save();
+      refreshHudCounters();
+      sound.discovery();
+      await note([
+        `<h3>Every competitor met!</h3>`,
+        `<p class="dlg">You have spoken with all fifteen of your fellow competitors. Word spreads fast in Indigo League City - the League sends a gift to every trainer who takes the time to know their rivals.</p>`,
+        `<b>Received ₽3,000 and 2 Revives!</b>`,
+      ]);
+    } else {
+      routeExplorationEngine.showToast('Competitor met', `${met} of ${CHAMPIONSHIP_OPPONENTS.length} competitors`);
+    }
+  }
+}
+
+/** The Indigo Stadium gate: the only way into the Championship (and later the Elite Four). */
+async function enterIndigoStadium(): Promise<boolean> {
+  const badges = (G.badges || []).length;
+  if (G.phase === 'ELITE_FOUR_HUB') {
+    const c = await pick(
+      `<h1>INDIGO STADIUM</h1>${dlg('Receptionist Mai', 'Welcome back, Champion. The Elite Four are waiting for you in the inner sanctum of the stadium.')}`,
+      [{ h: 'FACE THE ELITE FOUR' }, { h: 'NOT YET' }]
+    );
+    if (c !== 0) return false;
+    saveCurrentRoutePosition();
+    routeExplorationEngine.stop();
+    eliteFourHub();
+    return true;
+  }
+  if (badges < 8) {
+    await note([
+      `<h1>INDIGO STADIUM</h1>`,
+      dlg('Receptionist Mai', `The Kanto Championship is open only to trainers holding all eight Gym Badges. You have ${badges}. Come back when your case is full - the competitors will still be here.`),
+    ]);
+    return false;
+  }
+  const t = G.tournament;
+  const started = !!t && t.history.length > 0;
+  const roundName = ROUND_NAMES_16[t?.currentRoundIndex ?? 0] || 'THE FINAL';
+  const opp = t?.trainers?.[t.activeIds[1]];
+  const c = await pick(
+    `<h1>INDIGO STADIUM</h1>` +
+      dlg(
+        'Receptionist Mai',
+        started
+          ? `Welcome back. The ${roundName.toLowerCase()} is ready${opp ? ` - your opponent is ${opp.name}` : ''}. The crowd is already in their seats.`
+          : `Sixteen trainers, four rounds, one Champion. Your first opponent is ${opp?.name || 'waiting'}. Once you step through this gate, the Championship begins.`
+      ),
+    [{ h: started ? `CONTINUE THE CHAMPIONSHIP (${roundName})` : 'ENTER THE CHAMPIONSHIP' }, { h: 'NOT YET' }]
+  );
+  if (c !== 0) return false;
+  saveCurrentRoutePosition();
+  routeExplorationEngine.stop();
+  sound.beep(523, 0.2, 'triangle');
+  sound.beep(784, 0.3, 'triangle', 0.1, 0.18);
+  championshipScr();
+  return true;
+}
+
+/** Arrive in Indigo League City: at the gate the first time, in front of the stadium once the tournament is on. */
+function goToLeagueCity(atStadium = false): void {
+  const started = !!G.tournament && G.tournament.history.length > 0;
+  if (atStadium || started || G.phase === 'ELITE_FOUR_HUB') enterRouteExploration(INDIGO_LEAGUE_ID, 3530, 660);
+  else enterRouteExploration(INDIGO_LEAGUE_ID, 210, 820);
+}
+
 function questToast(title: string, sub: string): void {
   const host = document.getElementById('g');
   if (!host) return;
@@ -1204,6 +1339,7 @@ export async function battleTrainer(npc: RouteNPC, back: { routeId: number; x: n
   $('#ctl').innerHTML = '';
   $('#msg').textContent = '';
   $('#fld').className = 'env-grass';
+  setBattleArena('stadium');
   pokemon3DManager.init($('#world'));
   pokemon3DManager.start();
 
@@ -1335,9 +1471,9 @@ async function recoverPendingEvolution(): Promise<void> {
 }
 
 function areaPinsForMap(): MapAreaPin[] {
-  const visited = G?.visitedAreas || [];
   const here = G?.savedRoutePos?.routeId ?? G?.currentRouteId;
-  return AREA_INFO.filter(a => a.map && visited.includes(a.id)).map(a => ({
+  // Every area is shown on the map from the start (free roaming), not just visited ones.
+  return AREA_INFO.filter(a => a.map).map(a => ({
     id: a.id,
     name: a.name,
     kind: a.kind,
@@ -1563,6 +1699,16 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
     shopScr();
   };
 
+  eng.onEnterStadium = async () => {
+    eng.isPaused = true;
+    let leaving = false;
+    try {
+      leaving = await enterIndigoStadium();
+    } finally {
+      if (!leaving && eng.currentRoute === routeDef) eng.isPaused = false;
+    }
+  };
+
   eng.onEnterHouse = async (building) => {
     await pauseFor(async () => {
       sound.beep(659, 0.15, 'sine');
@@ -1709,6 +1855,10 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
     eng.isPaused = true;
     let leaving = false;
     try {
+      if (npc.competitorId !== undefined) {
+        await competitorConversation(npc);
+        return;
+      }
       if (await handleQuestSource('npc', npc.id, npc.name)) return;
 
       if (npc.trainer && !hasFlag('trainer:' + npc.trainer.id)) {
@@ -1830,7 +1980,7 @@ export function enterRouteExploration(routeId?: number, resumeX?: number, resume
     saveCurrentRoutePosition();
     eng.stop();
     const mon = generateEncounterMon(routeDef.id, Math.random() < 0.06, spot.zone);
-    battleWild(mon, here());
+    battleWild(mon, here(), { fishing: true });
   };
 
   eng.onCompanionInteract = () => {
@@ -2040,7 +2190,7 @@ export function journeyHubScr(): void {
         </div>
         <div class="col" style="gap:8px">
           <button id="btn-enter-championship" class="btn-accent" style="width:100%;text-align:center;font-size:14px;font-weight:900">
-            ${isStarted ? `RETURN TO TOURNAMENT (${roundName.toUpperCase()}) ➔` : 'ENTER 16-PLAYER CHAMPIONSHIP ➔'}
+            ${isStarted ? `RETURN TO INDIGO LEAGUE CITY (${roundName.toUpperCase()}) ➔` : 'TRAVEL TO INDIGO LEAGUE CITY ➔'}
           </button>
           <button id="btn-open-town-map" class="btn-secondary" style="width:100%;text-align:center;font-size:12.5px;font-weight:800">
             🗺️ TRAVEL TO PREVIOUS CITIES (TOWN MAP)
@@ -2136,7 +2286,7 @@ export function journeyHubScr(): void {
   }
 
   if ($('#btn-enter-championship')) {
-    $('#btn-enter-championship').onclick = () => championshipScr();
+    $('#btn-enter-championship').onclick = () => goToLeagueCity();
   }
 
   if ($('#btn-enter-elitefour')) {
@@ -2703,6 +2853,7 @@ export async function battleGym(gymIndex: number): Promise<void> {
   $('#ctl').innerHTML = '';
   $('#msg').textContent = '';
   $('#fld').className = 'env-' + gym.environment;
+  setBattleArena('stadium');
 
   pokemon3DManager.init($('#world'));
   pokemon3DManager.start();
@@ -2830,7 +2981,7 @@ export async function gymVictoryScr(gymIndex: number): Promise<void> {
 export async function battleWild(
   wildMon: EncounterMon,
   returnCoords?: { routeId: number; x: number; y: number },
-  opts?: { staticFlag?: string }
+  opts?: { staticFlag?: string; fishing?: boolean }
 ): Promise<void> {
   const pl = G.team.filter(m => m.hp > 0);
   if (!pl.length) {
@@ -2844,7 +2995,9 @@ export async function battleWild(
   show('bat');
   $('#ctl').innerHTML = '';
   $('#msg').textContent = '';
-  $('#fld').className = 'env-grass';
+  // Wild battles happen where the encounter happened (forest, cave, beach, lake...)
+  $('#fld').className = 'env-wild';
+  setBattleArena(returnCoords ? biomeAt(returnCoords.routeId, returnCoords.x, !!opts?.fishing) : 'meadow', (returnCoords?.x || 0) + (returnCoords?.y || 0));
 
   pokemon3DManager.init($('#world'));
   pokemon3DManager.start();
@@ -3058,7 +3211,7 @@ export function championshipScr(): void {
           ${ICONS.bracket(16)} VIEW BRACKET
         </button>
         <button id="btn-champ-city" class="champ-prep-btn" style="grid-column: 1 / -1; background: linear-gradient(180deg,#0284c7,#0369a1); border-color: #075985; color: #fff" title="Take a break in the city to heal, shop, or manage team">
-          ${ICONS.city(16)} RETURN TO CITY (Pokémon Center / Poké Mart)
+          ${ICONS.city(16)} RETURN TO INDIGO LEAGUE CITY
         </button>
       </div>
     </div>
@@ -3115,7 +3268,7 @@ export function championshipScr(): void {
   $('#btn-champ-city').onclick = () => {
     G.phase = 'JOURNEY_HUB';
     save();
-    journeyHubScr();
+    goToLeagueCity(true);
   };
 
   // Individual Pokémon Row Action Buttons
@@ -3150,6 +3303,7 @@ export async function battleChampionship(roundIndex: number): Promise<void> {
   $('#ctl').innerHTML = '';
   $('#msg').textContent = '';
   $('#fld').className = 'final';
+  setBattleArena('stadium');
 
   pokemon3DManager.init($('#world'));
   pokemon3DManager.start();
@@ -3608,6 +3762,7 @@ export async function battleEliteFour(memberId: string): Promise<void> {
   $('#ctl').innerHTML = '';
   $('#msg').textContent = '';
   $('#fld').className = 'final ' + member.id;
+  setBattleArena('stadium');
 
   pokemon3DManager.init($('#world'));
   pokemon3DManager.start();
@@ -5584,6 +5739,8 @@ if (import.meta.env.DEV) {
     __fp: firstPersonCity,
     __starter: starterScr,
     __enterRoute: enterRouteExploration,
+    __battleWild: battleWild,
+    __genMon: generateEncounterMon,
     __selfcheck: () => import('./devtools/selfcheck').then(m => m.runSelfChecks()),
     __evolve: (uid: string, to: number) => {
       const m = G.team.find(x => x.uid === uid);

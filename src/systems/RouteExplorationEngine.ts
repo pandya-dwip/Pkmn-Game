@@ -17,6 +17,7 @@ import { Camera25D } from '../world/Camera25D';
 import { CompanionController } from '../world/CompanionController';
 import { drawBuildingVolume, Architecture } from '../world/BuildingVolume';
 import { getPokemonSprite } from '../world/PokemonSprites';
+import { drawStadium, drawCivicHall } from '../world/LeagueArt';
 import { drawTrainerSpriteCached, getNpcAppearance, getTrainerById, TrainerCustomization } from '../data/characters';
 import {
   CAVE_WALL_FACE,
@@ -58,7 +59,7 @@ import {
 } from '../world/WorldTypes';
 
 export interface RouteBuilding {
-  type: 'center' | 'mart' | 'gym' | 'gate' | 'house';
+  type: 'center' | 'mart' | 'gym' | 'gate' | 'house' | 'stadium';
   x: number;
   y: number;
   w: number;
@@ -72,6 +73,10 @@ export interface RouteBuilding {
   chimney?: boolean;
   occupant?: string;
   dialogue?: string;
+  /** Grand civic facade instead of a cottage (League buildings): drawn by LeagueArt. */
+  facade?: 'hall' | 'tower' | 'temple';
+  /** Specific 3D model for this building (overrides the zone's house list). */
+  model3d?: string;
 }
 
 export interface RoutePath {
@@ -114,6 +119,8 @@ export interface RouteNPC {
   /** Ferry / guide NPC that moves the player to another location. */
   ferry?: { target: number; x: number; y: number; label: string; requires?: WorldCondition };
   facing?: 'up' | 'down' | 'left' | 'right';
+  /** Championship competitor (index into the tournament's trainers): talks about the tournament. */
+  competitorId?: number;
 }
 
 export interface GrassPatch {
@@ -261,7 +268,7 @@ export interface RouteDefinition {
   // ---- 2.5D world expansion (all optional) ----
   /** Special exploration area (forest / cave / coast / mountain) outside the linear route chain. */
   isSpecialArea?: boolean;
-  areaKind?: 'forest' | 'cave' | 'coast' | 'mountain';
+  areaKind?: 'forest' | 'cave' | 'coast' | 'mountain' | 'city';
   /** Area this one returns to by default (for the HUD / hub). */
   parentRouteId?: number;
   /** Ambient darkness 0..1 (caves). */
@@ -370,6 +377,8 @@ export class RouteExplorationEngine {
   // Progress hooks provided by the game layer
   public isConditionMet: (c?: WorldCondition) => boolean = () => true;
   public getFlag: (flag: string) => boolean = () => false;
+  /** The Indigo Stadium gate (starts the Championship). */
+  public onEnterStadium: ((b: RouteBuilding) => void) | null = null;
   public setFlag: (flag: string) => void = () => {};
   public questMarkerFor: ((npc: RouteNPC) => 'quest' | 'turnin' | null) | null = null;
   public noticeBoardHasNew: ((board: RouteNoticeBoard) => boolean) | null = null;
@@ -507,6 +516,8 @@ export class RouteExplorationEngine {
 
   private isNearDoor(b: RouteBuilding): boolean {
     const p = this.player;
+    // The stadium's main gate is in the middle of its long facade
+    if (b.type === 'stadium') return Math.abs(p.x - (b.x + b.w / 2)) < 90 && p.y >= b.y + b.h - 16 && p.y <= b.y + b.h + 55;
     return p.x >= b.x - 20 && p.x <= b.x + b.w + 24 && p.y >= b.y + b.h - 16 && p.y <= b.y + b.h + 45;
   }
 
@@ -575,7 +586,7 @@ export class RouteExplorationEngine {
     }
     for (const b of r.buildings) {
       if (this.isNearDoor(b)) {
-        const action = b.type === 'gym' ? (b.gymIndex !== undefined ? 'Enter Gym' : 'Inspect') : b.type === 'house' ? 'Visit' : 'Enter';
+        const action = b.type === 'gym' ? (b.gymIndex !== undefined ? 'Enter Gym' : 'Inspect') : b.type === 'house' ? 'Visit' : b.type === 'stadium' ? 'Enter Stadium' : 'Enter';
         return { label: b.label, action, run: () => this.enterBuilding(b) };
       }
     }
@@ -633,6 +644,7 @@ export class RouteExplorationEngine {
     } else if (b.type === 'mart') this.onEnterMart?.();
     else if (b.type === 'center') this.onEnterCenter?.();
     else if (b.type === 'house') this.onEnterHouse?.(b);
+    else if (b.type === 'stadium') this.onEnterStadium?.(b);
     else if (b.type === 'gate') {
       if (this.onEnterGate) this.onEnterGate(b);
       else this.onRouteExit?.(r.id + 1);
@@ -2241,6 +2253,18 @@ export class RouteExplorationEngine {
     ctx.beginPath();
     ctx.ellipse(b.x + b.w / 2, b.y + b.h + 3, b.w / 2 + 10, 11, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // League landmarks: the stadium and grand civic halls have their own artwork
+    if (b.type === 'stadium') {
+      drawStadium(ctx, b, this.time);
+      ctx.restore();
+      return;
+    }
+    if (b.facade) {
+      drawCivicHall(ctx, b, b.facade);
+      ctx.restore();
+      return;
+    }
 
     if (b.type === 'center') {
       // ======================================================================

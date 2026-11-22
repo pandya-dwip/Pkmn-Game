@@ -23,6 +23,7 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const BASE = import.meta.env.BASE_URL;
 const KENNEY = `${BASE}models/kenney/`;
@@ -190,11 +191,15 @@ class EnvironmentAssetManager {
     // Mixed-author models: whole-model sway for foliage (their material names are not standardised)
     const polySway = isPoly && isPlant && !/dead|bonsai/i.test(name);
     const deepen = name.startsWith('t:') || name.startsWith('s:') || name.startsWith('c:') || isNatureKit ? 0.85 : 1;
+    // One converted material per source material, so parts that share a material stay shared
+    const converted = new Map<THREE.Material, THREE.MeshLambertMaterial>();
     gltf.scene.traverse(o => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       markShared(m.geometry);
       const toLambert = (mat: THREE.Material) => {
+        const hit = converted.get(mat);
+        if (hit) return hit;
         const std = mat as THREE.MeshStandardMaterial;
         const color = isNatureKit && NATURE_PALETTE[std.name] ? new THREE.Color(NATURE_PALETTE[std.name]) : std.color.clone().multiplyScalar(deepen);
         const l = new THREE.MeshLambertMaterial({
@@ -213,6 +218,7 @@ class EnvironmentAssetManager {
         else if (polySway) addWindSway(l, 0.012);
         markShared(l);
         markShared(std.map);
+        converted.set(mat, l);
         return l;
       };
       m.material = Array.isArray(m.material) ? m.material.map(toLambert) : toLambert(m.material);
@@ -228,7 +234,8 @@ class EnvironmentAssetManager {
       gltf.scene.position.z -= c.z;
       root.add(gltf.scene);
       root.updateMatrixWorld(true);
-      return { scene: root, box: new THREE.Box3().setFromObject(root) };
+      const merged = mergeByMaterial(root);
+      return { scene: merged, box: new THREE.Box3().setFromObject(merged) };
     }
     return { scene: gltf.scene, box: new THREE.Box3().setFromObject(gltf.scene) };
   }
@@ -260,6 +267,87 @@ class EnvironmentAssetManager {
     scene.updateMatrixWorld(true);
     return { scene, box: model.box };
   }
+}
+
+/**
+ * Collapse a model made of many small meshes into one mesh per material. Some downloaded
+ * models arrive split into hundreds of parts, and every part costs a draw call per instance.
+ */
+const toF32 = (a: THREE.BufferAttribute | THREE.InterleavedBufferAttribute): THREE.BufferAttribute => {
+  if ((a as THREE.BufferAttribute).isBufferAttribute && a.array instanceof Float32Array && !a.normalized) return a as THREE.BufferAttribute;
+  const out = new Float32Array(a.count * a.itemSize);
+  for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) out[i * a.itemSize + c] = a.getComponent(i, c);
+  return new THREE.BufferAttribute(out, a.itemSize);
+};
+
+function mergeByMaterial(root: THREE.Object3D): THREE.Group {
+  root.updateMatrixWorld(true);
+  const groups = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  let parts = 0;
+  root.traverse(o => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || (m as unknown as THREE.SkinnedMesh).isSkinnedMesh) return;
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    const geo = m.geometry;
+    // Multi-material meshes: split by group
+    const slices: { mat: THREE.Material; g: THREE.BufferGeometry }[] = [];
+    if (Array.isArray(m.material) && geo.groups.length) {
+      const src = geo.index ? geo.toNonIndexed() : geo;
+      for (const gr of geo.groups) {
+        const g = new THREE.BufferGeometry();
+        for (const [k, a] of Object.entries(src.attributes)) {
+          const attr = toF32(a as THREE.BufferAttribute);
+          g.setAttribute(k, new THREE.BufferAttribute((attr.array as Float32Array).slice(gr.start * attr.itemSize, (gr.start + gr.count) * attr.itemSize), attr.itemSize, attr.normalized));
+        }
+        slices.push({ mat: mats[gr.materialIndex ?? 0], g });
+      }
+    } else {
+      slices.push({ mat: mats[0], g: geo.index ? geo.toNonIndexed() : geo.clone() });
+    }
+    for (const { mat, g } of slices) {
+      for (const [k, a] of Object.entries(g.attributes)) g.setAttribute(k, toF32(a as THREE.BufferAttribute));
+      g.applyMatrix4(m.matrixWorld);
+      if (!groups.has(mat)) groups.set(mat, []);
+      groups.get(mat)!.push(g);
+      parts++;
+    }
+  });
+  const out = new THREE.Group();
+  if (parts <= groups.size) {
+    // Already one mesh per material: keep the original hierarchy
+    for (const list of groups.values()) list.forEach(g => g.dispose());
+    out.add(root);
+    out.updateMatrixWorld(true);
+    return out;
+  }
+  for (const [mat, list] of groups) {
+    // mergeGeometries needs identical attribute sets
+    const names = new Set<string>();
+    list.forEach(g => Object.keys(g.attributes).forEach(k => names.add(k)));
+    for (const g of list) {
+      const n = g.attributes.position.count;
+      for (const k of names) {
+        if (g.attributes[k]) continue;
+        const size = k === 'uv' || k.startsWith('uv') ? 2 : k === 'color' ? (list.find(x => x.attributes.color)!.attributes.color.itemSize) : 3;
+        g.setAttribute(k, new THREE.BufferAttribute(new Float32Array(n * size).fill(k === 'color' ? 1 : 0), size));
+      }
+      for (const k of Object.keys(g.attributes)) if (!names.has(k)) g.deleteAttribute(k);
+      g.morphAttributes = {};
+    }
+    const merged = mergeGeometries(list, false);
+    list.forEach(g => g.dispose());
+    if (!merged) {
+      // Never lose a model: fall back to the original parts
+      out.clear();
+      out.add(root);
+      out.updateMatrixWorld(true);
+      return out;
+    }
+    markShared(merged);
+    out.add(new THREE.Mesh(merged, mat));
+  }
+  out.updateMatrixWorld(true);
+  return out;
 }
 
 export const environmentAssets = new EnvironmentAssetManager();

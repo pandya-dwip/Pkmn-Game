@@ -68,7 +68,7 @@ export interface ZoneEnv {
   houses: string[];
   houseSkins: string[];
   /** Pokémon Center / Mart / Gym / Gate models. */
-  civic?: Partial<Record<'center' | 'mart' | 'gym' | 'gate', string>>;
+  civic?: Partial<Record<'center' | 'mart' | 'gym' | 'gate' | 'stadium', string>>;
   /** Cap on building height (world units); tall models shrink to fit. */
   maxBuildingHeight?: number;
   decor: DecorRule[];
@@ -646,6 +646,97 @@ const ENVIRONMENTS: Record<number, LocationEnv> = {
       hemi: { sky: 0xc7e3cf, ground: 0x24381f, intensity: 1.5 },
       sun: { color: 0xe9f3d2, intensity: 1.5, dir: [-1, 2.4, -0.6] },
       drawDistance: 760,
+    }
+  ),
+
+  // Indigo League City: capital of the Pokemon League (the most dressed-up place in the game)
+  110: outdoor(
+    [
+      zone(0, 'Gateway Plaza', {
+        treeSkin: { '*': [['p:cypress', 2, 96], ['CommonTree_5', 2, 68], ['p:cherry', 1, 52]] },
+        filler: [],
+        ringTrees: INDIGO_TREES,
+        houses: ['c:building-a'],
+        houseSkins: [],
+        fountain: 'p:fountain_pedestal',
+        lawn: 'lush',
+        ground: 'meadow',
+        decor: [
+          { models: [['t:hedge-large', 1, 18]], density: 14, where: 'building', fit: 'y' },
+          { models: FLOWERS, density: 60, where: 'building' },
+          { models: [['p:flag_red', 1, 56]], density: 10, where: 'roadside' },
+          { models: [['p:market_stand', 1, 34]], density: 3, where: 'roadside', solid: 12 },
+        ],
+      }),
+      zone(640, "Competitors' Quarter", {
+        treeSkin: { '*': [['CommonTree_2', 2, 88], ['CommonTree_3', 2, 92], ['p:poplar', 2, 96], ['p:birch', 1, 90]], conifer: [['p:spruce', 1, 104]] },
+        filler: [],
+        ringTrees: INDIGO_TREES,
+        houses: ['p:timber_tall'],
+        houseSkins: [],
+        lawn: 'lush',
+        decor: [
+          { models: BUSHES, density: 30, where: 'building', fit: 'xz' },
+          { models: FLOWERS, density: 40, where: 'building' },
+          { models: [['c:detail-parasol-a', 1, 26], ['c:detail-parasol-b', 1, 26]], density: 4, where: 'roadside' },
+          { models: [['p:flag_banner', 1, 60]], density: 6, where: 'roadside' },
+          { models: [['k:fence_simple', 1, 12]], density: 4, where: 'open', fit: 'y' },
+        ],
+      }),
+      zone(1700, 'Garden of Legends', {
+        treeSkin: { '*': [['p:blossom_white', 2, 60], ['CommonTree_5', 2, 68], ['p:cypress', 2, 96], ['p:willow', 1, 56]] },
+        filler: [],
+        ringTrees: CELADON_TREES,
+        houses: ['p:greenhouse'],
+        houseSkins: [],
+        fountain: 'p:wishing_well',
+        lawn: 'meadow',
+        ground: 'meadow',
+        decor: [
+          { models: FLOWERS, density: 160, where: 'open' },
+          { models: BUSHES, density: 50, where: 'open', fit: 'xz' },
+          { models: LILIES, density: 60, where: 'water', fit: 'xz' },
+          { models: [['t:hedge-large', 1, 18], ['t:hedge', 1, 14]], density: 20, where: 'roadside', fit: 'y' },
+        ],
+      }),
+      zone(2600, 'Hall of Fame', {
+        treeSkin: { '*': [['p:cypress', 3, 100], ['CommonTree_5', 1, 68]] },
+        filler: [],
+        ringTrees: INDIGO_TREES,
+        houses: ['p:grand_hall'],
+        houseSkins: [],
+        maxBuildingHeight: 210,
+        lawn: 'lush',
+        decor: [
+          { models: [['p:flag_banner', 1, 64]], density: 10, where: 'roadside' },
+          { models: [['t:hedge-large', 1, 18]], density: 12, where: 'building', fit: 'y' },
+          { models: [['k:statue_column', 1, 60]], density: 6, where: 'roadside', solid: 8 },
+        ],
+      }),
+      zone(3080, 'Indigo Stadium', {
+        treeSkin: { '*': [['p:cypress', 3, 100], ['p:poplar', 1, 96]] },
+        filler: [],
+        ringTrees: INDIGO_TREES,
+        houses: [],
+        houseSkins: [],
+        civic: { stadium: 'p:colosseum' },
+        fountain: 'p:fountain_classic',
+        lawn: 'lush',
+        decor: [
+          { models: [['t:banner-red', 1, 40], ['t:banner-green', 1, 40]], density: 6, where: 'building' },
+          { models: [['p:flag_red', 1, 60]], density: 14, where: 'edge' },
+        ],
+      }),
+    ],
+    {
+      ring: 'skyline',
+      camera: CAMERA_CITY,
+      baseGround: 'grass',
+      sky: ['#3d8ee0', '#a5d4f2', '#fbe6c2'],
+      fog: { color: 0xe9e4d8, near: 460, far: 1000 },
+      hemi: { sky: 0xfff4e0, ground: 0x4a6b3a, intensity: 2.25 },
+      sun: { color: 0xffe3b8, intensity: 2.6, dir: [-1, 1.8, -0.9] },
+      drawDistance: 950,
     }
   ),
 

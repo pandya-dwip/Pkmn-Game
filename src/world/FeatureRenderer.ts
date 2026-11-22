@@ -693,13 +693,74 @@ export function drawLandmark(ctx: CanvasRenderingContext2D, l: RouteLandmark, ti
     ctx.lineTo(x, y - 124);
     ctx.lineTo(x + 15, y - 110);
     ctx.fill();
-  } else {
-    // old_tree handled by tree renderer; draw a carved stump marker
-    ctx.fillStyle = '#5c3b1e';
-    ctx.fillRect(x - 12, y - 18, 24, 18);
-    ctx.fillStyle = '#a16207';
+  } else if (l.style === 'statue') {
+    // Champion statue: stepped stone pedestal with a bronze trainer and partner
+    ctx.fillStyle = '#9ca3af';
+    ctx.fillRect(x - 24, y - 10, 48, 10);
+    ctx.fillStyle = '#d1d5db';
+    ctx.fillRect(x - 18, y - 34, 36, 24);
+    ctx.fillStyle = '#e5e7eb';
+    ctx.fillRect(x - 21, y - 38, 42, 5);
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(x - 10, y - 26, 20, 6);
+    const bronze = ctx.createLinearGradient(x - 14, 0, x + 14, 0);
+    bronze.addColorStop(0, '#78350f');
+    bronze.addColorStop(0.5, '#b45309');
+    bronze.addColorStop(1, '#451a03');
+    ctx.fillStyle = bronze;
+    // trainer: legs, body, raised arm, head
+    ctx.fillRect(x - 8, y - 58, 5, 20);
+    ctx.fillRect(x - 1, y - 58, 5, 20);
+    ctx.fillRect(x - 10, y - 78, 16, 22);
+    ctx.save();
+    ctx.translate(x + 6, y - 76);
+    ctx.rotate(-0.9);
+    ctx.fillRect(0, -2.5, 18, 5);
+    ctx.restore();
     ctx.beginPath();
-    ctx.ellipse(x, y - 18, 12, 5, 0, 0, Math.PI * 2);
+    ctx.arc(x - 2, y - 85, 7, 0, Math.PI * 2);
+    ctx.fill();
+    // partner Pokemon at their feet
+    ctx.beginPath();
+    ctx.ellipse(x + 12, y - 44, 8, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x + 8, y - 49);
+    ctx.lineTo(x + 6, y - 58);
+    ctx.lineTo(x + 12, y - 50);
+    ctx.moveTo(x + 15, y - 50);
+    ctx.lineTo(x + 19, y - 58);
+    ctx.lineTo(x + 18, y - 48);
+    ctx.fill();
+    ctx.fillStyle = `rgba(254, 240, 138, ${0.15 + 0.1 * Math.sin(time * 2)})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y - 60, 28, 40, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    // old_tree: an ancient oak with a wide crown and a stone ring around its roots
+    ctx.fillStyle = '#9ca3af';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 2, 30, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#5c3b1e';
+    ctx.beginPath();
+    ctx.moveTo(x - 12, y - 4);
+    ctx.quadraticCurveTo(x - 8, y - 50, x - 16, y - 92);
+    ctx.lineTo(x + 14, y - 92);
+    ctx.quadraticCurveTo(x + 8, y - 50, x + 13, y - 4);
+    ctx.closePath();
+    ctx.fill();
+    const leaves = ['#166534', '#15803d', '#22c55e', '#14532d'];
+    const blobs: [number, number, number][] = [[0, -120, 42], [-36, -104, 32], [36, -104, 32], [-20, -146, 30], [22, -146, 30], [0, -96, 30]];
+    blobs.forEach(([dx, dy, r], i) => {
+      ctx.fillStyle = leaves[i % leaves.length];
+      ctx.beginPath();
+      ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.beginPath();
+    ctx.arc(x - 14, y - 132, 18, 0, Math.PI * 2);
     ctx.fill();
   }
   if (!discovered) {

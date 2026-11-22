@@ -29,7 +29,7 @@ const COMMERCIAL_ROTATION = Math.PI; // Kenney commercial storefronts face -Z
 /** Which way the suburban houses' front doors face in model space (radians about Y). */
 const HOUSE_ROTATION = 0;
 /** poly.pizza buildings whose front door does not face +Z (checked by rendering each from four sides). */
-const MODEL_ROTATION: Record<string, number> = { 'p:lab_b': Math.PI };
+const MODEL_ROTATION: Record<string, number> = { 'p:lab_b': Math.PI, 'p:greek_temple': -Math.PI / 2 };
 const rotationFor = (key: string) => MODEL_ROTATION[key] ?? (key.startsWith('c:') ? COMMERCIAL_ROTATION : HOUSE_ROTATION);
 
 /** A sign board (4:1) rendered to a canvas: coloured panel, optional Poké Ball emblem, bold label. */
@@ -283,7 +283,8 @@ const BASE_KEYS = [
   'c:building-c', 'c:building-e', 'c:building-n', 'c:building-d',
 ];
 
-const CIVIC: Record<'center' | 'mart' | 'gym' | 'gate', { model: string; sign: string; ink: string; band: string }> = {
+const CIVIC: Record<'center' | 'mart' | 'gym' | 'gate' | 'stadium', { model: string; sign: string; ink: string; band: string }> = {
+  stadium: { model: 'p:colosseum', sign: '#1e3a8a', ink: '#facc15', band: '#facc15' },
   center: { model: 'c:building-e', sign: '#dc2626', ink: '#ffffff', band: '#fecaca' },
   mart: { model: 'c:building-c', sign: '#1d4ed8', ink: '#ffffff', band: '#bfdbfe' },
   gym: { model: 'c:building-n', sign: '#a16207', ink: '#fef3c7', band: '#fde68a' },
@@ -295,6 +296,10 @@ export function routeModelKeys(route: RouteDefinition, env: LocationEnv): Set<st
   const keys = modelKeysFor(env);
   BASE_KEYS.forEach(k => keys.add(k));
   for (const z of env.zones) if (z.lawn !== 'none') LAWNS[z.lawn].list.forEach(([k]) => keys.add(k));
+  for (const b of route.buildings) {
+    if (b.model3d) keys.add(b.model3d);
+    if (b.type === 'stadium') ['p:colosseum', 'p:flag_red', 'p:horse_statue'].forEach(k => keys.add(k));
+  }
   for (const g of route.grassPatches) {
     if (g.style === 'dunes') keys.add('k:grass_large#olive');
     if (g.style === 'rubble') ['k:rock_smallA', 'k:rock_smallC', 'k:rock_smallFlatA'].forEach(k => keys.add(env.underground ? k + '#cave' : k));
@@ -701,7 +706,7 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
 
   // Houses: per-zone models fitted to each house footprint, door facing the street (south)
   const houses = new Set<RouteBuilding>();
-  const place = (b: RouteBuilding, key: string, skin: THREE.Texture | null, maxH?: number): { s: number; size: THREE.Vector3; front: number } | null => {
+  const place = (b: RouteBuilding, key: string, skin: THREE.Texture | null, maxH?: number, stretch = false): { s: number; size: THREE.Vector3; front: number } | null => {
     if (!has(key)) return null;
     const obj = model(key).scene.clone(true);
     if (skin) {
@@ -719,10 +724,15 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
     const size = box.getSize(new THREE.Vector3());
     let s = Math.min((b.w * 1.05) / size.x, (b.h * (b.type === 'house' ? 1.0 : 1.05)) / size.z);
     if (maxH && size.y * s > maxH) s = maxH / size.y;
-    obj.scale.setScalar(s);
+    // Arenas fill their whole footprint (an oval amphitheatre), heights stay proportionate
+    const sx = stretch ? (b.w * 1.02) / size.x : s;
+    const sz = stretch ? (b.h * 1.02) / size.z : s;
+    const sy = stretch ? Math.min(sx, sz) * 1.15 : s;
+    obj.scale.set(sx, sy, sz);
     const c = box.getCenter(new THREE.Vector3());
     const front = b.y + b.h;
-    obj.position.set(b.x + b.w / 2 - c.x * s, -box.min.y * s, front - box.max.z * s);
+    obj.position.set(b.x + b.w / 2 - c.x * sx, -box.min.y * sy, front - box.max.z * sz);
+    if (stretch) s = sy;
     group.add(obj);
     houses.add(b);
     return { s, size, front };
@@ -730,9 +740,10 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
   for (const b of route.buildings) {
     if (b.type !== 'house') continue;
     const z = zoneAt(env, b.x + b.w / 2);
-    if (!z.houses.length) continue;
+    const own = b.model3d && has(b.model3d) ? b.model3d : null;
+    if (!own && !z.houses.length) continue;
     const h = hash(b.x, b.y);
-    const key = z.houses[Math.floor(h * z.houses.length) % z.houses.length];
+    const key = own || z.houses[Math.floor(h * z.houses.length) % z.houses.length];
     // Colour-map variations only exist for the Kenney kits
     const kit = key.startsWith('c:') ? 'commercial' : key.startsWith('s:') ? 'suburban' : null;
     const skins = kit ? z.houseSkins.filter(p => p.startsWith(kit)) : [];
@@ -740,27 +751,72 @@ export async function loadRouteModels(input: RouteModelInput): Promise<RouteMode
     place(b, key, skin, z.maxBuildingHeight);
   }
 
+  /** Flags around the rim, a grand gate with gold posts, and two rearing statues guarding it. */
+  const dressStadium = (b: RouteBuilding, rimH: number) => {
+    const cx = b.x + b.w / 2;
+    const cz = b.y + b.h / 2;
+    const flag = has('p:flag_red') ? model('p:flag_red') : null;
+    if (flag) {
+      const fs = sized('p:flag_red', 'y', 46);
+      for (let i = 0; i < 20; i++) {
+        const a = (i / 20) * Math.PI * 2;
+        const fx = cx + Math.cos(a) * b.w * 0.5;
+        const fz = cz + Math.sin(a) * b.h * 0.5;
+        const o = flag.scene.clone(true);
+        o.scale.setScalar(fs);
+        o.position.set(fx, rimH - 6 - flag.box.min.y * fs, fz);
+        o.rotation.y = -a + Math.PI / 2;
+        group.add(o);
+      }
+    }
+    // Gate: two gold pylons with a lintel over the entrance
+    const gold = new THREE.MeshLambertMaterial({ color: 0xd4a017, emissive: 0x2a1c00 });
+    for (const side of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(14, rimH + 30, 14), gold);
+      post.position.set(cx + side * 70, (rimH + 30) / 2, b.y + b.h + 4);
+      group.add(post);
+      solids.push({ x: cx + side * 70, z: b.y + b.h + 4, r: 10 });
+    }
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(160, 12, 16), gold);
+    lintel.position.set(cx, rimH + 30, b.y + b.h + 4);
+    group.add(lintel);
+    if (has('p:horse_statue')) {
+      const hs = model('p:horse_statue');
+      const s = sized('p:horse_statue', 'y', 70);
+      for (const side of [-1, 1]) {
+        const o = hs.scene.clone(true);
+        o.scale.setScalar(s);
+        o.position.set(cx + side * 215, -hs.box.min.y * s, b.y + b.h + 40);
+        o.rotation.y = side * 0.35;
+        group.add(o);
+        solids.push({ x: cx + side * 215, z: b.y + b.h + 40, r: 16 });
+      }
+    }
+  };
+
   // Pokémon Center, Poké Mart, Gym and gatehouses: 3D buildings with a sign board over the door
   for (const b of route.buildings) {
     const spec = CIVIC[b.type as keyof typeof CIVIC];
     if (!spec) continue;
     const z = zoneAt(env, b.x + b.w / 2);
     const key = z.civic?.[b.type as keyof typeof CIVIC] && has(z.civic[b.type as keyof typeof CIVIC]!) ? z.civic[b.type as keyof typeof CIVIC]! : spec.model;
-    const r = place(b, key, null, b.type === 'gym' ? Math.max(z.maxBuildingHeight || 0, 160) : z.maxBuildingHeight);
+    const stadium = b.type === 'stadium';
+    const r = place(b, key, null, stadium ? undefined : b.type === 'gym' ? Math.max(z.maxBuildingHeight || 0, 160) : z.maxBuildingHeight, stadium);
     if (!r) continue;
     const { s, size, front } = r;
     // Coloured roof cap in the sign colour gives each civic building its identity from afar
     const roofH = Math.min(size.y * s, b.type === 'gym' ? 999 : z.maxBuildingHeight || 999);
-    if (b.type !== 'gate') {
+    if (b.type !== 'gate' && !stadium) {
       const cap = new THREE.Mesh(new THREE.BoxGeometry(size.x * s * 0.98, 3.5, size.z * s * 0.98), new THREE.MeshLambertMaterial({ color: spec.sign }));
       cap.position.set(b.x + b.w / 2, roofH + 1.2, front - (size.z * s) / 2);
       group.add(cap);
     }
     const board = signBoard(input.signText?.(b) || b.label, spec.sign, spec.ink, spec.band, b.type === 'center');
-    const bw = Math.min(b.w * 0.85, 110);
+    const bw = stadium ? 240 : Math.min(b.w * 0.85, 110);
     board.scale.set(bw, bw / 4, 1);
-    board.position.set(b.x + b.w / 2, Math.min(size.y * s * 0.62, 46), front + 1.5);
+    board.position.set(b.x + b.w / 2, stadium ? size.y * s + 34 : Math.min(size.y * s * 0.62, 46), front + (stadium ? -6 : 1.5));
     group.add(board);
+    if (stadium) dressStadium(b, size.y * s);
   }
 
   scene.add(group);

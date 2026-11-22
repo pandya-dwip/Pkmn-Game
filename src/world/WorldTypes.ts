@@ -87,7 +87,7 @@ export interface RouteLandmark {
   id: string;
   x: number;
   y: number;
-  style: 'viewpoint' | 'shrine' | 'ruin' | 'lighthouse' | 'old_tree' | 'monument';
+  style: 'viewpoint' | 'shrine' | 'ruin' | 'lighthouse' | 'old_tree' | 'monument' | 'statue';
   title: string;
   lines: string[];
 }

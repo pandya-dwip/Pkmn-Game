@@ -8,13 +8,14 @@
  * - Complete touch and mouse Pan & Zoom engine (drag-to-pan, pinch-to-zoom, wheel zoom, zoom controls, recenter)
  * - Desktop layout: 72% interactive map + 28% dedicated location intelligence sidebar
  * - Mobile layout: Fullscreen touch-optimized map + floating controls + compact docked bottom sheet
- * - Fast-travel validation matching gameplay progression rules (getFurthestUnlockedCityIndex)
+ * - Free fast travel: every city and landmark is open from the start
  * - Current location indicators, unlocked vs locked route states, and seamless save compatibility
  */
 
 import { KANTO_CITIES, KantoCityInfo, getFurthestUnlockedCityIndex } from '../data/cities';
 import { KANTO_GYMS, GymLeaderDefinition } from '../data/gyms';
 import { sound } from '../audio/SoundSynthesizer';
+import { renderKantoTerrainSVG, routeCurve } from './kantoMapArt';
 
 export interface WorldMapCityNode {
   cityIndex: number;
@@ -48,7 +49,7 @@ export interface WorldMapLandmark {
 export interface MapAreaPin {
   id: number;
   name: string;
-  kind: 'forest' | 'cave' | 'coast' | 'mountain';
+  kind: 'forest' | 'cave' | 'coast' | 'mountain' | 'city';
   mapX: number;
   mapY: number;
   canTravel: boolean;
@@ -349,12 +350,13 @@ export class KantoWorldMapView {
     }
   }
 
-  private isCityUnlocked(city: WorldMapCityNode): boolean {
-    return city.cityIndex <= this.furthestUnlockedIndex;
+  /** Free roaming: every city can be visited at any time, regardless of story progress. */
+  private isCityUnlocked(_city: WorldMapCityNode): boolean {
+    return true;
   }
 
-  private isLandmarkUnlocked(landmark: WorldMapLandmark): boolean {
-    return landmark.requiredRoute <= this.furthestUnlockedIndex;
+  private isLandmarkUnlocked(_landmark: WorldMapLandmark): boolean {
+    return true;
   }
 
   private render(): void {
@@ -403,168 +405,25 @@ export class KantoWorldMapView {
 
             <!-- Compass Rose / Scale Legend -->
             <div class="kanto-map-compass-hud">
-              <div class="compass-needle">N</div>
-              <div class="compass-sub">KANTO</div>
+              <svg class="km-compass" viewBox="-30 -30 60 60" width="58" height="58" aria-hidden="true">
+                <circle r="27" fill="rgba(246,239,220,0.92)" stroke="#5b4a32" stroke-width="1.2"/>
+                <circle r="22" fill="none" stroke="#8a7550" stroke-width="0.6" stroke-dasharray="1.5 2.5"/>
+                <path d="M0 -24 L4 -4 L0 0 L-4 -4 Z" fill="#b91c1c"/>
+                <path d="M0 -24 L0 0 L-4 -4 Z" fill="#7f1d1d"/>
+                <path d="M0 24 L4 4 L0 0 L-4 4 Z" fill="#475569"/>
+                <path d="M24 0 L4 4 L0 0 L4 -4 Z" fill="#94a3b8"/>
+                <path d="M-24 0 L-4 4 L0 0 L-4 -4 Z" fill="#94a3b8"/>
+                <circle r="2.2" fill="#3f3221"/>
+                <text y="-15.5" text-anchor="middle" font-size="7" font-weight="900" fill="#fff">N</text>
+              </svg>
+              <div class="km-scale"><span class="km-scale-bar"></span><span class="compass-sub">≈ 10 km</span></div>
             </div>
 
             <!-- Pannable / Zoomable Stage -->
             <div class="kanto-map-stage" id="kanto-map-stage" style="transform: translate(${this.panX}px, ${this.panY}px) scale(${this.zoomLevel});">
               <!-- Geographic Illustrated Vector Canvas -->
               <svg class="kanto-geo-svg" viewBox="0 0 1000 750" preserveAspectRatio="xMidYMid meet">
-                <defs>
-                  <!-- Ocean Deep Coastal Gradient -->
-                  <linearGradient id="kantoOceanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#023e8a" />
-                    <stop offset="40%" stop-color="#0077b6" />
-                    <stop offset="80%" stop-color="#0096c7" />
-                    <stop offset="100%" stop-color="#03045e" />
-                  </linearGradient>
-
-                  <!-- Mainland Lush Grassland Gradient -->
-                  <linearGradient id="kantoLandGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stop-color="#2d6a4f" />
-                    <stop offset="45%" stop-color="#40916c" />
-                    <stop offset="85%" stop-color="#52b788" />
-                    <stop offset="100%" stop-color="#1b4332" />
-                  </linearGradient>
-
-                  <!-- Mountain Ridge Shading -->
-                  <linearGradient id="kantoMountainGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stop-color="#64748b" />
-                    <stop offset="50%" stop-color="#475569" />
-                    <stop offset="100%" stop-color="#334155" />
-                  </linearGradient>
-
-                  <!-- Volcanic Island Gradient -->
-                  <linearGradient id="kantoVolcanoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#dc2626" />
-                    <stop offset="60%" stop-color="#991b1b" />
-                    <stop offset="100%" stop-color="#450a0a" />
-                  </linearGradient>
-
-                  <!-- Shading Filter for Land Relief -->
-                  <filter id="kantoShadow" x="-5%" y="-5%" width="110%" height="110%">
-                    <feDropShadow dx="3" dy="5" stdDeviation="6" flood-color="#03045e" flood-opacity="0.65" />
-                  </filter>
-                  <filter id="kantoGlow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur stdDeviation="3" result="blur" />
-                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                  </filter>
-                </defs>
-
-                <!-- 1. OCEAN WATER SURFACE -->
-                <rect width="1000" height="750" fill="url(#kantoOceanGrad)" />
-
-                <!-- Water Shorelines & Current Ribbons -->
-                <path d="M 0 280 Q 220 250 480 300 T 1000 270 L 1000 750 L 0 750 Z" fill="rgba(72, 202, 228, 0.12)" />
-                <path d="M 0 460 Q 320 420 640 480 T 1000 450 L 1000 750 L 0 750 Z" fill="rgba(0, 150, 199, 0.16)" />
-                <path d="M 0 600 Q 260 560 580 620 T 1000 590 L 1000 750 L 0 750 Z" fill="rgba(3, 4, 94, 0.24)" />
-
-                <!-- 2. MAINLAND KANTO CONTINENTAL LANDMASS -->
-                <!-- Natural Organic Peninsula Shape -->
-                <path d="
-                  M 70 120
-                  L 360 90
-                  Q 520 75 740 100
-                  Q 890 120 940 250
-                  Q 960 380 910 490
-                  Q 840 590 680 595
-                  Q 570 600 520 540
-                  Q 480 470 380 460
-                  L 340 510
-                  Q 310 590 170 600
-                  Q 70 560 60 410
-                  L 50 200
-                  Z
-                " fill="url(#kantoLandGrad)" stroke="#74c69d" stroke-width="5" filter="url(#kantoShadow)" />
-
-                <!-- Coastal Sandy Beach Fringe -->
-                <path d="
-                  M 68 122
-                  L 358 92
-                  Q 518 77 738 102
-                  Q 888 122 938 252
-                  Q 958 382 908 492
-                  Q 838 592 678 597
-                  Q 568 602 518 542
-                  Q 478 472 378 462
-                  L 338 512
-                  Q 308 592 168 602
-                  Q 68 562 58 412
-                  L 48 202
-                  Z
-                " fill="none" stroke="#d8f3dc" stroke-width="2" opacity="0.6" />
-
-                <!-- 3. ISLANDS & REEFS -->
-                <!-- Cinnabar Island -->
-                <path d="
-                  M 160 640
-                  Q 260 625 270 705
-                  Q 245 745 170 735
-                  Q 140 700 160 640
-                  Z
-                " fill="url(#kantoVolcanoGrad)" stroke="#f87171" stroke-width="3" filter="url(#kantoShadow)" />
-                <!-- Cinnabar Caldera Peak -->
-                <circle cx="215" cy="685" r="16" fill="#7f1d1d" stroke="#fca5a5" stroke-width="2" />
-                <circle cx="215" cy="685" r="6" fill="#450a0a" />
-
-                <!-- Seafoam Islands -->
-                <ellipse cx="380" cy="690" rx="36" ry="24" fill="#67e8f9" stroke="#06b6d4" stroke-width="3" filter="url(#kantoShadow)" />
-                <ellipse cx="430" cy="700" rx="28" ry="18" fill="#a5f3fc" stroke="#0891b2" stroke-width="2" />
-
-                <!-- 4. MOUNTAIN RANGES & ELEVATIONS -->
-                <!-- Mt. Moon Massif -->
-                <path d="
-                  M 330 210
-                  L 380 150
-                  L 430 215
-                  L 480 160
-                  L 535 220
-                  L 490 250
-                  L 420 240
-                  Z
-                " fill="url(#kantoMountainGrad)" stroke="#94a3b8" stroke-width="3" />
-                <polygon points="380,150 365,185 395,185" fill="#f1f5f9" opacity="0.8" />
-                <polygon points="480,160 465,195 495,195" fill="#f1f5f9" opacity="0.8" />
-
-                <!-- Victory Road / Indigo Plateau Ridge -->
-                <path d="
-                  M 50 170
-                  L 110 95
-                  L 165 170
-                  L 120 200
-                  Z
-                " fill="url(#kantoMountainGrad)" stroke="#94a3b8" stroke-width="3" />
-                <polygon points="110,95 95,130 125,130" fill="#f1f5f9" opacity="0.85" />
-
-                <!-- Eastern Mountain Escarpment (Rock Tunnel) -->
-                <path d="
-                  M 810 230
-                  L 850 180
-                  L 890 240
-                  L 840 270
-                  Z
-                " fill="url(#kantoMountainGrad)" stroke="#94a3b8" stroke-width="2.5" />
-
-                <!-- 5. FOREST REGIONS -->
-                <!-- Viridian Forest Canopy -->
-                <circle cx="210" cy="340" r="42" fill="#1b4332" opacity="0.85" />
-                <circle cx="235" cy="325" r="34" fill="#2d6a4f" opacity="0.85" />
-                <circle cx="185" cy="350" r="30" fill="#1b4332" opacity="0.85" />
-                <text x="210" y="345" font-size="11" font-weight="900" fill="#b7e4c7" text-anchor="middle" letter-spacing="0.5">VIRIDIAN FOREST</text>
-
-                <!-- Fuchsia Safari Woodlands -->
-                <circle cx="560" cy="570" r="45" fill="#14532d" opacity="0.85" />
-                <circle cx="590" cy="555" r="32" fill="#166534" opacity="0.85" />
-                <text x="560" y="575" font-size="11" font-weight="900" fill="#bbf7d0" text-anchor="middle" letter-spacing="0.5">SAFARI ZONE</text>
-
-                <!-- 6. RIVERS, ESTUARIES & WATERWAYS -->
-                <!-- Cerulean River / Route 24 Channel -->
-                <path d="M 680 100 Q 690 145 680 175" fill="none" stroke="#0077b6" stroke-width="10" stroke-linecap="round" />
-                <!-- Water Channel to Vermilion Port -->
-                <path d="M 680 185 Q 730 290 730 400 L 730 480 Q 730 535 680 545" fill="none" stroke="#0077b6" stroke-width="12" stroke-linecap="round" />
-                <!-- Vermilion Harbor Bay Mouth -->
-                <path d="M 660 545 Q 680 620 730 650" fill="none" stroke="#0096c7" stroke-width="16" stroke-linecap="round" opacity="0.7" />
+                ${renderKantoTerrainSVG()}
 
                 <!-- 7. ROUTE HIGHWAY NETWORKS (Dynamic SVG Roads) -->
                 ${this.renderRouteHighwaysSVG()}
@@ -624,10 +483,10 @@ export class KantoWorldMapView {
                         <div class="city-pin-bubble">
                           <span class="city-pin-icon">${city.badgeIcon}</span>
                         </div>
+                        ${!unlocked ? '<span class="city-pin-lock" title="Not visited yet"><svg viewBox="0 0 12 12" width="9" height="9"><rect x="2" y="5" width="8" height="6" rx="1.2" fill="currentColor"/><path d="M4 5V3.6a2 2 0 0 1 4 0V5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span>' : ''}
                       </div>
                       <div class="city-pin-label">
                         <span class="city-pin-name">${city.shortName}</span>
-                        ${!unlocked ? '<span class="city-lock-indicator">🔒</span>' : ''}
                       </div>
                     </div>
                   `;
@@ -651,10 +510,12 @@ export class KantoWorldMapView {
 
     document.body.appendChild(overlay);
     this.attachEvents();
+    this.fitToViewport();
   }
 
   private renderRouteHighwaysSVG(): string {
-    const lines: string[] = [];
+    const casing: string[] = [];
+    const surface: string[] = [];
     const drawn = new Set<string>();
 
     for (const city of KANTO_MAP_CITIES) {
@@ -666,37 +527,20 @@ export class KantoWorldMapView {
         const target = KANTO_MAP_CITIES.find(c => c.id === targetId);
         if (!target) continue;
 
-        const isBothUnlocked = this.isCityUnlocked(city) && this.isCityUnlocked(target);
-        const strokeColor = isBothUnlocked ? '#facc15' : '#475569';
-        const strokeDash = isBothUnlocked ? 'none' : '6 6';
-        const strokeWidth = isBothUnlocked ? '5' : '3.5';
-        const opacity = isBothUnlocked ? '0.9' : '0.4';
+        const open = this.isCityUnlocked(city) && this.isCityUnlocked(target);
+        const seaLane = city.id === 'cinnabar' || target.id === 'cinnabar';
+        const d = routeCurve(city.mapX, city.mapY, target.mapX, target.mapY, key);
 
-        lines.push(`
-          <!-- Road Underlay / Shading -->
-          <line
-            x1="${city.mapX}" y1="${city.mapY}"
-            x2="${target.mapX}" y2="${target.mapY}"
-            stroke="#0f172a"
-            stroke-width="${isBothUnlocked ? '8' : '5'}"
-            stroke-linecap="round"
-            opacity="0.75"
-          />
-          <!-- Highway Surface -->
-          <line
-            x1="${city.mapX}" y1="${city.mapY}"
-            x2="${target.mapX}" y2="${target.mapY}"
-            stroke="${strokeColor}"
-            stroke-width="${strokeWidth}"
-            stroke-dasharray="${strokeDash}"
-            stroke-linecap="round"
-            opacity="${opacity}"
-          />
-        `);
+        if (seaLane) {
+          surface.push(`<path d="${d}" class="km-route sea ${open ? 'open' : 'closed'}" />`);
+        } else {
+          casing.push(`<path d="${d}" class="km-route-casing ${open ? 'open' : 'closed'}" />`);
+          surface.push(`<path d="${d}" class="km-route land ${open ? 'open' : 'closed'}" />`);
+        }
       }
     }
 
-    return lines.join('');
+    return `<g class="km-routes" fill="none" stroke-linecap="round">${casing.join('')}${surface.join('')}</g>`;
   }
 
   private renderDetailPanelHTML(): string {
@@ -903,7 +747,29 @@ export class KantoWorldMapView {
     const stage = this.overlayEl.querySelector('#kanto-map-stage') as HTMLElement;
     if (stage) {
       stage.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.zoomLevel})`;
+      // Pins grow only gently with zoom, so they stay legible without swamping the terrain.
+      stage.style.setProperty('--pin-s', Math.pow(this.zoomLevel, -0.75).toFixed(3));
+      // Small on-screen map: hide secondary captions so city names stay readable.
+      const shownWidth = stage.offsetWidth * this.zoomLevel;
+      stage.classList.toggle('km-dense', shownWidth > 0 && shownWidth < 700);
     }
+  }
+
+  /** Default view: whole map on wide screens; on tall phones, fill the height and centre on the player. */
+  private fitToViewport(): void {
+    if (!this.overlayEl) return;
+    const viewport = this.overlayEl.querySelector('#kanto-map-viewport') as HTMLElement | null;
+    const stage = this.overlayEl.querySelector('#kanto-map-stage') as HTMLElement | null;
+    this.zoomLevel = 1.0;
+    this.panX = 0;
+    this.panY = 0;
+    if (viewport && stage && stage.offsetHeight > 0 && viewport.clientHeight > stage.offsetHeight * 1.25) {
+      this.zoomLevel = Math.min(this.maxZoom, viewport.clientHeight / stage.offsetHeight);
+      const city = KANTO_MAP_CITIES.find(c => c.cityIndex === this.currentLocationIndex) || KANTO_MAP_CITIES[0];
+      this.panX = -((city.mapX / 1000) - 0.5) * stage.offsetWidth * this.zoomLevel;
+      this.clampPan();
+    }
+    this.applyStageTransform();
   }
 
   private clampPan(): void {
@@ -913,8 +779,11 @@ export class KantoWorldMapView {
 
     const vpW = viewport.clientWidth;
     const vpH = viewport.clientHeight;
-    const maxPanX = (1000 * this.zoomLevel - vpW) / 2 + 150;
-    const maxPanY = (750 * this.zoomLevel - vpH) / 2 + 150;
+    const stage = this.overlayEl.querySelector('#kanto-map-stage') as HTMLElement | null;
+    const stageW = stage?.offsetWidth || 1000;
+    const stageH = stage?.offsetHeight || 750;
+    const maxPanX = (stageW * this.zoomLevel - vpW) / 2 + 60;
+    const maxPanY = (stageH * this.zoomLevel - vpH) / 2 + 60;
 
     const limitX = Math.max(80, maxPanX);
     const limitY = Math.max(80, maxPanY);
@@ -979,10 +848,7 @@ export class KantoWorldMapView {
     if (recenterBtn) {
       recenterBtn.onclick = (e) => {
         e.stopPropagation();
-        this.zoomLevel = 1.0;
-        this.panX = 0;
-        this.panY = 0;
-        this.applyStageTransform();
+        this.fitToViewport();
         sound.beep(740, 0.08, 'sine');
       };
     }

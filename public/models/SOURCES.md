@@ -95,3 +95,13 @@ Downloaded from [poly.pizza](https://poly.pizza). Embedded textures were downsca
 | `fountain_statue.glb` | Town Center | Quaternius | CC0 1.0 | https://poly.pizza/m/cuQuFJEIfH |
 | `fountain_waterfall.glb` | Waterfall | Poly by Google | CC-BY 3.0 | https://poly.pizza/m/7mrPbZToHh2 |
 | `well_stone.glb` | Well | Poly by Google | CC-BY 3.0 | https://poly.pizza/m/an8wpvcJi8X |
+| `colosseum.glb` | Colosseum | CreativeTrio | CC0 1.0 | https://poly.pizza/m/83ftBPyiSf |
+| `greek_temple.glb` | Greek Temple | Alexandre Thomas (Ashtom) | CC-BY 3.0 | https://poly.pizza/m/cdMQnl19MB9 |
+| `grand_hall.glb` | Big Building | Quaternius | CC0 1.0 | https://poly.pizza/m/AVCS8jUd2l |
+| `flag_red.glb` | Flag | Quaternius | CC0 1.0 | https://poly.pizza/m/FuOkF3WBrx |
+| `flag_banner.glb` | Flag | Poly by Google | CC-BY 3.0 | https://poly.pizza/m/0okBVouy3-T |
+| `horse_statue.glb` | Horse Statue | Quaternius | CC0 1.0 | https://poly.pizza/m/AK9CmjFnL6 |
+| `hero_statue.glb` | Statue | Zsky | CC-BY 3.0 | https://poly.pizza/m/0Mkdl3SJDT |
+| `fountain_classic.glb` | Fountain | Poly by Google | CC-BY 3.0 | https://poly.pizza/m/0YTMlW0CUHU |
+| `fountain_pedestal.glb` | Water fountain made in Blocks | The Sabby Life | CC-BY 3.0 | https://poly.pizza/m/cZoDn3K30Vd |
+| `wishing_well.glb` | Wishing Well | Don Carson | CC-BY 3.0 | https://poly.pizza/m/4H4zAj62ulP |

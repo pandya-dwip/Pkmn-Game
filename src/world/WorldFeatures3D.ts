@@ -401,12 +401,40 @@ function buildPortal(p: RoutePortal, underground: boolean): THREE.Group {
   return g;
 }
 
-function buildLandmark(lm: { style: string; x: number; y: number }, group: THREE.Group, animated: ((t: number, dt: number) => void)[]): void {
+function buildLandmark(lm: { id?: string; style: string; x: number; y: number }, group: THREE.Group, animated: ((t: number, dt: number) => void)[]): void {
   const g = new THREE.Group();
   g.position.set(lm.x, 0, lm.y);
   group.add(g);
   const stone = lambert(0x9a958c);
   switch (lm.style) {
+    case 'statue': {
+      // Champion statue: stone pedestal with a gold plaque, then the sculpture itself
+      const id = lm.id || '';
+      if (/flame|horse/.test(id)) {
+        attachModel(g, 'p:horse_statue', 74); // carries its own pedestal
+        break;
+      }
+      const ped = new THREE.Mesh(new THREE.BoxGeometry(36, 22, 36), stone);
+      ped.position.y = 11;
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(42, 4, 42), lambert(0xd1d5db));
+      cap.position.y = 24;
+      const plaque = new THREE.Mesh(new THREE.BoxGeometry(18, 7, 1), lambert(0xd4a017, { emissive: 0x2a1c00 }));
+      plaque.position.set(0, 12, 18.5);
+      g.add(ped, cap, plaque);
+      const top = new THREE.Group();
+      top.position.y = 26;
+      g.add(top);
+      attachModel(top, 'p:hero_statue', 48, 'y', o => {
+        if (/partner/.test(id)) o.position.x -= 6;
+      });
+      if (/partner/.test(id)) {
+        const pet = new THREE.Group();
+        pet.position.set(12, 0, 6);
+        top.add(pet);
+        attachModel(pet, 'p:fox_statue', 22);
+      }
+      break;
+    }
     case 'lighthouse': {
       for (let i = 0; i < 6; i++) {
         const r0 = 20 - i * 1.4;
